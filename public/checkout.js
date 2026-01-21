@@ -202,9 +202,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadCart();
     await syncCartFromServerIfNeeded();
     setupLanguageSwitcher();
+    setupResponsiveCheckoutHandlers();
     updateLanguage();
     renderCheckout();
 });
+
+function setupResponsiveCheckoutHandlers() {
+    if (!window || !window.matchMedia) return;
+
+    const mql = window.matchMedia('(max-width: 768px)');
+    let lastIsMobile = mql.matches;
+
+    const maybeRerender = () => {
+        const isMobile = mql.matches;
+        if (isMobile === lastIsMobile) return;
+        lastIsMobile = isMobile;
+        // Re-render so mobile-only truncation and layout update immediately.
+        renderCheckout();
+    };
+
+    // Fires in many browsers when crossing the breakpoint.
+    if (typeof mql.addEventListener === 'function') {
+        mql.addEventListener('change', maybeRerender);
+    } else if (typeof mql.addListener === 'function') {
+        mql.addListener(maybeRerender);
+    }
+
+    // DevTools responsive mode often triggers resize without a media-query change event.
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(maybeRerender, 120);
+    });
+}
 
 function isLikelyMojibake(text) {
     if (!text || typeof text !== 'string') return false;
