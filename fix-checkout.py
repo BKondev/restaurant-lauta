@@ -7,6 +7,13 @@ from typing import Any, Iterable
 
 
 BAD_TOKENS = [
+    # Newer observed mojibake pattern (UTF-8 bytes decoded with a Cyrillic single-byte codec)
+    # Shows up as sequences like: "тХи╨Б..."
+    "тХ",
+    "ТХ",
+    "тХи",
+    "ТХИ",
+
     "╨",
     "╤",
     "Ð",
@@ -58,7 +65,9 @@ def fix_text_once(text: str) -> str:
     # - cp1251-decoded UTF-8: "РџР»РѕРІРґРёРІ" -> "Пловдив"
     # - cp866-decoded UTF-8:  "╨б╨░╨»..." -> "Сал..."
     # - latin1-decoded UTF-8: "ÐÐ»Ð¾..." -> "Пло..."
-    for enc in ("cp1251", "cp866", "latin1"):
+    # Extra encodings seen in the wild when mojibake is introduced by decoding UTF-8
+    # bytes with a Cyrillic single-byte codec.
+    for enc in ("cp1251", "cp866", "latin1", "koi8_r", "koi8_u", "mac_cyrillic", "cp855"):
         recoded = try_redecode(text, enc)
         if recoded is not None:
             candidates.append(recoded)
@@ -66,7 +75,7 @@ def fix_text_once(text: str) -> str:
     return min(candidates, key=bad_score)
 
 
-def fix_text(text: str, max_passes: int = 2) -> str:
+def fix_text(text: str, max_passes: int = 4) -> str:
     prev = text
     for _ in range(max_passes):
         cur = fix_text_once(prev)
