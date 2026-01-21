@@ -464,63 +464,61 @@ body {
         margin-bottom: 8px !important;
     }
 
-    /* cart-item-row: Image left, info wrapper on right */
-    body .cart-item .cart-item-row { 
-        display: flex !important; 
-        flex-direction: row !important;
-        align-items: flex-start !important; 
-        gap: 10px !important; 
+    /* Checkout cart-item-row (mobile): image left, title above qty, price on right */
+    body:has(.checkout-container) .cart-item .cart-item-row {
+        display: grid !important;
+        grid-template-columns: 54px 1fr auto !important;
+        grid-template-areas:
+            "img name price"
+            "img controls price";
+        column-gap: 10px !important;
+        row-gap: 6px !important;
+        align-items: start !important;
     }
 
     /* Image: stays on left */
-    body .cart-item-row .cart-item-image { 
-        width: 50px !important;
-        height: 50px !important;
+    body:has(.checkout-container) .cart-item-row .cart-item-image {
+        grid-area: img !important;
+        width: 54px !important;
+        height: 54px !important;
         border-radius: 6px !important;
         object-fit: cover !important;
         flex-shrink: 0 !important;
     }
 
-    /* Info wrapper: column layout for name on top, controls below */
-    body .cart-item-row .cart-item-info {
-        flex: 1 1 auto !important;
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 4px !important;
-    }
-
     /* Name: top row */
-    body .cart-item-info .cart-item-name { 
-        font-size: 13px !important;
+    body:has(.checkout-container) .cart-item-row .cart-item-name {
+        grid-area: name !important;
+        min-width: 0 !important;
+        font-size: 14px !important;
         font-weight: 600 !important;
         line-height: 1.3 !important;
     }
 
-    /* Controls row: weight, price and quantity side by side */
-    body .cart-item-info .cart-item-controls {
+    /* Quantity controls must be BELOW title */
+    body:has(.checkout-container) .cart-item-row .cart-item-controls {
+        grid-area: controls !important;
         display: flex !important;
         align-items: center !important;
+        justify-content: flex-start !important;
         gap: 8px !important;
-        justify-content: space-around !important;
+        min-width: 0 !important;
     }
 
-    /* Weight in controls */
-    body .cart-item-controls .cart-item-weight { 
-        display: inline !important;
-        font-size: 11px !important;
-        color: #888 !important;
-        font-weight: 400 !important;
-    }
-
-    /* Price */
-    body .cart-item-controls .cart-item-price { 
+    /* Price pinned on the right, stays inside box */
+    body:has(.checkout-container) .cart-item-row .cart-item-price {
+        grid-area: price !important;
         font-weight: 700 !important;
-        font-size: 13px !important;
+        font-size: 14px !important;
         color: #e74c3c !important;
+        text-align: right !important;
+        white-space: normal !important;
+        max-width: 120px !important;
+        line-height: 1.2 !important;
     }
 
     /* Quantity controls */
-    body .cart-item-controls .quantity-controls { 
+    body:has(.checkout-container) .cart-item-controls .quantity-controls {
         display: inline-flex !important;
         align-items: center !important;
         gap: 6px !important;
@@ -542,7 +540,7 @@ body {
     }
 
     /* Remove button: hide */
-    body .cart-item-row .remove-btn { 
+    body:has(.checkout-container) .cart-item-row .remove-btn {
         display: none !important;
     }
 
