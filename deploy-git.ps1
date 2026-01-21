@@ -19,6 +19,7 @@ function Require-Command([string]$name) {
 
 Require-Command git
 Require-Command ssh
+Require-Command scp
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Git Deployment Script" -ForegroundColor Cyan
@@ -74,7 +75,7 @@ if ($changes) {
 Write-Host "Pushing to $RemoteName/$Branch ..." -ForegroundColor Yellow
 git push $RemoteName $Branch
 
-# Deploy on server (clone if needed, then hard-reset to remote)
+# Deploy on server (init/clone if needed, then hard-reset to remote)
 Write-Host "\nStep 2: Pull on server and restart" -ForegroundColor Green
 
 $remoteCmd = @'
@@ -84,6 +85,17 @@ BRANCH="__BRANCH__"
 REMOTE="__REMOTE__"
 REPO_URL="__REPO_URL__"
 PM2_NAME="__PM2__"
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "Installing git..."
+  apt-get update -y
+  apt-get install -y git
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "ERROR: node is not installed on the server. Install Node.js first."
+  exit 3
+fi
 
 mkdir -p "$DEPLOY_DIR"
 cd "$DEPLOY_DIR"
@@ -120,8 +132,10 @@ if command -v pm2 >/dev/null 2>&1; then
   pm2 restart "$PM2_NAME" || pm2 start server.js --name "$PM2_NAME"
   pm2 save || true
 else
-  echo "WARNING: pm2 not installed. Starting with node (not recommended for prod)."
-  nohup node server.js >/tmp/restaurant.out 2>&1 &
+  echo "pm2 not found; installing pm2 globally..."
+  npm install -g pm2
+  pm2 restart "$PM2_NAME" || pm2 start server.js --name "$PM2_NAME"
+  pm2 save || true
 fi
 
 echo "Deploy done."
@@ -133,12 +147,16 @@ $remoteCmd = $remoteCmd.Replace("__REMOTE__", $RemoteName)
 $remoteCmd = $remoteCmd.Replace("__REPO_URL__", $RepoUrl)
 $remoteCmd = $remoteCmd.Replace("__PM2__", $Pm2Process)
 
-# Run using bash -lc and a heredoc to avoid PowerShell quoting problems
-$escaped = $remoteCmd -replace "'","'\\''"
-ssh ${ServerUser}@${ServerIp} "bash -lc 'cat > /tmp/deploy_git.sh <<\''EOF\''
-$escaped
-EOF
-bash /tmp/deploy_git.sh'"
+# Avoid fragile quoting: upload a temp script then execute it.
+$tmp = [System.IO.Path]::GetTempFileName()
+try {
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($tmp, $remoteCmd, $utf8NoBom)
+  scp $tmp "${ServerUser}@${ServerIp}:/tmp/deploy_git.sh" | Out-Null
+  ssh ${ServerUser}@${ServerIp} "bash /tmp/deploy_git.sh"
+} finally {
+  Remove-Item -Force $tmp -ErrorAction SilentlyContinue
+}
 
 Write-Host "\n========================================" -ForegroundColor Cyan
 Write-Host "Git Deployment Complete" -ForegroundColor Green
