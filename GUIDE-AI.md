@@ -157,23 +157,24 @@ cd /c/Users/User/Desktop/resturant-template
 # 2. Копирай файловете на сървъра със SCP (САМО ДАЙ КОМАНДАТА, НЕ Я ИЗПЪЛНЯВАЙ!)
 scp server.js root@46.62.174.218:/opt/resturant-website/
 scp GUIDE-AI.md root@46.62.174.218:/opt/resturant-website/
-scp public/app.js root@46.62.174.218:/opt/resturant-website/public/
-scp public/checkout.js root@46.62.174.218:/opt/resturant-website/public/
-
-# 3. Рестартирай PM2 (МОЖЕ ДА СЕ ИЗПЪЛНИ АВТОМАТИЧНО)
-ssh root@46.62.174.218 "pm2 restart restaurant-backend"
-
-# 4. НЕ ИЗПЪЛНЯВАЙ LOGS АВТОМАТИЧНО - потребителят ще го направи ако иска
-# ssh root@46.62.174.218 "pm2 logs restaurant-backend --lines 20"
 ```
 
-**ИЛИ само SCP командите (без рестарт - потребителят ще рестартира сам):**
+## ✅ DEPLOY (официално): GitHub → Server pull
 
-```bash
-cd /c/Users/User/Desktop/resturant-template
-scp server.js GUIDE-AI.md root@46.62.174.218:/opt/resturant-website/
-scp public/app.js public/checkout.js root@46.62.174.218:/opt/resturant-website/public/
+**НЕ използвай директно SCP за deploy/update.** SCP води до проблеми с quoting/encoding и лесно оставя production в половин-обновено състояние.
+
+Локално (Windows / PowerShell):
+
+```powershell
+cd C:\Users\User\Desktop\resturant-template
+.\deploy-git.ps1 -RepoUrl "git@github.com:BKondev/restaurant-platform.git" -CommitMessage "deploy"
 ```
+
+Какво прави:
+- Commit + push към GitHub
+- Сървърът прави `git fetch/reset --hard origin/main`
+- Инсталира production dependencies
+- Рестартира PM2 процеса `restaurant-backend`
 
 **ЗА ЛОГИН НА СЪРВЪРА:**
 
@@ -192,7 +193,7 @@ pm2 logs restaurant-backend --lines 20
 **ВАЖНО:**
 - След всяка промяна в код, дай тези команди на потребителя
 - Потребителят ще ги изпълни сам - гарантира правилно UTF-8 кодиране
-- НЕ използвай SCP/FTP - само Git!
+- НЕ използвай SCP/FTP за deploy/update - само Git!
 - Винаги рестартирай PM2 след промени
 
 **Локално тестване преди deploy:**

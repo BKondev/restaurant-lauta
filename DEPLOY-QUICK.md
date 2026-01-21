@@ -1,28 +1,30 @@
 # Quick Deployment Commands for crystalautomation.eu/resturant-website
 
-## Option 1: Automated PowerShell Script (Easiest)
+## Option 1 (Recommended): GitHub → Server pull (Reliable)
+
+This is the official deploy method now: **commit+push → server pulls latest**.
 
 ```powershell
-# Run from your local machine (PowerShell)
 cd C:\Users\User\Desktop\resturant-template
-.\deploy-to-server.ps1
+.\deploy-git.ps1 -RepoUrl "git@github.com:BKondev/restaurant-platform.git" -CommitMessage "deploy"
 ```
 
 This will:
-- Upload all files to the server
-- Install dependencies
-- Configure Nginx
-- Create systemd service
-- Start the application
+- Commit + push your local changes to GitHub
+- Server `git fetch` + `reset --hard origin/main`
+- Install production dependencies
+- Restart PM2 process `restaurant-backend`
 
 ---
 
-## Option 2: Manual Commands
+## Option 2 (Legacy / Avoid): Direct SCP uploads
+
+Avoid this for updates. Use it only for one-time recovery when git deploy is impossible.
 
 ### From Local Machine (PowerShell):
 
 ```powershell
-# Upload files
+# LEGACY (avoid): Upload files
 scp -r C:\Users\User\Desktop\resturant-template root@46.62.174.218:/tmp/restaurant-upload
 ```
 
@@ -94,18 +96,13 @@ tail -f /var/log/nginx/access.log
 
 ---
 
-## Update Application (After Initial Deployment)
+## Update Application (Normal day-to-day)
+
+Do NOT SCP individual files. Use git deploy:
 
 ```powershell
-# From local machine
-scp -r C:\Users\User\Desktop\resturant-template\public root@46.62.174.218:/opt/resturant-website/
-scp C:\Users\User\Desktop\resturant-template\server.js root@46.62.174.218:/opt/resturant-website/
-```
-
-```bash
-# On server
-ssh root@46.62.174.218
-systemctl restart restaurant.service
+cd C:\Users\User\Desktop\resturant-template
+.\deploy-git.ps1 -RepoUrl "git@github.com:BKondev/restaurant-platform.git" -CommitMessage "deploy"
 ```
 
 ---
