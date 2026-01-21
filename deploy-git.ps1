@@ -58,6 +58,15 @@ if (-not $hasRemote) {
     git remote add $RemoteName $RepoUrl
 }
 
+# If RepoUrl not explicitly provided, use the configured local remote URL.
+if ([string]::IsNullOrWhiteSpace($RepoUrl)) {
+  try {
+    $RepoUrl = (git remote get-url $RemoteName).Trim()
+  } catch {
+    throw "RepoUrl is empty and could not read remote URL for '$RemoteName'. Pass -RepoUrl explicitly."
+  }
+}
+
 # Commit & push
 Write-Host "\nStep 1: Commit and push" -ForegroundColor Green
 git add -A
