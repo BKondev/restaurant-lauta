@@ -86,6 +86,22 @@ REMOTE="__REMOTE__"
 REPO_URL="__REPO_URL__"
 PM2_NAME="__PM2__"
 
+PRESERVE_DIR="$DEPLOY_DIR/.preserve"
+TS=$(date +%Y%m%d-%H%M%S)
+
+mkdir -p "$PRESERVE_DIR"
+
+# Preserve production-only files (they should not be committed)
+if [ -f "$DEPLOY_DIR/database.json" ]; then
+  cp -a "$DEPLOY_DIR/database.json" "$PRESERVE_DIR/database.json.$TS" || true
+fi
+if [ -f "$DEPLOY_DIR/.env" ]; then
+  cp -a "$DEPLOY_DIR/.env" "$PRESERVE_DIR/.env.$TS" || true
+fi
+if [ -d "$DEPLOY_DIR/uploads" ]; then
+  tar -czf "$PRESERVE_DIR/uploads.$TS.tgz" -C "$DEPLOY_DIR" uploads || true
+fi
+
 if ! command -v git >/dev/null 2>&1; then
   echo "Installing git..."
   apt-get update -y
@@ -117,6 +133,14 @@ git fetch "$REMOTE" --prune
 git checkout -B "$BRANCH" "$REMOTE/$BRANCH"
 
 git reset --hard "$REMOTE/$BRANCH"
+
+# Ensure preserved files still exist after switching branches
+if [ ! -f "$DEPLOY_DIR/database.json" ] && [ -f "$PRESERVE_DIR/database.json.$TS" ]; then
+  cp -a "$PRESERVE_DIR/database.json.$TS" "$DEPLOY_DIR/database.json" || true
+fi
+if [ ! -f "$DEPLOY_DIR/.env" ] && [ -f "$PRESERVE_DIR/.env.$TS" ]; then
+  cp -a "$PRESERVE_DIR/.env.$TS" "$DEPLOY_DIR/.env" || true
+fi
 
 echo "Installing dependencies (production)..."
 if [ -f package-lock.json ]; then
