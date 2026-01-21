@@ -38,6 +38,21 @@ let workingHours = {
     closingTime: '22:00'
 };
 
+function escapeHtmlAttribute(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function truncateMobileName(name, maxChars = 25) {
+    const text = String(name ?? '');
+    if (!window.matchMedia || !window.matchMedia('(max-width: 768px)').matches) return text;
+    if (text.length <= maxChars) return text;
+    return text.slice(0, maxChars).trimEnd() + '…';
+}
+
 // List of available cities for delivery
 const availableCities = [
     'Пловдив',
@@ -736,6 +751,8 @@ function renderCartItems() {
         const displayName = currentLanguage === 'bg' && item.translations?.bg?.name 
             ? item.translations.bg.name 
             : item.name;
+
+        const displayNameForUi = truncateMobileName(displayName, 25);
         
         const displayCategory = currentLanguage === 'bg' && item.translations?.bg?.category 
             ? item.translations.bg.category 
@@ -749,7 +766,7 @@ function renderCartItems() {
                     <img src="${item.image.startsWith('http') ? item.image : BASE_PATH + item.image}" alt="${displayName}" class="cart-item-image" onerror="this.style.display='none'">
                     ${item.weight ? `<span class="cart-item-weight cart-item-weight-overlay">${item.weight}</span>` : ''}
                 </div>
-                <div class="cart-item-name">${displayName}</div>
+                <div class="cart-item-name" title="${escapeHtmlAttribute(displayName)}">${displayNameForUi}</div>
                 <div class="cart-item-price">
                     <span>${formatPrice(itemTotal)}</span>
                 </div>
