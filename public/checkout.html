@@ -756,36 +756,58 @@
 
         @media (max-width: 768px) {
             .cart-item {
-                text-align: center;
+                text-align: left;
             }
 
+            /* Desired layout:
+               [image] [title]
+               [image] [qty]     [price]
+            */
             .cart-item-row {
-                flex-direction: column;
-                align-items: center;
+                display: grid;
+                grid-template-columns: 54px 1fr auto;
+                grid-template-areas:
+                    "img name price"
+                    "img controls price";
+                column-gap: 10px;
+                row-gap: 6px;
+                align-items: start;
             }
 
             .cart-item-image {
-                width: 100%;
-                max-width: 300px;
-                height: 200px;
+                grid-area: img;
+                width: 54px;
+                height: 54px;
+                max-width: none;
+                border-radius: 6px;
             }
 
             .cart-item-name {
-                width: 100%;
-                text-align: center;
-                align-items: center;
+                grid-area: name;
+                min-width: 0;
+                font-size: 14px;
+                text-align: left;
+                align-items: flex-start;
             }
 
-            .quantity-controls {
-                justify-content: center;
+            .cart-item-controls {
+                grid-area: controls;
+                justify-content: flex-start;
             }
 
             .cart-item-price {
-                text-align: center;
+                grid-area: price;
+                min-width: 0;
+                font-size: 14px;
+                white-space: normal;
+                max-width: 120px;
+                text-align: right;
+                align-items: flex-end;
+                line-height: 1.2;
             }
 
             .remove-btn {
-                align-self: center;
+                display: none;
             }
 
             .promo-input-group {
