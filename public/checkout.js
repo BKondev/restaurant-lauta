@@ -185,10 +185,71 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadOrderSettings();
     await loadWorkingHours();
     loadCart();
+    await syncCartFromServerIfNeeded();
     setupLanguageSwitcher();
     updateLanguage();
     renderCheckout();
 });
+
+function isLikelyMojibake(text) {
+    if (!text || typeof text !== 'string') return false;
+
+    // Common mojibake markers we have seen in this project.
+    const badTokens = ['╨', '╤', 'Ð', 'Ñ', 'тХ', 'ТХ', '\uFFFD'];
+    return badTokens.some(t => text.includes(t));
+}
+
+function cartHasMojibake() {
+    return cart.some(item =>
+        isLikelyMojibake(item?.name) ||
+        isLikelyMojibake(item?.category) ||
+        isLikelyMojibake(item?.translations?.bg?.name) ||
+        isLikelyMojibake(item?.translations?.bg?.category)
+    );
+}
+
+async function syncCartFromServerIfNeeded() {
+    // Cart is stored in localStorage; if it was saved while the DB/UI was mojibake,
+    // the checkout will still show broken names even after DB is fixed.
+    if (!cart || cart.length === 0) return;
+    if (!cartHasMojibake()) return;
+
+    try {
+        const productsResponse = await fetch(`${API_URL}/products`);
+        if (!productsResponse.ok) return;
+        const products = await productsResponse.json();
+
+        const byId = new Map();
+        (products || []).forEach(p => {
+            if (p && (p.id !== undefined && p.id !== null)) {
+                byId.set(String(p.id), p);
+            }
+        });
+
+        let changed = false;
+        cart = cart.map(item => {
+            const product = byId.get(String(item?.id));
+            if (!product) return item;
+
+            // Preserve checkout-specific state
+            const quantity = item.quantity;
+            const note = item.note;
+
+            changed = true;
+            return {
+                ...product,
+                quantity,
+                note
+            };
+        });
+
+        if (changed) {
+            saveCart();
+        }
+    } catch (error) {
+        console.error('Error syncing cart from server:', error);
+    }
+}
 
 // Load restaurant info
 async function loadRestaurantInfo() {
