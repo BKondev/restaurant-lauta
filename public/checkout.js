@@ -345,21 +345,35 @@ function saveCart() {
 
 // Language switcher
 function setupLanguageSwitcher() {
-    const langBtns = document.querySelectorAll('.lang-btn');
-    langBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            langBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentLanguage = btn.dataset.lang;
-            localStorage.setItem('language', currentLanguage);
-            updateLanguage();
-            renderCheckout();
-        });
+    // checkout.html uses inline onclick/onchange handlers calling switchLanguage().
+    // Keep this function focused on initializing the UI state.
+    syncLanguageUi();
+}
 
-        if (btn.dataset.lang === currentLanguage) {
-            btn.classList.add('active');
-        }
-    });
+function syncLanguageUi() {
+    const langBtns = Array.from(document.querySelectorAll('.lang-btn'));
+    const dropdown = document.getElementById('lang-dropdown');
+
+    // Ensure only one button is highlighted.
+    langBtns.forEach(b => b.classList.remove('active'));
+    const activeBtn = langBtns.find(b => b.dataset.lang === currentLanguage);
+    if (activeBtn) activeBtn.classList.add('active');
+
+    // Ensure dropdown reflects actual language.
+    if (dropdown) {
+        dropdown.value = currentLanguage;
+    }
+}
+
+// Used by inline onclick/onchange in checkout.html
+function switchLanguage(lang) {
+    if (!lang) return;
+    if (!translations[lang]) return;
+    currentLanguage = lang;
+    localStorage.setItem('language', currentLanguage);
+    syncLanguageUi();
+    updateLanguage();
+    renderCheckout();
 }
 
 // Update language
@@ -374,6 +388,9 @@ function updateLanguage() {
             }
         }
     });
+
+    // Keep language UI (buttons/dropdown) consistent with currentLanguage.
+    syncLanguageUi();
 }
 
 // Render checkout page
