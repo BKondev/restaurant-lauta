@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login - Restaurant Template</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 400px;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-header i {
+            font-size: 50px;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .login-header h1 {
+            color: #2c3e50;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .login-header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .input-wrapper i {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #999;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 15px 12px 45px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            font-size: 13px;
+            margin-top: 10px;
+            display: none;
+            text-align: center;
+            padding: 10px;
+            background-color: #fee;
+            border-radius: 5px;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+        }
+
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .back-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+
+        .default-credentials {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .default-credentials h4 {
+            color: #2c3e50;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .default-credentials code {
+            display: block;
+            background: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin: 3px 0;
+            font-size: 12px;
+            color: #667eea;
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 30px 20px;
+            }
+
+            .login-header h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <i class="fas fa-shield-alt"></i>
+            <h1>Admin Login</h1>
+            <p>Enter your credentials to access the admin panel</p>
+        </div>
+
+        <form id="login-form">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <div class="input-wrapper">
+                    <i class="fas fa-user"></i>
+                    <input type="text" id="username" placeholder="Enter username" required autocomplete="username">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="input-wrapper">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="password" placeholder="Enter password" required autocomplete="current-password">
+                </div>
+            </div>
+
+            <div class="error-message" id="error-message">
+                Invalid username or password
+            </div>
+
+            <button type="submit" class="login-btn">
+                <i class="fas fa-sign-in-alt"></i> Login
+            </button>
+        </form>
+
+        <div class="default-credentials">
+            <h4><i class="fas fa-info-circle"></i> Default Credentials:</h4>
+            <code>Username: admin</code>
+            <code>Password: admin123</code>
+        </div>
+
+        <div class="back-link">
+            <a href="../">
+                <i class="fas fa-arrow-left"></i> Back to Menu
+            </a>
+        </div>
+    </div>
+
+    <script>
+    // Dynamic Base Path Detection so login works under a subdirectory
+    const BASE_PATH = window.location.pathname.includes('/resturant-website') ? '/resturant-website' : '';
+    
+    
+    // Fix back link on DOM load
+    window.addEventListener('DOMContentLoaded', () => {
+        const backLink = document.querySelector('a[href="../"]');
+        if (backLink) backLink.href = BASE_PATH + '/';
+    });
+    const API_URL = `${BASE_PATH}/api`;
+
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMessage = document.getElementById('error-message');
+            
+            errorMessage.classList.remove('show');
+            
+            try {
+                const response = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    // Store token in sessionStorage
+                    sessionStorage.setItem('adminToken', data.token);
+                    sessionStorage.setItem('adminUser', username);
+                    
+                    // Redirect to admin within the same BASE_PATH
+                    window.location.href = `${BASE_PATH}/admin`;
+                } else {
+                    errorMessage.textContent = data.message || 'Invalid username or password';
+                    errorMessage.classList.add('show');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                errorMessage.textContent = 'Connection error. Make sure the server is running.';
+                errorMessage.classList.add('show');
+            }
+        });
+    </script>
+</body>
+</html>
+
+

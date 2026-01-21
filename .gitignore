@@ -1,0 +1,26 @@
+node_modules/
+uploads/
+*.log
+.DS_Store
+
+# Local/prod data (never commit)
+database.json
+production_database.json
+database_prod_*.json
+database_prod_*.json.bak
+database_prod_*.json.*
+database_prod_*.bak
+database_prod_*.tmp
+database_prod_*.fixed
+database_prod_*.orig
+
+# Backups created by repair scripts
+*.bak
+
+# Local environment
+.env
+.env.*
+
+# Local archives/artifacts
+*.zip
+*.tar.gz

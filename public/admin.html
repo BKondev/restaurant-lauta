@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Admin Panel - Restaurant Template</title>
+    <link rel="stylesheet" href="/resturant-website/styles.css?v=20251208120000">
+    <link rel="stylesheet" href="/resturant-website/admin-styles.css?v=20251208120000">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+        <meta http-equiv="Pragma" content="no-cache"/>
+        <meta http-equiv="Expires" content="0"/>
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Fixed Header -->
+        <div class="admin-header">
+            <div class="admin-logo">
+                <i class="fas fa-utensils"></i>
+                <span data-translate="adminPanel">Admin Panel</span>
+            </div>
+            <div class="admin-actions">
+                <div class="language-switcher">
+                    <button class="lang-btn" data-lang="en" onclick="switchLanguage('en')" title="English">EN</button>
+                    <button class="lang-btn" data-lang="bg" onclick="switchLanguage('bg')" title="Български">BG</button>
+                </div>
+                <a href="/resturant-website/" class="admin-action-btn" title="Back to Menu">
+                    <i class="fas fa-home"></i>
+                </a>
+                <button onclick="logout()" class="admin-action-btn" data-translate-title="logout" title="Logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+            <button class="nav-toggle-btn" onclick="toggleNav()" title="Toggle Menu">
+                <i class="fas fa-chevron-down" id="toggleIcon"></i>
+            </button>
+        </div>
+        
+        <!-- Tab Navigation -->
+        <div class="admin-tabs-nav collapsed" id="adminNav">
+            
+            <div class="admin-logo">
+                <i class="fas fa-utensils"></i>
+                <span>Admin Panel</span>
+            </div>
+            
+            <button class="admin-tab-btn active" onclick="switchTab('pending-orders')">
+                <i class="fas fa-bell"></i>
+                <span class="tab-text">Pending Orders</span>
+                <span id="pending-count-badge-tab" class="tab-badge">0</span>
+            </button>
+            <button class="admin-tab-btn" onclick="switchTab('restaurant-settings')">
+                <i class="fas fa-store"></i>
+                <span class="tab-text">Restaurant</span>
+            </button>
+            <button class="admin-tab-btn" onclick="switchTab('delivery-settings')">
+                <i class="fas fa-truck"></i>
+                <span class="tab-text">Delivery</span>
+            </button>
+            <button class="admin-tab-btn" onclick="switchTab('products')">
+                <i class="fas fa-box"></i>
+                <span class="tab-text">Products</span>
+            </button>
+            <button class="admin-tab-btn" onclick="switchTab('promo-codes')">
+                <i class="fas fa-ticket-alt"></i>
+                <span class="tab-text">Promo Codes</span>
+            </button>
+            <button class="admin-tab-btn" onclick="switchTab('combos')">
+                <i class="fas fa-gift"></i>
+                <span class="tab-text">Combos</span>
+            </button>
+            <button class="admin-tab-btn" onclick="switchTab('orders-history')">
+                <i class="fas fa-history"></i>
+                <span class="tab-text">Orders History</span>
+            </button>
+            
+            <div class="admin-actions">
+                <a href="/resturant-website/" class="admin-action-btn" title="Back to Menu">
+                    <i class="fas fa-home"></i>
+                    <span class="action-text">Menu</span>
+                </a>
+                <button onclick="logout()" class="admin-action-btn logout-btn" title="Logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span class="action-text">Logout</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tab Contents -->
+        <div class="admin-tabs-content">
+        
+        <!-- Pending Orders Tab -->
+        <div class="admin-tab-content active" id="tab-pending-orders">
+        <!-- Pending Orders Section -->
+        <div class="admin-section" id="pending-orders-section" style="background: #fff5f5; border: 2px solid #e74c3c; display: none;">
+            <h2 style="color: #e74c3c;">
+                <i class="fas fa-bell"></i> Pending Orders 
+                <span id="pending-count-badge" style="background: #e74c3c; color: white; padding: 4px 12px; border-radius: 20px; font-size: 16px; margin-left: 10px;">0</span>
+            </h2>
+            <div id="pending-orders-list">
+                <!-- Pending orders will be rendered here -->
+            </div>
+        </div>
+        </div><!-- End Pending Orders Tab -->
+
+        <!-- Restaurant Settings Tab -->
+        <div class="admin-tab-content" id="tab-restaurant-settings">
+        <!-- Settings Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-cog"></i> Restaurant Settings</h2>
+            <div class="form-group">
+                <label for="restaurant-name-input">Restaurant Name:</label>
+                <input type="text" id="restaurant-name-input" placeholder="Enter restaurant name">
+            </div>
+            
+            <div class="form-group">
+                <label for="restaurant-logo-input">Restaurant Logo URL:</label>
+                <input type="text" id="restaurant-logo-input" placeholder="https://example.com/logo.png">
+                <small>Enter image URL or leave empty to hide logo</small>
+            </div>
+            
+            <button onclick="updateRestaurantSettings()" class="btn btn-primary">
+                <i class="fas fa-save"></i> Update Settings
+            </button>
+        </div>
+
+        <!-- Customization Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-palette"></i> Visual Customization</h2>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="top-bar-color">Top Bar Color:</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="color" id="top-bar-color" value="#2c3e50">
+                        <input type="text" id="top-bar-color-text" value="#2c3e50" placeholder="#2c3e50">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="highlight-color">Highlight/Accent Color:</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="color" id="highlight-color" value="#e74c3c">
+                        <input type="text" id="highlight-color-text" value="#e74c3c" placeholder="#e74c3c">
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="background-color">Background Color:</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="color" id="background-color" value="#f5f5f5">
+                        <input type="text" id="background-color-text" value="#f5f5f5" placeholder="#f5f5f5">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="price-color">Price Color:</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="color" id="price-color" value="#e74c3c">
+                        <input type="text" id="price-color-text" value="#e74c3c" placeholder="#e74c3c">
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="background-image">Background Image URL:</label>
+                <input type="text" id="background-image" placeholder="https://example.com/background.jpg">
+                <small>Leave empty to use background color instead</small>
+            </div>
+
+            <button onclick="updateCustomization()" class="btn btn-success">
+                <i class="fas fa-save"></i> Save Customization
+            </button>
+        </div>
+
+        <!-- Currency Settings Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-euro-sign"></i> Currency Settings</h2>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="eur-to-bgn-rate">EUR to BGN Exchange Rate:</label>
+                    <input type="number" id="eur-to-bgn-rate" step="0.0001" min="0" value="1.9558" placeholder="1.9558">
+                    <small>Official fixed rate: 1 EUR = 1.9558 BGN</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-bgn-prices">
+                        <span>Show BGN Prices</span>
+                    </label>
+                    <small>When unchecked, only EUR prices will be displayed</small>
+                </div>
+            </div>
+
+            <button onclick="updateCurrencySettings()" class="btn btn-primary">
+                <i class="fas fa-save"></i> Save Currency Settings
+            </button>
+        </div>
+
+        <!-- Order Settings Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-shopping-cart"></i> Order Settings</h2>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="minimum-order-amount">Minimum Order Amount (EUR):</label>
+                    <input type="number" id="minimum-order-amount" step="0.01" min="0" value="0" placeholder="0.00">
+                    <small>Set to 0 to disable minimum order requirement</small>
+                </div>
+            </div>
+
+            <button onclick="updateOrderSettings()" class="btn btn-primary">
+                <i class="fas fa-save"></i> Save Order Settings
+            </button>
+        </div>
+
+        <!-- Working Hours Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-clock"></i> Working Hours</h2>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="opening-time">Opening Time:</label>
+                    <input type="time" id="opening-time" value="09:00">
+                    <small>Restaurant opening time for pickup orders</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="closing-time">Closing Time:</label>
+                    <input type="time" id="closing-time" value="22:00">
+                    <small>Restaurant closing time for pickup orders</small>
+                </div>
+            </div>
+
+            <button onclick="updateWorkingHours()" class="btn btn-primary">
+                <i class="fas fa-save"></i> Save Working Hours
+            </button>
+        </div>
+
+        <!-- Promotional Slideshow Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-images"></i> Promotional Slideshow Banner</h2>
+            
+            <div class="form-group">
+                <div style="background: #f8f9fa; border-left: 4px solid #3498db; padding: 12px 15px; margin-bottom: 15px; border-radius: 4px;">
+                    <strong><i class="fas fa-info-circle"></i> Препоръчителни размери на банери:</strong>
+                    <ul style="margin: 8px 0 0 20px; line-height: 1.6;">
+                        <li><strong>Desktop:</strong> 1200 x 400 px (съотношение 3:1)</li>
+                        <li><strong>Mobile:</strong> 800 x 600 px (съотношение 4:3)</li>
+                    </ul>
+                    <small style="color: #666; display: block; margin-top: 8px;">
+                        <i class="fas fa-lightbulb"></i> Използвайте високо качество изображения (JPG/PNG) за най-добър резултат
+                    </small>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label style="display: inline-flex !important; align-items: center !important; gap: 8px !important; cursor: pointer;">
+                    <input type="checkbox" id="slideshow-enabled" onchange="toggleSlideshowPreview()">
+                    Enable Promotional Slideshow (shown only in "All Items" category)
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label for="slideshow-interval">Auto-play Interval (seconds):</label>
+                <input type="number" id="slideshow-interval" min="3" max="30" value="5">
+            </div>
+
+            <div class="form-group">
+                <label>Slides:</label>
+                <div id="slides-list" style="display: flex; flex-direction: column; gap: 15px; margin-top: 10px;">
+                    <!-- Slides will be rendered here -->
+                </div>
+                <button onclick="addSlide()" class="btn btn-secondary" style="margin-top: 10px;">
+                    <i class="fas fa-plus"></i> Add Slide
+                </button>
+            </div>
+
+            <button onclick="saveSlideshowSettings()" class="btn btn-primary">
+                <i class="fas fa-save"></i> Save Slideshow Settings
+            </button>
+        </div>
+        </div><!-- End Restaurant Settings Tab -->
+
+        <!-- Delivery Settings Tab -->
+        <div class="admin-tab-content" id="tab-delivery-settings">
+        <!-- Delivery Zones Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-city"></i> Delivery Cities & Prices</h2>
+            
+            <p>Manage available cities for delivery and set delivery price for each city.</p>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="city-name-input">City Name:</label>
+                    <input type="text" id="city-name-input" placeholder="е.g., Пловдив">
+                </div>
+
+                <div class="form-group">
+                    <label for="city-price-input">Delivery Price (EUR):</label>
+                    <input type="number" id="city-price-input" step="0.01" min="0" placeholder="e.g., 5.00">
+                </div>
+            </div>
+
+            <button onclick="addCity()" class="btn btn-success">
+                <i class="fas fa-plus"></i> Add City
+            </button>
+
+            <div id="cities-list" style="margin-top: 20px;">
+                <!-- Cities will be rendered here -->
+            </div>
+        </div>
+
+        <!-- Delivery Settings Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-truck"></i> Delivery Settings</h2>
+            
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="delivery-enabled" onchange="toggleDeliverySection()" checked>
+                    <span>Enable Delivery (Show all delivery options)</span>
+                </label>
+                <small style="color: #666; display: block; margin-top: 5px;">When disabled, only "Pick up from location" will be available</small>
+            </div>
+            
+            <div id="delivery-settings-section">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="free-delivery-enabled" onchange="toggleFreeDelivery()">
+                            <span>Enable Free Delivery Above Amount</span>
+                        </label>
+                    </div>
+                    <div class="form-group" id="free-delivery-amount-group" style="display: none;">
+                        <label for="free-delivery-amount">Minimum Order Amount (лв):</label>
+                        <input type="number" id="free-delivery-amount" min="0" step="0.01" placeholder="e.g., 50.00">
+                        <small>Orders above this amount get free delivery</small>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="delivery-fee">Standard Delivery Fee (лв):</label>
+                        <input type="number" id="delivery-fee" min="0" step="0.01" placeholder="e.g., 5.00" value="5.00">
+                        <small>Fee charged for delivery orders</small>
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: flex-end;">
+                        <button onclick="saveDeliverySettings()" class="btn btn-primary" style="width: 100%;">
+                            <i class="fas fa-save"></i> Save Delivery Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div><!-- End Delivery Settings Tab -->
+
+        <!-- Promo Codes Tab -->
+        <div class="admin-tab-content" id="tab-promo-codes">
+        <!-- Promo Codes Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-ticket-alt"></i> Promo Codes Management</h2>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="promo-code-input">Promo Code:</label>
+                    <input type="text" id="promo-code-input" placeholder="e.g., SUMMER25" style="text-transform: uppercase;">
+                    <small>Code will be converted to uppercase automatically</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="promo-code-category">Apply to Category:</label>
+                    <select id="promo-code-category">
+                        <option value="all">All Categories</option>
+                    </select>
+                    <small>Promo code will apply only to items in this category</small>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="promo-code-discount">Discount Percentage:</label>
+                    <input type="number" id="promo-code-discount" min="1" max="100" step="1" placeholder="e.g., 25">
+                    <small>Percentage discount (1-100%)</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="promo-code-active">Status:</label>
+                    <select id="promo-code-active">
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button onclick="savePromoCode()" class="btn btn-success" id="save-promo-btn">
+                    <i class="fas fa-plus"></i> <span id="promo-submit-text">Add Promo Code</span>
+                </button>
+                <button onclick="cancelPromoEdit()" class="btn btn-secondary" id="cancel-promo-btn" style="display: none;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+
+            <h3 style="margin-top: 30px; margin-bottom: 15px;">Active Promo Codes</h3>
+            <div class="products-table-container">
+                <table class="products-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Category</th>
+                            <th>Discount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="promo-codes-table-body">
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 20px; color: #999;">
+                                No promo codes yet. Create one above!
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        </div><!-- End Promo Codes Tab -->
+
+        <!-- Combos Tab -->
+        <div class="admin-tab-content" id="tab-combos">
+        <!-- Combo & Bundle Offers Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-gift"></i> Combo & Bundle Offers</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Create special combo and bundle deals. These will automatically appear in the "Combos & Bundles" category.
+            </p>
+
+            <div class="form-group">
+                <label for="combo-name">Combo Name (English):</label>
+                <input type="text" id="combo-name" placeholder="e.g., Family Meal Deal">
+            </div>
+
+            <div class="form-group">
+                <label for="combo-name-bg">Combo Name (Bulgarian):</label>
+                <input type="text" id="combo-name-bg" placeholder="например, Семейно Комбо">
+            </div>
+
+            <div class="form-group">
+                <label for="combo-description">Description (English):</label>
+                <textarea id="combo-description" rows="3" placeholder="Describe what's included in this combo..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="combo-description-bg">Description (Bulgarian):</label>
+                <textarea id="combo-description-bg" rows="3" placeholder="Опишете какво включва комбото..."></textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="combo-price">Price (лв):</label>
+                    <input type="number" id="combo-price" min="0" step="0.01" placeholder="e.g., 49.99">
+                </div>
+
+                <div class="form-group">
+                    <label for="combo-type">Type:</label>
+                    <select id="combo-type">
+                        <option value="combo">Combo (Multiple items together)</option>
+                        <option value="bundle">Bundle (Buy X Get Y)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="combo-image">Image URL:</label>
+                <input type="text" id="combo-image" placeholder="https://example.com/combo-image.jpg">
+            </div>
+
+            <div class="form-group">
+                <label>Select Products Included:</label>
+                <div style="margin-bottom: 10px; display: flex; gap: 10px;">
+                    <input type="text" id="combo-product-search" placeholder="Search products..." style="flex: 2; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <select id="combo-category-filter" style="flex: 1; max-width: 200px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <option value="">All Categories</option>
+                    </select>
+                </div>
+                <div id="combo-products-selector" style="max-height: 500px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 15px; background: #f9f9f9;">
+                    <p style="color: #999; text-align: center;">Loading products...</p>
+                </div>
+                <!-- Pagination controls -->
+                <div id="combo-pagination" style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 15px;">
+                    <button onclick="previousComboPage()" class="btn btn-secondary" style="padding: 5px 15px;">
+                        <i class="fas fa-chevron-left"></i> Previous
+                    </button>
+                    <span id="combo-page-info" style="color: #666;">Page 1</span>
+                    <button onclick="nextComboPage()" class="btn btn-secondary" style="padding: 5px 15px;">
+                        Next <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button onclick="saveCombo()" class="btn btn-success">
+                    <i class="fas fa-plus"></i> Create Combo/Bundle
+                </button>
+                <button onclick="clearComboForm()" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Clear Form
+                </button>
+            </div>
+
+            <h3 style="margin-top: 30px; margin-bottom: 15px;">Active Combos & Bundles</h3>
+            <div class="products-table-container">
+                <table class="products-table">
+                    <thead>
+                        <tr>
+                            <th>Image</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Price</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="combos-table-body">
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 20px; color: #999;">
+                                No combos or bundles yet. Create one above!
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        </div><!-- End Combos Tab -->
+
+        <!-- Products Tab -->
+        <div class="admin-tab-content" id="tab-products">
+        <!-- Add/Edit Product Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-plus-circle"></i> <span id="form-title">Add New Product</span></h2>
+            <form id="product-form" class="product-form">
+                <input type="hidden" id="product-id">
+                
+                <div class="form-group">
+                    <label for="product-name">Product Name (English):</label>
+                    <input type="text" id="product-name" required placeholder="e.g., Margherita Pizza">
+                </div>
+
+                <div class="form-group">
+                    <label for="product-name-bg">Product Name (Bulgarian):</label>
+                    <input type="text" id="product-name-bg" placeholder="например, Пица Маргарита">
+                    <small>Optional: Leave empty to use English name</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="product-description">Description (English):</label>
+                    <textarea id="product-description" rows="3" required placeholder="Describe your product..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="product-description-bg">Description (Bulgarian):</label>
+                    <textarea id="product-description-bg" rows="3" placeholder="Опишете продукта..."></textarea>
+                    <small>Optional: Leave empty to use English description</small>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="product-category">Category (English):</label>
+                        <input type="text" id="product-category" required placeholder="e.g., Pizza, Salads">
+                        <small>Tip: Use existing categories or create new ones</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="product-category-bg">Category (Bulgarian):</label>
+                        <input type="text" id="product-category-bg" placeholder="например, Пица, Салати">
+                        <small>Optional: Leave empty to use English category</small>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="product-price">Price ($):</label>
+                        <input type="number" id="product-price" step="0.01" min="0" required placeholder="0.00">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="product-weight">Weight/Quantity:</label>
+                        <input type="text" id="product-weight" placeholder="e.g., 500g, 300ml, 1 pc">
+                        <small>Example: 500g, 300ml, 12 pcs, 1L</small>
+                    </div>
+                </div>
+
+                <div class="promo-section" style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <h3 style="margin-bottom: 15px; color: #856404;">
+                        <i class="fas fa-tag"></i> Promotional Pricing
+                    </h3>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="promo-enabled" onchange="togglePromoFields()">
+                            <span>Enable Promotional Price</span>
+                        </label>
+                    </div>
+
+                    <div id="promo-fields" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="promo-price">Promo Price ($):</label>
+                                <input type="number" id="promo-price" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="promo-type">Promo Duration:</label>
+                                <select id="promo-type" onchange="togglePromoDateFields()">
+                                    <option value="permanent">Until Manually Disabled</option>
+                                    <option value="timed">Set Start & End Date</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="promo-date-fields" style="display: none;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="promo-start">Start Date:</label>
+                                    <input type="datetime-local" id="promo-start">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="promo-end">End Date:</label>
+                                    <input type="datetime-local" id="promo-end">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="product-image">Image URL:</label>
+                    <input type="text" id="product-image" placeholder="https://example.com/image.jpg">
+                    <small>Or upload an image:</small>
+                    <input type="file" id="product-image-file" accept="image/*" onchange="handleImageUpload(event)">
+                    <div id="image-preview" class="image-preview"></div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save"></i> <span id="submit-text">Add Product</span>
+                    </button>
+                    <button type="button" onclick="cancelEdit()" class="btn btn-secondary" id="cancel-btn" style="display: none;">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Products List Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-list"></i> Manage Products</h2>
+            
+            <div class="filter-bar">
+                <input type="text" id="admin-search" placeholder="Search by EN name, BG name, or ID..." onkeyup="filterProducts()">
+                <select id="category-filter" onchange="filterProducts()">
+                    <option value="all">All Categories</option>
+                </select>
+            </div>
+
+            <!-- Top Action Bar -->
+            <div class="form-group" style="display:flex; gap:12px; align-items:center; margin-bottom:15px; flex-wrap:wrap;">
+                <span id="manage-selection-count-top" style="padding:8px 12px; background:#f0f0f0; border-radius:6px; font-weight:600; color:#555;">0 selected</span>
+                <button id="manage-create-bundle-btn-top" class="admin-link" style="background-color:#27ae60; border:none;" disabled>
+                    <i class="fas fa-gift"></i> Create Bundle
+                </button>
+                <button id="manage-bulk-promo-btn-top" class="admin-link" style="background-color:#e74c3c; border:none;" disabled>Apply Promo to Selected</button>
+                <button id="manage-bulk-delete-btn-top" class="admin-link" style="background-color:#b23b3b; border:none;" disabled>Delete Selected</button>
+            </div>
+
+            <div class="products-table-container">
+                <table class="products-table">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;"><input type="checkbox" id="manage-select-all"></th>
+                            <th>ID</th>
+                            <th>EN Name</th>
+                            <th>BG Name</th>
+                            <th>Category</th>
+                            <th>Price</th>
+                            <th>Promo</th>
+                            <th>Image</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="products-table-body">
+                        <!-- Products will be loaded here -->
+                    </tbody>
+                </table>
+                
+                <!-- Pagination Controls -->
+                <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 8px;">
+                    <button onclick="previousManagePage()" class="btn btn-secondary" style="padding: 8px 20px;">
+                        <i class="fas fa-chevron-left"></i> Previous
+                    </button>
+                    <span id="manage-page-info" style="color: #666; font-weight: 600;">Page 1 of 1</span>
+                    <button onclick="nextManagePage()" class="btn btn-secondary" style="padding: 8px 20px;">
+                        Next <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+
+                <!-- Bottom Action Bar -->
+                <div class="form-group" style="display:flex; gap:12px; align-items:center; margin-top:10px; flex-wrap:wrap;">
+                    <span id="manage-selection-count" style="padding:8px 12px; background:#f0f0f0; border-radius:6px; font-weight:600; color:#555;">0 selected</span>
+                    <button id="manage-create-bundle-btn" class="admin-link" style="background-color:#27ae60; border:none;" disabled>
+                        <i class="fas fa-gift"></i> Create Bundle
+                    </button>
+                    <button id="manage-bulk-promo-btn" class="admin-link" style="background-color:#e74c3c; border:none;" disabled>Apply Promo to Selected</button>
+                    <button id="manage-bulk-delete-btn" class="admin-link" style="background-color:#b23b3b; border:none;" disabled>Delete Selected</button>
+                    <select id="manage-category-select" style="padding:10px; border:2px solid #e0e0e0; border-radius:8px;"></select>
+                    <button id="manage-category-promo-btn" class="admin-link" style="background-color:#c0392b; border:none;">Apply Promo to Category</button>
+                </div>
+            </div>
+
+            <div id="no-products" class="empty-state" style="display: none;">
+                <i class="fas fa-box-open"></i>
+                <p>No products found</p>
+                <small>Add your first product using the form above</small>
+            </div>
+        </div>
+        
+        <!-- Data Management Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-database"></i> Data Management</h2>
+            
+            <h3 style="margin-top: 30px; margin-bottom: 15px;">
+                <i class="fas fa-file-csv"></i> Products CSV Import/Export
+            </h3>
+            <p style="color: #666; margin-bottom: 20px;">
+                Download a CSV template, fill it with product data, and upload it back to bulk import products.
+            </p>
+            
+            <div class="data-actions" style="margin-bottom: 30px;">
+                <button onclick="downloadCSVTemplate()" class="btn btn-success">
+                    <i class="fas fa-download"></i> Download CSV Template
+                </button>
+                <button onclick="exportProductsCSV()" class="btn btn-info">
+                    <i class="fas fa-file-export"></i> Export Products to CSV
+                </button>
+                <button onclick="document.getElementById('csv-import-file').click()" class="btn btn-primary">
+                    <i class="fas fa-upload"></i> Import Products from CSV
+                </button>
+            </div>
+            <input type="file" id="csv-import-file" accept=".csv" style="display: none;" onchange="handleCSVImport(event)">
+            
+            <h3 style="margin-top: 40px; margin-bottom: 15px;">
+                <i class="fas fa-database"></i> Full Database Backup
+            </h3>
+            <div class="data-actions">
+                <button onclick="exportData()" class="btn btn-info">
+                    <i class="fas fa-download"></i> Export All Data (JSON)
+                </button>
+                <button onclick="importData()" class="btn btn-warning">
+                    <i class="fas fa-upload"></i> Import All Data (JSON)
+                </button>
+                <button onclick="resetData()" class="btn btn-danger">
+                    <i class="fas fa-trash"></i> Reset All Data
+                </button>
+            </div>
+            <input type="file" id="import-file" accept=".json" style="display: none;" onchange="handleImport(event)">
+        </div>
+        </div><!-- End Products Tab -->
+
+        <!-- Orders History Tab -->
+        <div class="admin-tab-content" id="tab-orders-history">
+        <div class="admin-section">
+            <h2><i class="fas fa-history"></i> Orders History</h2>
+            <p style="color: #666;">Coming soon - Orders history functionality will be added here.</p>
+        </div>
+        </div><!-- End Orders History Tab -->
+
+        </div><!-- End admin-tabs-content -->
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal">
+        <div class="modal-content modal-small">
+            <h3>Confirm Delete</h3>
+            <p>Are you sure you want to delete this product?</p>
+            <div class="modal-actions">
+                <button onclick="confirmDelete()" class="btn btn-danger">Delete</button>
+                <button onclick="closeDeleteModal()" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bundle Creation Modal -->
+    <div id="bundle-modal" class="modal">
+        <div class="modal-content" style="max-width: 700px; max-height: 90vh; display: flex; flex-direction: column;">
+            <h3 style="padding: 20px; margin: 0; border-bottom: 1px solid #eee;"><i class="fas fa-gift"></i> Create Bundle from Selected Products</h3>
+            
+            <div style="flex: 1; overflow-y: auto; padding: 20px;">
+                <div id="bundle-products-list" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <!-- Selected products will be shown here -->
+                </div>
+                
+                <div style="padding: 0;">
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label for="bundle-name-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Bundle Name (English):</label>
+                        <input type="text" id="bundle-name-input" placeholder="e.g., Pizza & Salad Combo" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                        <small style="display: block; margin-top: 5px; color: #666;">Leave empty to auto-generate from product names</small>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label for="bundle-name-bg-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Bundle Name (Bulgarian):</label>
+                        <input type="text" id="bundle-name-bg-input" placeholder="например, Пица и Салата Комбо" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label for="bundle-price-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Bundle Price (лв):</label>
+                        <input type="number" id="bundle-price-input" step="0.01" min="0" required placeholder="0.00" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                        <small id="bundle-original-price" style="display: block; margin-top: 5px; color: #666;"></small>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label for="bundle-label-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Special Label (Optional):</label>
+                        <input type="text" id="bundle-label-input" placeholder="e.g., SPECIAL, HOT DEAL, BEST VALUE" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                        <small style="display: block; margin-top: 5px; color: #666;">Will appear as a badge on the product card (like promo labels)</small>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label for="bundle-image-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Image URL (Optional):</label>
+                        <input type="text" id="bundle-image-input" placeholder="https://example.com/bundle-image.jpg" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                        <small style="display: block; margin-top: 5px; color: #666;">Leave empty to use first product's image</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-actions" style="padding: 20px; border-top: 1px solid #eee; display: flex; gap: 10px; justify-content: flex-end;">
+                <button onclick="confirmBundleCreation()" class="btn btn-success">
+                    <i class="fas fa-check"></i> Create Bundle
+                </button>
+                <button onclick="closeBundleModal()" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Fix navigation links with BASE_PATH
+        const BASE_PATH_FIX = window.location.pathname.includes('/resturant-website') ? '/resturant-website' : '';
+        document.addEventListener('DOMContentLoaded', () => {
+            const backLink = document.querySelector('a[href="../"]');
+            if (backLink) backLink.href = BASE_PATH_FIX + '/';
+        });
+    </script>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="admin.js"></script>
+</body>
+</html>
+

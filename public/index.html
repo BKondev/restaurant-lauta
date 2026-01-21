@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Restaurant Menu - Template</title>
+    <link rel="stylesheet" href="styles.css?v=20251211012">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Top Bar -->
+    <div class="top-bar">
+        <div class="container">
+            <div class="logo" onclick="window.location.reload();" style="cursor: pointer;">
+                <img id="restaurant-logo" class="restaurant-logo" src="" alt="Logo">
+                <h1 id="restaurant-name">Restaurant Name</h1>
+            </div>
+            <div class="search-bar-top">
+                <div class="search-container" id="search-container">
+                    <input type="text" id="search-input" placeholder="Search for dishes..." data-i18n-placeholder="searchPlaceholder" autocomplete="off">
+                    <i class="fas fa-search search-icon-desktop"></i>
+                    <button class="close-search-mobile" onclick="closeMobileSearch()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="search-results-dropdown" id="search-results"></div>
+                </div>
+            </div>
+            <div class="top-actions">
+                <button class="search-toggle-mobile" id="search-toggle-btn" onclick="toggleMobileSearch()">
+                    <i class="fas fa-search"></i>
+                </button>
+                <div class="language-switcher">
+                    <button class="lang-btn active" data-lang="en" onclick="switchLanguage('en')" title="English">
+                        EN
+                    </button>
+                    <button class="lang-btn" data-lang="bg" onclick="switchLanguage('bg')" title="Български">
+                        BG
+                    </button>
+                    <select class="lang-dropdown" id="lang-dropdown" onchange="switchLanguage(this.value)">
+                        <option value="en">EN</option>
+                        <option value="bg">BG</option>
+                    </select>
+                </div>
+                <a href="checkout" class="cart-button" id="cart-button">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span class="cart-badge" id="cart-count">0</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <!-- Sidebar Categories -->
+        <aside class="sidebar">
+            <div class="categories-header">
+                <h2 data-i18n="categories">Menu Categories</h2>
+            </div>
+            <nav class="categories-nav" id="categories-nav">
+                <!-- Categories will be dynamically loaded here -->
+            </nav>
+        </aside>
+
+        <!-- Menu Content -->
+        <div class="content">
+            <!-- Promotional Slideshow Banner -->
+            <div id="promo-slideshow" class="promo-slideshow" style="display: none;">
+                <div class="slideshow-container">
+                    <div class="slides-wrapper" id="slides-wrapper">
+                        <!-- Slides will be dynamically loaded here -->
+                    </div>
+                    <button class="slide-nav prev" onclick="changeSlide(-1)">❮</button>
+                    <button class="slide-nav next" onclick="changeSlide(1)">❯</button>
+                    <div class="slide-dots" id="slide-dots"></div>
+                </div>
+            </div>
+            
+            <!-- Products Container -->
+            <div id="products-container">
+                <!-- Products will be dynamically loaded here -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="empty-state" class="empty-state" style="display: none;">
+                <i class="fas fa-utensils"></i>
+                <p>No items found</p>
+            </div>
+        </main>
+    </div>
+
+    <!-- Product Modal -->
+    <div id="product-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div class="modal-body">
+                <img id="modal-image" src="" alt="">
+                <div class="modal-info">
+                    <h2 id="modal-name"></h2>
+                    <p id="modal-description"></p>
+                    <div class="modal-details">
+                        <span class="modal-price" id="modal-price"></span>
+                        <span class="modal-category" id="modal-category"></span>
+                    </div>
+                    <button class="add-to-cart-btn" id="modal-add-to-cart" style="margin-top: 20px;">
+                        <i class="fas fa-shopping-cart"></i> Add to Cart
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js?v=20251211002"></script>
+</body>
+</html>

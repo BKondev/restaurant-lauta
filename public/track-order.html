@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Проследяване на поръчка - BOJOLE</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #4caf50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            animation: scaleIn 0.5s ease-out 0.2s both;
+        }
+
+        @keyframes scaleIn {
+            from {
+                transform: scale(0);
+            }
+            to {
+                transform: scale(1);
+            }
+        }
+
+        .success-icon i {
+            font-size: 40px;
+            color: white;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .order-info {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+
+        .order-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .order-row:last-child {
+            border-bottom: none;
+        }
+
+        .order-label {
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .order-value {
+            color: #333;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .order-id {
+            font-size: 24px;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .status-container {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .status-text {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .time-remaining {
+            font-size: 36px;
+            font-weight: bold;
+            margin: 15px 0;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .estimated-time {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .progress-bar-container {
+            background: rgba(255, 255, 255, 0.3);
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 15px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: white;
+            border-radius: 4px;
+            transition: width 1s linear;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .actions {
+            margin-top: 30px;
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+
+        .error-container {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .error-title {
+            color: #856404;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .error-message {
+            color: #856404;
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .delivery-info {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .delivery-info i {
+            color: #2196f3;
+            margin-right: 8px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 25px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .time-remaining {
+                font-size: 28px;
+            }
+
+            .actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="app">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Зареждане на поръчка...</p>
+        </div>
+    </div>
+
+    <script>
+        const BASE_PATH = '/resturant-website';
+        const API_URL = 'https://www.crystalautomation.eu/resturant-website/api';
+        
+        let updateInterval = null;
+        let order = null;
+        let startTime = null;
+
+        // Get order ID from URL
+        function getOrderId() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('id');
+        }
+
+        // Fetch order details
+        async function fetchOrderDetails(orderId) {
+            try {
+                const response = await fetch(`${API_URL}/orders/track/${orderId}`);
+                
+                if (response.status === 410) {
+                    // Order tracking expired (2 hours passed)
+                    return { expired: true };
+                }
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch order');
+                }
+
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Error fetching order:', error);
+                return { error: true, message: error.message };
+            }
+        }
+
+        // Calculate time remaining
+        function calculateTimeRemaining(createdAt, estimatedMinutes) {
+            if (!estimatedMinutes) estimatedMinutes = 60; // Default
+
+            const created = new Date(createdAt);
+            const now = new Date();
+            const estimatedCompletion = new Date(created.getTime() + estimatedMinutes * 60000);
+            const remaining = estimatedCompletion - now;
+
+            if (remaining <= 0) {
+                return { minutes: 0, seconds: 0, total: 0 };
+            }
+
+            const minutes = Math.floor(remaining / 60000);
+            const seconds = Math.floor((remaining % 60000) / 1000);
+
+            return { minutes, seconds, total: remaining };
+        }
+
+        // Format time
+        function formatTime(minutes, seconds) {
+            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // Render order tracking page
+        function renderOrderTracking(orderData) {
+            order = orderData;
+            startTime = new Date(order.createdAt);
+
+            const timeRemaining = calculateTimeRemaining(order.createdAt, order.estimatedTime);
+            const totalEstimatedMs = (order.estimatedTime || 60) * 60000;
+            const elapsedMs = Date.now() - startTime.getTime();
+            const progressPercent = Math.min(100, (elapsedMs / totalEstimatedMs) * 100);
+
+            const statusText = order.status === 'pending' 
+                ? 'Поръчката се обработва...' 
+                : order.status === 'approved' 
+                    ? 'Поръчката е одобрена!' 
+                    : 'В процес на изпълнение';
+
+            const html = `
+                <div class="header">
+                    <div class="success-icon">
+                        <i class="fas fa-check"></i>
+                    </div>
+                    <h1>Благодарим за поръчката!</h1>
+                    <p class="subtitle">Вашата поръчка беше приета успешно</p>
+                </div>
+
+                <div class="order-info">
+                    <div class="order-row">
+                        <span class="order-label">Номер на поръчка:</span>
+                        <span class="order-id">#${order.id}</span>
+                    </div>
+                    <div class="order-row">
+                        <span class="order-label">Статус:</span>
+                        <span class="order-value">${statusText}</span>
+                    </div>
+                    <div class="order-row">
+                        <span class="order-label">Тип:</span>
+                        <span class="order-value">
+                            ${order.deliveryMethod === 'delivery' ? '🚚 Доставка' : '🛍 Вземане от място'}
+                        </span>
+                    </div>
+                    <div class="order-row">
+                        <span class="order-label">Обща сума:</span>
+                        <span class="order-value">${order.total.toFixed(2)} лв</span>
+                    </div>
+                </div>
+
+                ${order.deliveryMethod === 'delivery' && order.customerInfo ? `
+                    <div class="delivery-info">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <strong>Адрес за доставка:</strong><br>
+                        ${order.customerInfo.address}, ${order.customerInfo.city}
+                    </div>
+                ` : ''}
+
+                <div class="status-container">
+                    <div class="status-text">
+                        ${timeRemaining.total > 0 ? 'Очаквано време за изпълнение:' : 'Вашата поръчка е готова!'}
+                    </div>
+                    <div class="time-remaining" id="time-display">
+                        ${timeRemaining.total > 0 ? formatTime(timeRemaining.minutes, timeRemaining.seconds) : 'Готово!'}
+                    </div>
+                    <div class="estimated-time">
+                        ${order.estimatedTime ? `Приблизително ${order.estimatedTime} минути` : 'Приблизително 60 минути'}
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progress-bar" style="width: ${progressPercent}%"></div>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <a href="${BASE_PATH}/" class="btn btn-secondary">
+                        <i class="fas fa-home"></i> Начало
+                    </a>
+                    <a href="${BASE_PATH}/" class="btn btn-primary">
+                        <i class="fas fa-utensils"></i> Нова поръчка
+                    </a>
+                </div>
+            `;
+
+            document.getElementById('app').innerHTML = html;
+
+            // Start countdown
+            if (timeRemaining.total > 0) {
+                updateInterval = setInterval(updateCountdown, 1000);
+            }
+        }
+
+        // Update countdown
+        function updateCountdown() {
+            if (!order) return;
+
+            const timeRemaining = calculateTimeRemaining(order.createdAt, order.estimatedTime);
+            const timeDisplay = document.getElementById('time-display');
+            const progressBar = document.getElementById('progress-bar');
+
+            if (timeDisplay) {
+                if (timeRemaining.total > 0) {
+                    timeDisplay.textContent = formatTime(timeRemaining.minutes, timeRemaining.seconds);
+
+                    // Update progress bar
+                    const totalEstimatedMs = (order.estimatedTime || 60) * 60000;
+                    const elapsedMs = Date.now() - startTime.getTime();
+                    const progressPercent = Math.min(100, (elapsedMs / totalEstimatedMs) * 100);
+                    if (progressBar) {
+                        progressBar.style.width = progressPercent + '%';
+                    }
+                } else {
+                    timeDisplay.textContent = 'Готово!';
+                    if (progressBar) {
+                        progressBar.style.width = '100%';
+                    }
+                    clearInterval(updateInterval);
+                }
+            }
+        }
+
+        // Render error
+        function renderError(message) {
+            const html = `
+                <div class="header">
+                    <div class="success-icon" style="background: #f44336;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h1>Грешка</h1>
+                </div>
+
+                <div class="error-container">
+                    <div class="error-title">Не можахме да заредим поръчката</div>
+                    <div class="error-message">${message}</div>
+                </div>
+
+                <div class="actions">
+                    <a href="${BASE_PATH}/" class="btn btn-primary" style="flex: initial; width: 100%;">
+                        <i class="fas fa-home"></i> Обратно към началото
+                    </a>
+                </div>
+            `;
+
+            document.getElementById('app').innerHTML = html;
+        }
+
+        // Render expired
+        function renderExpired() {
+            const html = `
+                <div class="header">
+                    <div class="success-icon" style="background: #ff9800;">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <h1>Проследяването изтече</h1>
+                </div>
+
+                <div class="error-container">
+                    <div class="error-title">Линкът за проследяване не е повече активен</div>
+                    <div class="error-message">
+                        Можете да проследявате вашата поръчка само в рамките на 2 часа след създаването ѝ.
+                        За повече информация, моля свържете се с ресторанта.
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <a href="${BASE_PATH}/" class="btn btn-primary" style="flex: initial; width: 100%;">
+                        <i class="fas fa-home"></i> Обратно към началото
+                    </a>
+                </div>
+            `;
+
+            document.getElementById('app').innerHTML = html;
+        }
+
+        // Initialize
+        async function init() {
+            const orderId = getOrderId();
+
+            if (!orderId) {
+                renderError('Не е посочен номер на поръчка.');
+                return;
+            }
+
+            const result = await fetchOrderDetails(orderId);
+
+            if (result.expired) {
+                renderExpired();
+            } else if (result.error) {
+                renderError(result.message || 'Възникна грешка при зареждане на поръчката.');
+            } else if (result.order) {
+                renderOrderTracking(result.order);
+
+                // Auto-refresh order status every 30 seconds
+                setInterval(async () => {
+                    const updated = await fetchOrderDetails(orderId);
+                    if (updated.order && !updated.error && !updated.expired) {
+                        // Update status silently
+                        order.status = updated.order.status;
+                        order.estimatedTime = updated.order.estimatedTime;
+                    }
+                }, 30000);
+            } else {
+                renderError('Поръчката не беше намерена.');
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+        });
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

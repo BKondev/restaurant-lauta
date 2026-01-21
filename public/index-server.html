@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant Menu - Template</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Top Bar -->
+    <div class="top-bar">
+        <div class="container">
+            <div class="logo">
+                <img id="restaurant-logo" class="restaurant-logo" src="" alt="Logo">
+                <h1 id="restaurant-name">Restaurant Name</h1>
+            </div>
+            <div class="top-actions">
+                <div class="language-switcher">
+                    <button class="lang-btn active" data-lang="en" onclick="switchLanguage('en')">
+                        <i class="fas fa-globe"></i> EN
+                    </button>
+                    <button class="lang-btn" data-lang="bg" onclick="switchLanguage('bg')">
+                        <i class="fas fa-globe"></i> BG
+                    </button>
+                </div>
+                <a href="checkout" class="cart-button" id="cart-button">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span class="cart-badge" id="cart-count">0</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <!-- Sidebar Categories -->
+        <aside class="sidebar">
+            <div class="categories-header">
+                <h2 data-i18n="categories">Menu Categories</h2>
+            </div>
+            <nav class="categories-nav" id="categories-nav">
+                <!-- Categories will be dynamically loaded here -->
+            </nav>
+        </aside>
+
+        <!-- Menu Content -->
+        <div class="content">
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="Search for dishes..." data-i18n-placeholder="searchPlaceholder">
+                <i class="fas fa-search"></i>
+            </div>
+
+            <!-- Promo Code Section -->
+            <div class="promo-code-section" style="background: #fff; padding: 15px 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <i class="fas fa-ticket-alt" style="color: var(--highlight-color); font-size: 20px;"></i>
+                    <input type="text" id="promo-code-input" placeholder="Enter promo code" 
+                           style="flex: 1; min-width: 200px; padding: 10px 15px; border: 2px solid #ddd; border-radius: 8px; font-size: 15px; text-transform: uppercase;">
+                    <button onclick="applyPromoCode()" style="padding: 10px 20px; background: var(--highlight-color); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.3s;">
+                        <i class="fas fa-check"></i> Apply Code
+                    </button>
+                </div>
+                <div id="promo-message" style="margin-top: 10px; font-size: 14px; display: none;"></div>
+            </div>
+
+            <!-- Products Container -->
+            <div id="products-container">
+                <!-- Products will be dynamically loaded here -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="empty-state" class="empty-state" style="display: none;">
+                <i class="fas fa-utensils"></i>
+                <p>No items found</p>
+            </div>
+        </main>
+    </div>
+
+    <!-- Product Modal -->
+    <div id="product-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div class="modal-body">
+                <img id="modal-image" src="" alt="">
+                <div class="modal-info">
+                    <h2 id="modal-name"></h2>
+                    <p id="modal-description"></p>
+                    <div class="modal-details">
+                        <span class="modal-price" id="modal-price"></span>
+                        <span class="modal-category" id="modal-category"></span>
+                    </div>
+                    <button class="add-to-cart-btn" id="modal-add-to-cart" style="margin-top: 20px;">
+                        <i class="fas fa-shopping-cart"></i> Add to Cart
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
