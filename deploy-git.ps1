@@ -23,7 +23,7 @@ Require-Command scp
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Git Deployment Script" -ForegroundColor Cyan
-Write-Host "Target: $ServerUser@$ServerIp:$DeployDir" -ForegroundColor Cyan
+Write-Host "Target: $ServerUser@${ServerIp}:$DeployDir" -ForegroundColor Cyan
 Write-Host "Branch: $Branch" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 

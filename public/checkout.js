@@ -745,10 +745,13 @@ function renderCartItems() {
 
         itemElement.innerHTML = `
             <div class="cart-item-row">
-                <img src="${item.image.startsWith('http') ? item.image : BASE_PATH + item.image}" alt="${displayName}" class="cart-item-image" onerror="this.style.display='none'">
-                <div class="cart-item-name">
-                    ${displayName}
-                    ${item.weight ? `<span class="cart-item-weight">${item.weight}</span>` : ''}
+                <div class="cart-item-image-wrap">
+                    <img src="${item.image.startsWith('http') ? item.image : BASE_PATH + item.image}" alt="${displayName}" class="cart-item-image" onerror="this.style.display='none'">
+                    ${item.weight ? `<span class="cart-item-weight cart-item-weight-overlay">${item.weight}</span>` : ''}
+                </div>
+                <div class="cart-item-name">${displayName}</div>
+                <div class="cart-item-price">
+                    <span>${formatPrice(itemTotal)}</span>
                 </div>
                 <div class="cart-item-controls">
                     <div class="quantity-controls">
@@ -756,9 +759,6 @@ function renderCartItems() {
                         <span class="quantity-display">${item.quantity}</span>
                         <button class="quantity-btn" onclick="updateQuantity(${item.id}, 1)">+</button>
                     </div>
-                </div>
-                <div class="cart-item-price">
-                    <span>${formatPrice(itemTotal)}</span>
                 </div>
                 <button class="remove-btn" onclick="removeItem(${item.id})">
                     <i class="fas fa-trash"></i>
