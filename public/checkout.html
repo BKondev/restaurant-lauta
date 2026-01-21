@@ -779,6 +779,7 @@
         @media (max-width: 768px) {
             .cart-item {
                 text-align: left;
+                position: relative;
             }
 
             /* Desired layout:
@@ -834,7 +835,30 @@
             }
 
             .remove-btn {
-                display: none;
+                display: flex !important;
+                position: absolute;
+                top: 8px;
+                right: 8px;
+                width: 28px;
+                height: 28px;
+                padding: 0;
+                border-radius: 50%;
+                align-items: center;
+                justify-content: center;
+                z-index: 5;
+            }
+
+            .remove-btn i { display: none; }
+            .remove-btn::before {
+                content: '×';
+                font-size: 20px;
+                line-height: 1;
+                font-weight: 700;
+            }
+
+            .quantity-btn:disabled {
+                background: #ccc;
+                cursor: not-allowed;
             }
 
             .promo-input-group {

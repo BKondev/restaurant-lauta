@@ -462,6 +462,7 @@ body {
         border-radius: 8px !important;
         background: #fff !important;
         margin-bottom: 8px !important;
+        position: relative !important;
     }
 
     /* Checkout cart-item-row (mobile): image left (bigger), name above price, qty on far right (vertically centered) */
@@ -550,6 +551,10 @@ body {
         align-items: center !important;
         gap: 6px !important;
     }
+    body.checkout-page .quantity-controls .quantity-btn:disabled {
+        background: #ccc !important;
+        cursor: not-allowed !important;
+    }
     body .quantity-controls .quantity-btn { 
         width: 30px !important;
         height: 30px !important;
@@ -566,9 +571,33 @@ body {
         font-weight: 600 !important;
     }
 
-    /* Remove button: hide */
+    /* Remove button: red circular X in top-right */
     body.checkout-page .cart-item-row .remove-btn {
+        display: flex !important;
+        position: absolute !important;
+        top: 8px !important;
+        right: 8px !important;
+        width: 28px !important;
+        height: 28px !important;
+        padding: 0 !important;
+        border-radius: 50% !important;
+        background: #e74c3c !important;
+        color: #fff !important;
+        border: none !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12) !important;
+        z-index: 5 !important;
+    }
+    body.checkout-page .cart-item-row .remove-btn i {
         display: none !important;
+    }
+    body.checkout-page .cart-item-row .remove-btn::before {
+        content: '×' !important;
+        font-size: 20px !important;
+        line-height: 1 !important;
+        font-weight: 700 !important;
+        transform: translateY(-1px);
     }
 
     /* Notes */
