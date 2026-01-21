@@ -575,16 +575,16 @@ body {
     body.checkout-page .cart-item-row .remove-btn {
         display: flex !important;
         position: absolute !important;
-        top: -10px !important;
-        right: -10px !important;
-        width: 28px !important;
-        height: 28px !important;
+        top: -8px !important;
+        right: -8px !important;
+        width: 24px !important;
+        height: 24px !important;
         padding: 0 !important;
         border-radius: 50% !important;
         background: #e74c3c !important;
         color: #fff !important;
         border: none !important;
-        box-shadow: 0 0 0 3px #fff, 0 2px 8px rgba(0,0,0,0.18) !important;
+        box-shadow: 0 0 0 2px #fff, 0 2px 8px rgba(0,0,0,0.18) !important;
         align-items: center !important;
         justify-content: center !important;
         z-index: 5 !important;
@@ -594,7 +594,7 @@ body {
     }
     body.checkout-page .cart-item-row .remove-btn::before {
         content: '×' !important;
-        font-size: 20px !important;
+        font-size: 18px !important;
         line-height: 1 !important;
         font-weight: 700 !important;
         transform: translateY(-1px);
