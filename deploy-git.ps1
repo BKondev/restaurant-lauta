@@ -177,7 +177,7 @@ try {
   $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
   [System.IO.File]::WriteAllText($tmp, $remoteCmd, $utf8NoBom)
   scp $tmp "${ServerUser}@${ServerIp}:/tmp/deploy_git.sh" | Out-Null
-  ssh ${ServerUser}@${ServerIp} "bash /tmp/deploy_git.sh"
+  ssh ${ServerUser}@${ServerIp} "sed -i 's/\r$//' /tmp/deploy_git.sh; bash /tmp/deploy_git.sh"
 } finally {
   Remove-Item -Force $tmp -ErrorAction SilentlyContinue
 }
