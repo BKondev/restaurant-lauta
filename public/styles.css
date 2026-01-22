@@ -938,15 +938,21 @@ body {
 }
 
 .product-modal-shell {
-    position: relative;
-    width: min(860px, calc(100% - 32px));
-    margin: 5% auto;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 72px 16px 16px;
 }
 
 .modal-close-circle {
     position: absolute;
-    top: -18px;
-    right: 10px;
+    top: 24px;
+    left: 50%;
+    right: auto;
     width: 44px;
     height: 44px;
     border-radius: 999px;
@@ -959,6 +965,7 @@ body {
     justify-content: center;
     box-shadow: 0 8px 24px rgba(0,0,0,0.25);
     z-index: 2;
+    transform: translateX(-50%);
 }
 
 .modal-close-circle:hover {
@@ -988,7 +995,8 @@ body {
 .product-modal-content {
     display: flex;
     flex-direction: column;
-    max-height: 85vh;
+    width: min(860px, 100%);
+    max-height: calc(100vh - 88px);
 }
 
 .product-modal-inner {
@@ -1549,18 +1557,11 @@ body {
 
     /* Mobile modal adjustments - full width but auto height */
     .product-modal-shell {
-        width: 100%;
-        margin: 0;
-        position: fixed;
-        left: 0;
-        top: 50%;
-        transform: translateY(-50%);
-        padding: 0;
+        padding: 72px 0 0;
     }
 
     .modal-close-circle {
-        top: 10px;
-        right: 10px;
+        top: 18px;
     }
 
     .modal-content {
