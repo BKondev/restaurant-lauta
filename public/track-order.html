@@ -257,6 +257,88 @@
             margin-right: 8px;
         }
 
+        .stepper {
+            background: #fff;
+            border: 1px solid #eee;
+            border-radius: 12px;
+            padding: 18px;
+            margin: 20px 0;
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .step {
+            position: relative;
+            text-align: center;
+            padding: 10px 8px 6px;
+        }
+
+        .step::after {
+            content: '';
+            position: absolute;
+            top: 26px;
+            left: 50%;
+            width: 100%;
+            height: 4px;
+            background: #e9ecef;
+            z-index: 0;
+        }
+
+        .step:last-child::after {
+            display: none;
+        }
+
+        .step-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            margin: 0 auto 8px;
+            background: #e9ecef;
+            color: #6c757d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 1;
+            transition: transform 0.25s ease, background 0.25s ease, color 0.25s ease;
+        }
+
+        .step-label {
+            font-size: 12px;
+            color: #666;
+            font-weight: 600;
+        }
+
+        .step.active .step-icon {
+            background: #667eea;
+            color: #fff;
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.35);
+        }
+
+        .step.done .step-icon {
+            background: #4caf50;
+            color: #fff;
+        }
+
+        .step.done::after {
+            background: #4caf50;
+        }
+
+        .step.active::after {
+            background: linear-gradient(90deg, #4caf50 0%, #667eea 100%);
+        }
+
+        .stepper-hint {
+            margin-top: 10px;
+            color: #666;
+            font-size: 13px;
+        }
+
         @media (max-width: 600px) {
             .container {
                 padding: 25px;
@@ -285,8 +367,8 @@
     </div>
 
     <script>
-        const BASE_PATH = '/resturant-website';
-        const API_URL = 'https://www.crystalautomation.eu/resturant-website/api';
+        const BASE_PATH = window.location.pathname.includes('/resturant-website') ? '/resturant-website' : '';
+        const API_URL = `${BASE_PATH}/api`;
         
         let updateInterval = null;
         let order = null;
@@ -354,19 +436,49 @@
             const elapsedMs = Date.now() - startTime.getTime();
             const progressPercent = Math.min(100, (elapsedMs / totalEstimatedMs) * 100);
 
-            const statusText = order.status === 'pending' 
-                ? 'Поръчката се обработва...' 
-                : order.status === 'approved' 
-                    ? 'Поръчката е одобрена!' 
-                    : 'В процес на изпълнение';
+            function normalizeStatus(s) {
+                const v = (s || '').toString();
+                return v === 'confirmed' ? 'approved' : v;
+            }
+
+            const normalizedStatus = normalizeStatus(order.status);
+
+            const statusText = normalizedStatus === 'pending'
+                ? 'Поръчката е получена'
+                : normalizedStatus === 'approved'
+                    ? 'Поръчката е одобрена'
+                    : normalizedStatus === 'delivering'
+                        ? 'Поръчката е за доставка'
+                        : normalizedStatus === 'ready_for_pickup'
+                            ? 'Поръчката е готова за взимане'
+                            : normalizedStatus === 'completed'
+                                ? 'Поръчката е завършена'
+                                : normalizedStatus === 'cancelled'
+                                    ? 'Поръчката е отказана'
+                                    : 'В процес на изпълнение';
+
+            function getStepIndex() {
+                // Step index: 0 received, 1 approved, 2 delivering/ready, 3 done
+                if (normalizedStatus === 'cancelled') return -1;
+                if (normalizedStatus === 'pending') return 0;
+                if (normalizedStatus === 'approved') return 1;
+                if (normalizedStatus === 'delivering' || normalizedStatus === 'ready_for_pickup') return 2;
+                if (normalizedStatus === 'completed') return 3;
+                return 0;
+            }
+
+            const stepIdx = getStepIndex();
+            const isDelivery = order.deliveryMethod === 'delivery';
+            const step3Label = isDelivery ? 'Delivering' : 'Ready';
+            const step3Icon = isDelivery ? 'fa-truck' : 'fa-box';
 
             const html = `
                 <div class="header">
-                    <div class="success-icon">
-                        <i class="fas fa-check"></i>
+                    <div class="success-icon" style="background: ${normalizedStatus === 'cancelled' ? '#f44336' : (normalizedStatus === 'completed' ? '#4caf50' : '#667eea')};">
+                        <i class="fas ${normalizedStatus === 'cancelled' ? 'fa-times' : (normalizedStatus === 'completed' ? 'fa-check' : 'fa-receipt')}"></i>
                     </div>
-                    <h1>Благодарим за поръчката!</h1>
-                    <p class="subtitle">Вашата поръчка беше приета успешно</p>
+                    <h1>${normalizedStatus === 'cancelled' ? 'Поръчката е отказана' : 'Благодарим за поръчката!'}</h1>
+                    <p class="subtitle">${normalizedStatus === 'cancelled' ? 'За повече информация, свържете се с ресторанта.' : 'Вашата поръчка беше приета успешно'}</p>
                 </div>
 
                 <div class="order-info">
@@ -398,15 +510,37 @@
                     </div>
                 ` : ''}
 
+                <div class="stepper">
+                    <div class="steps">
+                        <div class="step ${stepIdx > 0 ? 'done' : (stepIdx === 0 ? 'active' : '')}">
+                            <div class="step-icon"><i class="fas fa-inbox"></i></div>
+                            <div class="step-label">Received</div>
+                        </div>
+                        <div class="step ${stepIdx > 1 ? 'done' : (stepIdx === 1 ? 'active' : '')}">
+                            <div class="step-icon"><i class="fas fa-check"></i></div>
+                            <div class="step-label">Approved</div>
+                        </div>
+                        <div class="step ${stepIdx > 2 ? 'done' : (stepIdx === 2 ? 'active' : '')}">
+                            <div class="step-icon"><i class="fas ${step3Icon}"></i></div>
+                            <div class="step-label">${step3Label}</div>
+                        </div>
+                        <div class="step ${stepIdx === 3 ? 'done active' : ''}">
+                            <div class="step-icon"><i class="fas fa-check-circle"></i></div>
+                            <div class="step-label">Done</div>
+                        </div>
+                    </div>
+                    <div class="stepper-hint">${statusText}</div>
+                </div>
+
                 <div class="status-container">
                     <div class="status-text">
-                        ${timeRemaining.total > 0 ? 'Очаквано време за изпълнение:' : 'Вашата поръчка е готова!'}
+                        ${normalizedStatus === 'cancelled' ? 'Поръчката е отказана' : (timeRemaining.total > 0 ? 'Очаквано време за изпълнение:' : 'Вашата поръчка е готова!')}
                     </div>
                     <div class="time-remaining" id="time-display">
-                        ${timeRemaining.total > 0 ? formatTime(timeRemaining.minutes, timeRemaining.seconds) : 'Готово!'}
+                        ${normalizedStatus === 'cancelled' ? '--:--' : (timeRemaining.total > 0 ? formatTime(timeRemaining.minutes, timeRemaining.seconds) : 'Готово!')}
                     </div>
                     <div class="estimated-time">
-                        ${order.estimatedTime ? `Приблизително ${order.estimatedTime} минути` : 'Приблизително 60 минути'}
+                        ${normalizedStatus === 'cancelled' ? '' : (order.estimatedTime ? `Приблизително ${order.estimatedTime} минути` : 'Приблизително 60 минути')}
                     </div>
                     <div class="progress-bar-container">
                         <div class="progress-bar" id="progress-bar" style="width: ${progressPercent}%"></div>
@@ -426,7 +560,7 @@
             document.getElementById('app').innerHTML = html;
 
             // Start countdown
-            if (timeRemaining.total > 0) {
+            if (normalizedStatus !== 'cancelled' && timeRemaining.total > 0) {
                 updateInterval = setInterval(updateCountdown, 1000);
             }
         }
@@ -538,6 +672,7 @@
                         // Update status silently
                         order.status = updated.order.status;
                         order.estimatedTime = updated.order.estimatedTime;
+                        renderOrderTracking(order);
                     }
                 }, 30000);
             } else {

@@ -6,6 +6,13 @@ const fs = require('fs');
 const { sendToDeliveryService } = require('./delivery-integration');
 const { printOrder } = require('./printer-service');
 
+let nodemailer = null;
+try {
+    nodemailer = require('nodemailer');
+} catch (e) {
+    // Optional dependency; emails will be disabled if not installed.
+}
+
 const app = express();
 const PORT = process.env.PORT || 3003;
 // Base path for mounting the app (e.g. '/resturant-website'). Empty string means root.
@@ -131,6 +138,7 @@ function initDatabase() {
                     address: "София, бул. Витоша 100",
                     phone: "+359888123456",
                     email: "contact@bojole.bg",
+                    orderNotificationEmail: "contact@bojole.bg",
                     active: true,
                     createdAt: new Date().toISOString()
                 }
@@ -231,6 +239,61 @@ app.post(API_PREFIX + '/logout', (req, res) => {
     });
 });
 
+// Current restaurant profile (admin only)
+app.get(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
+    try {
+        const db = readDatabase();
+        const restaurant = db.restaurants?.find(r => r.id === req.restaurantId);
+        if (!restaurant) {
+            return res.status(404).json({ error: 'Restaurant not found' });
+        }
+
+        res.json({
+            id: restaurant.id,
+            name: restaurant.name,
+            email: restaurant.email || '',
+            orderNotificationEmail: restaurant.orderNotificationEmail || ''
+        });
+    } catch (e) {
+        console.error('Error loading restaurant profile:', e);
+        res.status(500).json({ error: 'Failed to load restaurant profile' });
+    }
+});
+
+app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
+    try {
+        const { orderNotificationEmail } = req.body;
+        const db = readDatabase();
+
+        const idx = db.restaurants?.findIndex(r => r.id === req.restaurantId);
+        if (idx === -1 || idx === undefined) {
+            return res.status(404).json({ error: 'Restaurant not found' });
+        }
+
+        if (orderNotificationEmail !== undefined) {
+            const email = (orderNotificationEmail || '').toString().trim();
+            if (email && !isValidEmail(email)) {
+                return res.status(400).json({ error: 'Invalid notification email' });
+            }
+            db.restaurants[idx].orderNotificationEmail = email;
+        }
+
+        if (writeDatabase(db)) {
+            res.json({
+                id: db.restaurants[idx].id,
+                name: db.restaurants[idx].name,
+                email: db.restaurants[idx].email || '',
+                orderNotificationEmail: db.restaurants[idx].orderNotificationEmail || ''
+            });
+        } else {
+            res.status(500).json({ error: 'Failed to update restaurant profile' });
+        }
+    } catch (e) {
+        console.error('Error updating restaurant profile:', e);
+        res.status(500).json({ error: 'Failed to update restaurant profile' });
+    }
+});
+
 // Middleware to check authentication for protected routes (web admin)
 function requireAuth(req, res, next) {
     const token = req.headers.authorization?.replace('Bearer ', '');
@@ -275,6 +338,178 @@ function requireApiKey(req, res, next) {
     req.restaurantName = restaurant.name;
     
     next();
+}
+
+// ==================== EMAIL (SMTP) ====================
+
+let mailTransport = null;
+
+function isEmailEnabled() {
+    return !!(nodemailer && process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_FROM);
+}
+
+function getMailTransport() {
+    if (!isEmailEnabled()) return null;
+    if (mailTransport) return mailTransport;
+
+    const host = process.env.SMTP_HOST;
+    const port = parseInt(process.env.SMTP_PORT || '587', 10);
+    const secure = (process.env.SMTP_SECURE || '').toString().toLowerCase() === 'true';
+
+    mailTransport = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
+        }
+    });
+
+    return mailTransport;
+}
+
+async function sendEmail({ to, subject, text, html, replyTo }) {
+    const transport = getMailTransport();
+    if (!transport) {
+        console.log('[EMAIL] Disabled or missing SMTP config; skipping email to:', to);
+        return { skipped: true };
+    }
+
+    if (!to || !isValidEmail(to)) {
+        console.log('[EMAIL] Invalid recipient; skipping email to:', to);
+        return { skipped: true };
+    }
+
+    const from = process.env.SMTP_FROM;
+    const finalReplyTo = replyTo || process.env.SMTP_REPLY_TO || undefined;
+
+    try {
+        const info = await transport.sendMail({
+            from,
+            to,
+            subject,
+            text,
+            html,
+            ...(finalReplyTo ? { replyTo: finalReplyTo } : {})
+        });
+        return { success: true, messageId: info.messageId };
+    } catch (err) {
+        console.error('[EMAIL] sendMail failed:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+function getRestaurantNotificationEmail(restaurant) {
+    const email = (restaurant?.orderNotificationEmail || restaurant?.email || '').toString().trim();
+    return isValidEmail(email) ? email : '';
+}
+
+function formatOrderItemsText(order) {
+    return (order.items || [])
+        .map(it => `- ${it.name} x${it.quantity} = ${(parseNumber(it.price, 0) * parseNumber(it.quantity, 0)).toFixed(2)} лв`)
+        .join('\n');
+}
+
+function getPublicOrderTrackUrl(orderId) {
+    const base = (process.env.PUBLIC_BASE_URL || '').toString().trim().replace(/\/$/, '');
+    if (!base) return '';
+    return `${base}${BASE_PATH}/track-order.html?id=${encodeURIComponent(orderId)}`;
+}
+
+async function sendOrderPlacedEmails(order, restaurant) {
+    const trackUrl = getPublicOrderTrackUrl(order.id);
+    const restaurantTo = getRestaurantNotificationEmail(restaurant);
+    const customerTo = (order.customerInfo?.email || '').toString().trim();
+
+    const subjectRestaurant = `New order ${order.id} (${order.deliveryMethod})`;
+    const subjectCustomer = `Поръчката е получена: ${order.id}`;
+
+    const itemsText = formatOrderItemsText(order);
+    const totalText = `Обща сума: ${parseNumber(order.total, 0).toFixed(2)} лв`;
+    const deliveryText = order.deliveryMethod === 'delivery'
+        ? `Доставка до: ${order.customerInfo?.city || ''}, ${order.customerInfo?.address || ''}`
+        : 'Взимане от място';
+
+    const customerText = [
+        'Благодарим Ви за поръчката!',
+        `Номер: ${order.id}`,
+        deliveryText,
+        itemsText,
+        totalText,
+        trackUrl ? `Проследяване: ${trackUrl}` : ''
+    ].filter(Boolean).join('\n');
+
+    const restaurantText = [
+        `New order received: ${order.id}`,
+        `Customer: ${order.customerInfo?.name || ''} / ${order.customerInfo?.phone || ''} / ${order.customerInfo?.email || ''}`,
+        deliveryText,
+        itemsText,
+        totalText
+    ].filter(Boolean).join('\n');
+
+    // Customer email
+    await sendEmail({
+        to: customerTo,
+        subject: subjectCustomer,
+        text: customerText
+    });
+
+    // Restaurant notification email
+    if (restaurantTo) {
+        await sendEmail({
+            to: restaurantTo,
+            subject: subjectRestaurant,
+            text: restaurantText,
+            replyTo: customerTo
+        });
+    }
+}
+
+async function sendOrderApprovedEmail(order) {
+    const customerTo = (order.customerInfo?.email || '').toString().trim();
+    const trackUrl = getPublicOrderTrackUrl(order.id);
+    const subject = `Поръчката е одобрена: ${order.id}`;
+
+    const text = [
+        `Поръчката Ви ${order.id} е одобрена.`,
+        order.deliveryMethod === 'delivery' ? 'Очаквайте доставка скоро.' : 'Поръчката ще бъде готова за взимане.',
+        trackUrl ? `Проследяване: ${trackUrl}` : ''
+    ].filter(Boolean).join('\n');
+
+    await sendEmail({ to: customerTo, subject, text });
+}
+
+async function sendOrderStatusEmail(order, status) {
+    const normalized = normalizeOrderStatus(status);
+    const customerTo = (order.customerInfo?.email || '').toString().trim();
+    const trackUrl = getPublicOrderTrackUrl(order.id);
+
+    let subject = `Update for order: ${order.id}`;
+    let firstLine = `Статус на поръчката ${order.id} е обновен.`;
+
+    if (normalized === 'delivering') {
+        subject = `Поръчката е за доставка: ${order.id}`;
+        firstLine = `Поръчката Ви ${order.id} е за доставка.`;
+    } else if (normalized === 'ready_for_pickup') {
+        subject = `Поръчката е готова за взимане: ${order.id}`;
+        firstLine = `Поръчката Ви ${order.id} е готова за взимане.`;
+    } else if (normalized === 'completed') {
+        subject = `Поръчката е завършена: ${order.id}`;
+        firstLine = `Поръчката Ви ${order.id} е завършена.`;
+    } else if (normalized === 'cancelled') {
+        subject = `Поръчката е отказана: ${order.id}`;
+        firstLine = `Поръчката Ви ${order.id} е отказана.`;
+    } else if (normalized === 'approved') {
+        return sendOrderApprovedEmail(order);
+    }
+
+    const text = [
+        firstLine,
+        trackUrl ? `Проследяване: ${trackUrl}` : ''
+    ].filter(Boolean).join('\n');
+
+    await sendEmail({ to: customerTo, subject, text });
 }
 
 // Get all products (public route)
@@ -999,6 +1234,87 @@ app.put(API_PREFIX + '/products/category/bulk-assign', requireAuth, (req, res) =
 
 // ==================== ORDERS API ====================
 
+function normalizeOrderStatus(rawStatus) {
+    const s = (rawStatus || '').toString().trim().toLowerCase();
+    if (s === 'confirmed') return 'approved';
+    if (s === 'done') return 'completed';
+    if (s === 'picked_up') return 'completed';
+    if (s === 'delivered') return 'completed';
+    return s;
+}
+
+function isAllowedOrderStatus(status) {
+    return [
+        'pending',
+        'approved',
+        'delivering',
+        'ready_for_pickup',
+        'completed',
+        'cancelled'
+    ].includes(status);
+}
+
+function parseNumber(value, fallback = 0) {
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function isValidEmail(email) {
+    const e = (email || '').toString().trim();
+    return !!e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+}
+
+function sanitizeOrderItems(items) {
+    if (!Array.isArray(items)) return null;
+    const sanitized = items
+        .map(it => {
+            const name = (it?.name || '').toString().trim();
+            const quantity = Math.max(0, Math.floor(parseNumber(it?.quantity, 0)));
+            const price = Math.max(0, parseNumber(it?.price, 0));
+            const id = it?.id;
+            const weight = it?.weight;
+            const image = it?.image;
+            return {
+                ...(id !== undefined ? { id } : {}),
+                name,
+                price,
+                quantity,
+                ...(weight !== undefined ? { weight } : {}),
+                ...(image !== undefined ? { image } : {})
+            };
+        })
+        .filter(it => it.name && it.quantity > 0);
+
+    if (sanitized.length === 0) return null;
+    return sanitized;
+}
+
+function recomputeOrderTotals(order) {
+    const items = Array.isArray(order.items) ? order.items : [];
+    const subtotal = items.reduce((sum, it) => sum + (parseNumber(it.price, 0) * parseNumber(it.quantity, 0)), 0);
+    const discountPercent = Math.max(0, Math.min(100, parseNumber(order.discount, 0)));
+    const discountAmount = subtotal * (discountPercent / 100);
+    const deliveryFee = Math.max(0, parseNumber(order.deliveryFee, 0));
+    const total = Math.max(0, subtotal - discountAmount + deliveryFee);
+
+    order.subtotal = subtotal;
+    order.discount = discountPercent;
+    order.discountAmount = discountAmount;
+    order.deliveryFee = deliveryFee;
+    order.total = total;
+
+    const ownerDiscount = Math.max(0, Math.min(100, parseNumber(order.ownerDiscount, 0)));
+    if (ownerDiscount > 0 && order.status === 'approved') {
+        const ownerDiscountAmount = (total * ownerDiscount) / 100;
+        order.ownerDiscount = ownerDiscount;
+        order.ownerDiscountAmount = ownerDiscountAmount;
+        order.finalTotal = Math.max(0, total - ownerDiscountAmount);
+    } else {
+        order.ownerDiscountAmount = 0;
+        order.finalTotal = total;
+    }
+}
+
 // Get all orders (admin only - filtered by restaurant)
 app.get(API_PREFIX + '/orders', requireAuth, (req, res) => {
     try {
@@ -1058,6 +1374,11 @@ app.put(API_PREFIX + '/orders/mobile/:id', requireApiKey, async (req, res) => {
             return res.status(400).json({ error: 'Status is required' });
         }
 
+        const normalizedStatus = normalizeOrderStatus(status);
+        if (!isAllowedOrderStatus(normalizedStatus)) {
+            return res.status(400).json({ error: 'Invalid status value' });
+        }
+
         const data = readDatabase();
         if (!data.orders) {
             return res.status(404).json({ error: 'No orders found' });
@@ -1076,7 +1397,8 @@ app.put(API_PREFIX + '/orders/mobile/:id', requireApiKey, async (req, res) => {
         }
         
         // Update status and timestamps
-        order.status = status;
+        const previousStatus = order.status;
+        order.status = normalizedStatus;
         order.updatedAt = new Date().toISOString();
 
         if (estimatedTime) order.estimatedTime = estimatedTime;
@@ -1084,7 +1406,7 @@ app.put(API_PREFIX + '/orders/mobile/:id', requireApiKey, async (req, res) => {
         if (approvedAt) order.approvedAt = approvedAt;
 
         // Handle approval actions (print, delivery service)
-        if (status === 'approved') {
+        if (normalizedStatus === 'approved' && previousStatus !== 'approved') {
             console.log(`Order ${orderId} approved by mobile app (Restaurant: ${req.restaurantName})`);
             
             if (order.deliveryMethod === 'delivery') {
@@ -1112,6 +1434,30 @@ app.put(API_PREFIX + '/orders/mobile/:id', requireApiKey, async (req, res) => {
             } else {
                 console.log('Pickup order - no printing needed');
             }
+
+            // Email customer on approval (non-blocking)
+            setImmediate(() => {
+                try {
+                    sendOrderStatusEmail(order, 'approved')
+                        .then(() => console.log('[EMAIL] order approved email attempted:', order.id))
+                        .catch(err => console.error('[EMAIL] order approved email failed:', err));
+                } catch (e) {
+                    console.error('[EMAIL] order approved email error:', e);
+                }
+            });
+        }
+
+        // Email customer on other status transitions (non-blocking)
+        if (normalizedStatus !== previousStatus && ['delivering', 'ready_for_pickup', 'completed', 'cancelled'].includes(normalizedStatus)) {
+            setImmediate(() => {
+                try {
+                    sendOrderStatusEmail(order, normalizedStatus)
+                        .then(() => console.log('[EMAIL] order status email attempted:', order.id, normalizedStatus))
+                        .catch(err => console.error('[EMAIL] order status email failed:', err));
+                } catch (e) {
+                    console.error('[EMAIL] order status email error:', e);
+                }
+            });
         }
 
         data.orders[orderIndex] = order;
@@ -1173,22 +1519,47 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
 // Create new order (public endpoint - requires restaurantId in body or header)
 app.post(API_PREFIX + '/orders', (req, res) => {
     try {
-        const { items, promoCode, discount, total, deliveryMethod, customerInfo, timestamp, restaurantId } = req.body;
+        const {
+            items,
+            promoCode,
+            discount,
+            total,
+            deliveryMethod,
+            deliveryType,
+            deliveryFee,
+            customerInfo,
+            timestamp,
+            restaurantId
+        } = req.body;
         
-        // Get restaurant ID from body or X-Restaurant-Id header
-        const targetRestaurantId = restaurantId || req.headers['x-restaurant-id'];
-        
-        if (!targetRestaurantId) {
-            return res.status(400).json({ error: 'Restaurant ID required' });
-        }
+        // Get restaurant ID from body or X-Restaurant-Id header.
+        // In single-restaurant deployments we allow a safe fallback.
+        let targetRestaurantId = restaurantId || req.headers['x-restaurant-id'];
         
         if (!items || !items.length || !customerInfo || !deliveryMethod) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
+        // Email is required for ordering; validate early.
+        const customerEmail = (customerInfo.email || '').toString().trim();
+        const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail);
+        if (!customerEmail || !emailLooksValid) {
+            return res.status(400).json({ error: 'Valid customer email is required' });
+        }
+
         const data = readDatabase();
         if (!data.orders) {
             data.orders = [];
+        }
+
+        // Single-restaurant fallback for restaurantId
+        if (!targetRestaurantId) {
+            const activeRestaurants = (data.restaurants || []).filter(r => r && r.active);
+            if (activeRestaurants.length === 1) {
+                targetRestaurantId = activeRestaurants[0].id;
+            } else {
+                return res.status(400).json({ error: 'Restaurant ID required' });
+            }
         }
         
         // Verify restaurant exists and is active
@@ -1215,7 +1586,11 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             promoCode,
             discount: discount || 0,
             total,
+            // Keep existing field for backward compatibility across UI surfaces
             deliveryMethod,
+            // Normalized field for future flows
+            deliveryType: deliveryType || deliveryMethod,
+            deliveryFee: typeof deliveryFee === 'number' ? deliveryFee : (deliveryFee ? Number(deliveryFee) : 0),
             customerInfo: {
                 ...customerInfo,
                 previousOrders: previousOrders
@@ -1228,6 +1603,17 @@ app.post(API_PREFIX + '/orders', (req, res) => {
 
         data.orders.push(newOrder);
         writeDatabase(data);
+
+        // Fire-and-forget emails (don't block checkout)
+        setImmediate(() => {
+            try {
+                sendOrderPlacedEmails(newOrder, restaurant)
+                    .then(() => console.log('[EMAIL] order placed emails attempted:', newOrder.id))
+                    .catch(err => console.error('[EMAIL] order placed emails failed:', err));
+            } catch (e) {
+                console.error('[EMAIL] order placed emails error:', e);
+            }
+        });
 
         res.status(201).json({ 
             success: true, 
@@ -1244,10 +1630,25 @@ app.post(API_PREFIX + '/orders', (req, res) => {
 app.put(API_PREFIX + '/orders/:id', requireAuth, async (req, res) => {
     try {
         const orderId = req.params.id; // Keep as string now
-        const { status, ownerDiscount, estimatedTime, callMadeAt, approvedAt } = req.body;
+        const {
+            status,
+            ownerDiscount,
+            estimatedTime,
+            callMadeAt,
+            approvedAt,
+            deliveryMethod,
+            deliveryType,
+            deliveryFee,
+            discount,
+            promoCode,
+            customerInfo,
+            items
+        } = req.body;
 
-        if (!status) {
-            return res.status(400).json({ error: 'Status is required' });
+        const hasStatusUpdate = status !== undefined && status !== null && `${status}`.trim() !== '';
+        const normalizedStatus = hasStatusUpdate ? normalizeOrderStatus(status) : null;
+        if (hasStatusUpdate && !isAllowedOrderStatus(normalizedStatus)) {
+            return res.status(400).json({ error: 'Invalid status value' });
         }
 
         const data = readDatabase();
@@ -1268,8 +1669,69 @@ app.put(API_PREFIX + '/orders/:id', requireAuth, async (req, res) => {
         }
         
         // Update basic status
-        order.status = status;
+        const previousStatus = order.status;
+        if (hasStatusUpdate) {
+            order.status = normalizedStatus;
+        }
         order.updatedAt = new Date().toISOString();
+
+        // Apply editable fields (full editing)
+        if (deliveryMethod !== undefined || deliveryType !== undefined) {
+            const method = (deliveryMethod || deliveryType || order.deliveryMethod || order.deliveryType || '').toString();
+            if (!['delivery', 'pickup'].includes(method)) {
+                return res.status(400).json({ error: 'Invalid delivery method' });
+            }
+            order.deliveryMethod = method;
+            order.deliveryType = method;
+        }
+
+        if (promoCode !== undefined) {
+            order.promoCode = promoCode ? String(promoCode).trim() : null;
+        }
+
+        if (discount !== undefined) {
+            order.discount = Math.max(0, Math.min(100, parseNumber(discount, 0)));
+        }
+
+        if (deliveryFee !== undefined) {
+            order.deliveryFee = Math.max(0, parseNumber(deliveryFee, 0));
+        }
+
+        if (items !== undefined) {
+            const sanitizedItems = sanitizeOrderItems(items);
+            if (!sanitizedItems) {
+                return res.status(400).json({ error: 'Order must have at least one valid item' });
+            }
+            order.items = sanitizedItems;
+        }
+
+        if (customerInfo !== undefined) {
+            const merged = {
+                ...(order.customerInfo || {}),
+                ...(customerInfo || {})
+            };
+
+            // Preserve previousOrders if client doesn't send it
+            if (order.customerInfo && order.customerInfo.previousOrders !== undefined && merged.previousOrders === undefined) {
+                merged.previousOrders = order.customerInfo.previousOrders;
+            }
+
+            order.customerInfo = merged;
+        }
+
+        // Validate final customer email (required)
+        if (!isValidEmail(order.customerInfo?.email)) {
+            return res.status(400).json({ error: 'Valid customer email is required' });
+        }
+
+        // Validate delivery fields for delivery orders
+        if ((order.deliveryMethod || order.deliveryType) === 'delivery') {
+            const city = (order.customerInfo?.city || '').toString().trim();
+            const address = (order.customerInfo?.address || '').toString().trim();
+            if (!city || !address) {
+                return res.status(400).json({ error: 'City and address are required for delivery orders' });
+            }
+        }
 
         // Save estimated time if provided
         if (estimatedTime) {
@@ -1286,18 +1748,26 @@ app.put(API_PREFIX + '/orders/:id', requireAuth, async (req, res) => {
             order.approvedAt = approvedAt;
         }
 
-        // Apply owner discount if provided and status is confirmed
-        if (status === 'confirmed' && ownerDiscount && ownerDiscount > 0) {
-            const discountAmount = (order.total * ownerDiscount) / 100;
-            order.ownerDiscount = ownerDiscount;
-            order.ownerDiscountAmount = discountAmount;
-            order.finalTotal = order.total - discountAmount;
-        } else {
-            order.finalTotal = order.total;
+        // Set milestone timestamps when status changes
+        if (hasStatusUpdate && normalizedStatus !== previousStatus) {
+            const nowIso = new Date().toISOString();
+            if (normalizedStatus === 'approved' && !order.approvedAt) order.approvedAt = nowIso;
+            if (normalizedStatus === 'delivering' && !order.deliveringAt) order.deliveringAt = nowIso;
+            if (normalizedStatus === 'ready_for_pickup' && !order.readyAt) order.readyAt = nowIso;
+            if (normalizedStatus === 'completed' && !order.completedAt) order.completedAt = nowIso;
+            if (normalizedStatus === 'cancelled' && !order.cancelledAt) order.cancelledAt = nowIso;
         }
 
-        // Ако статусът е 'approved' (одобрена поръчка от мобилното приложение)
-        if (status === 'approved') {
+        // Owner discount can be set on approval (or via edits)
+        if (ownerDiscount !== undefined) {
+            order.ownerDiscount = Math.max(0, Math.min(100, parseNumber(ownerDiscount, 0)));
+        }
+
+        // Always recompute totals after any edits
+        recomputeOrderTotals(order);
+
+        // Ако статусът е 'approved'
+        if (hasStatusUpdate && normalizedStatus === 'approved' && previousStatus !== 'approved') {
             console.log('Order approved, processing...');
             
             // Принтиране САМО ако е за доставка
@@ -1329,37 +1799,33 @@ app.put(API_PREFIX + '/orders/:id', requireAuth, async (req, res) => {
             } else {
                 console.log('Pickup order - no printing needed');
             }
-        }
-        
-        // Ако статусът е confirmed (от уеб админ панела) - стара логика
-        if (status === 'confirmed') {
-            console.log('Order confirmed from web admin, processing delivery and printing...');
-            
-            // Изпращане към delivery service (ако е за доставка)
-            if (order.deliveryMethod === 'delivery') {
-                const deliveryResult = await sendToDeliveryService(order);
-                
-                if (deliveryResult.success) {
-                    console.log('Order sent to delivery service:', deliveryResult.deliveryId);
-                    order.deliveryServiceId = deliveryResult.deliveryId;
-                    order.deliveryClientId = deliveryResult.clientId;
-                } else {
-                    console.error('Failed to send to delivery service:', deliveryResult.error);
-                    // Не спираме процеса, само логваме грешката
+
+            // Email customer on approval (non-blocking)
+            setImmediate(() => {
+                try {
+                    sendOrderStatusEmail(order, 'approved')
+                        .then(() => console.log('[EMAIL] order approved email attempted:', order.id))
+                        .catch(err => console.error('[EMAIL] order approved email failed:', err));
+                } catch (e) {
+                    console.error('[EMAIL] order approved email error:', e);
                 }
-            }
-            
-            // Принтиране на поръчката
-            printOrder(order).then(printResult => {
-                if (printResult.success) {
-                    console.log('Order printed successfully on printer:', printResult.printer);
-                } else {
-                    console.error('Failed to print order:', printResult.error);
-                }
-            }).catch(err => {
-                console.error('Printer error:', err);
             });
         }
+
+        // Email customer on other status transitions (non-blocking)
+        if (hasStatusUpdate && normalizedStatus !== previousStatus && ['delivering', 'ready_for_pickup', 'completed', 'cancelled'].includes(normalizedStatus)) {
+            setImmediate(() => {
+                try {
+                    sendOrderStatusEmail(order, normalizedStatus)
+                        .then(() => console.log('[EMAIL] order status email attempted:', order.id, normalizedStatus))
+                        .catch(err => console.error('[EMAIL] order status email failed:', err));
+                } catch (e) {
+                    console.error('[EMAIL] order status email error:', e);
+                }
+            });
+        }
+        
+        // Legacy compatibility: treat 'confirmed' as 'approved' (handled above via normalization)
 
         writeDatabase(data);
         res.json(order);
@@ -1372,7 +1838,7 @@ app.put(API_PREFIX + '/orders/:id', requireAuth, async (req, res) => {
 // Delete order (admin only)
 app.delete(API_PREFIX + '/orders/:id', requireAuth, (req, res) => {
     try {
-        const orderId = parseInt(req.params.id);
+        const orderId = req.params.id;
         const data = readDatabase();
 
         if (!data.orders) {
@@ -1382,6 +1848,11 @@ app.delete(API_PREFIX + '/orders/:id', requireAuth, (req, res) => {
         const orderIndex = data.orders.findIndex(o => o.id === orderId);
         if (orderIndex === -1) {
             return res.status(404).json({ error: 'Order not found' });
+        }
+
+        // Verify order belongs to this restaurant
+        if (data.orders[orderIndex].restaurantId !== req.restaurantId) {
+            return res.status(403).json({ error: 'Access denied - order belongs to different restaurant' });
         }
 
         data.orders.splice(orderIndex, 1);
@@ -1446,7 +1917,7 @@ app.get(API_PREFIX + '/printer/find', requireAuth, async (req, res) => {
 // Print specific order (admin only)
 app.post(API_PREFIX + '/printer/print/:orderId', requireAuth, async (req, res) => {
     try {
-        const orderId = parseInt(req.params.orderId);
+        const orderId = req.params.orderId;
         const { printerIp } = req.body;
 
         const data = readDatabase();
@@ -1454,6 +1925,11 @@ app.post(API_PREFIX + '/printer/print/:orderId', requireAuth, async (req, res) =
 
         if (!order) {
             return res.status(404).json({ error: 'Order not found' });
+        }
+
+        // Verify order belongs to this restaurant
+        if (order.restaurantId !== req.restaurantId) {
+            return res.status(403).json({ error: 'Access denied - order belongs to different restaurant' });
         }
 
         const { printOrder } = require('./printer-service');

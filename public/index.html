@@ -90,18 +90,27 @@
 
     <!-- Product Modal -->
     <div id="product-modal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <div class="modal-body">
-                <img id="modal-image" src="" alt="">
-                <div class="modal-info">
-                    <h2 id="modal-name"></h2>
-                    <p id="modal-description"></p>
-                    <div class="modal-details">
-                        <span class="modal-price" id="modal-price"></span>
-                        <span class="modal-category" id="modal-category"></span>
+        <div class="product-modal-shell" role="dialog" aria-modal="true" aria-labelledby="modal-name">
+            <button type="button" class="modal-close-circle" id="modal-close-btn" aria-label="Close">
+                <i class="fas fa-times"></i>
+            </button>
+            <div class="modal-content product-modal-content">
+                <div class="product-modal-inner">
+                    <h2 id="modal-name" class="product-modal-name"></h2>
+                    <div id="modal-weight" class="product-modal-weight" style="display:none;"></div>
+                    <div id="modal-qty-line" class="product-modal-qtyline"></div>
+                    <div id="modal-big-price" class="product-modal-bigprice"></div>
+                    <p id="modal-description" class="product-modal-description"></p>
+                    <img id="modal-image" class="product-modal-image" src="" alt="">
+                </div>
+
+                <div class="product-modal-footer">
+                    <div class="product-modal-qty-controls" aria-label="Quantity controls">
+                        <button type="button" class="qty-btn" id="modal-qty-minus" aria-label="Decrease quantity">-</button>
+                        <span class="qty-display" id="modal-qty-display">1</span>
+                        <button type="button" class="qty-btn" id="modal-qty-plus" aria-label="Increase quantity">+</button>
                     </div>
-                    <button class="add-to-cart-btn" id="modal-add-to-cart" style="margin-top: 20px;">
+                    <button class="add-to-cart-btn" id="modal-add-to-cart">
                         <i class="fas fa-shopping-cart"></i> Add to Cart
                     </button>
                 </div>
@@ -109,7 +118,6 @@
         </div>
     </div>
 
-    <script src="data.js"></script>
     <script src="app.js?v=20251211002"></script>
 </body>
 </html>

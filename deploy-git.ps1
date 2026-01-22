@@ -143,6 +143,9 @@ git checkout -B "$BRANCH" "$REMOTE/$BRANCH"
 
 git reset --hard "$REMOTE/$BRANCH"
 
+# Remove internal/dev docs from the production server
+rm -f "$DEPLOY_DIR/GUIDE-AI.md" || true
+
 # Ensure preserved files still exist after switching branches
 if [ ! -f "$DEPLOY_DIR/database.json" ] && [ -f "$PRESERVE_DIR/database.json.$TS" ]; then
   cp -a "$PRESERVE_DIR/database.json.$TS" "$DEPLOY_DIR/database.json" || true

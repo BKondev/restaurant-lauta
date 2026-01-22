@@ -972,16 +972,17 @@ async function placeOrder() {
     const name = document.getElementById('customer-name').value.trim();
     const phone = document.getElementById('customer-phone').value.trim();
     const email = document.getElementById('customer-email').value.trim();
+    const city = deliveryMethod === 'delivery' ? document.getElementById('customer-city').value.trim() : '';
     const address = deliveryMethod === 'delivery' ? document.getElementById('customer-address').value.trim() : '';
     const notes = document.getElementById('customer-notes').value.trim();
 
-    if (!name || !phone || !email || (deliveryMethod === 'delivery' && !address)) {
+    if (!name || !phone || !email || (deliveryMethod === 'delivery' && (!city || !address))) {
         alert(translations[currentLanguage].fillAllFields);
         return;
     }
 
     // Save customer info
-    customerInfo = { name, phone, email, address, notes };
+    customerInfo = { name, phone, email, city, address, notes };
 
     const { total, deliveryFee } = calculateTotals();
     
@@ -993,6 +994,8 @@ async function placeOrder() {
         deliveryFee: deliveryMethod === 'delivery' ? deliveryFee : 0,
         total: total,
         deliveryMethod: deliveryMethod,
+        // Normalized alias (server will persist deliveryType for future flows)
+        deliveryType: deliveryMethod,
         customerInfo: customerInfo,
         timestamp: new Date().toISOString(),
         status: 'pending'
@@ -1018,7 +1021,7 @@ async function placeOrder() {
         // Clear cart and show success message
         cart = [];
         appliedPromo = null;
-        customerInfo = { name: '', phone: '', email: '', address: '', notes: '' };
+        customerInfo = { name: '', phone: '', email: '', city: '', address: '', notes: '' };
         saveCart();
 
         // Show success notification
@@ -1035,6 +1038,17 @@ async function placeOrder() {
 // Select delivery method
 function selectDeliveryMethod(method) {
     deliveryMethod = method;
+
+    // One-time pickup heads-up
+    if (method === 'pickup') {
+        const key = 'pickupTimeAlertShown_v1';
+        if (!sessionStorage.getItem(key)) {
+            sessionStorage.setItem(key, '1');
+            alert(currentLanguage === 'bg'
+                ? 'Внимание: При взимане на място поръчката може да отнеме до 1 час.'
+                : 'Heads up: Pickup orders may take up to 1 hour.');
+        }
+    }
     
     // Handle address fields visibility
     const addressField = document.getElementById('address-field');

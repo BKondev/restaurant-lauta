@@ -708,6 +708,21 @@ async function loadRestaurantName() {
         const data = await response.json();
         document.getElementById('restaurant-name-input').value = data.name;
         document.getElementById('restaurant-logo-input').value = data.logo || '';
+
+        // Per-tenant notification email (requires auth)
+        const token = sessionStorage.getItem('adminToken');
+        if (token) {
+            const profileRes = await fetch(`${API_URL}/restaurants/me`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (profileRes.ok) {
+                const profile = await profileRes.json();
+                const emailInput = document.getElementById('restaurant-notification-email-input');
+                if (emailInput) {
+                    emailInput.value = profile.orderNotificationEmail || profile.email || '';
+                }
+            }
+        }
     } catch (error) {
         console.error('Error loading restaurant settings:', error);
     }
@@ -717,6 +732,7 @@ async function loadRestaurantName() {
 async function updateRestaurantSettings() {
     const name = document.getElementById('restaurant-name-input').value.trim();
     const logo = document.getElementById('restaurant-logo-input').value.trim();
+    const notificationEmail = (document.getElementById('restaurant-notification-email-input')?.value || '').toString().trim();
     
     if (!name) {
         alert('Please enter a restaurant name');
@@ -740,11 +756,30 @@ async function updateRestaurantSettings() {
             return;
         }
         
-        if (response.ok) {
-            alert('Restaurant settings updated successfully!');
-        } else {
+        if (!response.ok) {
             alert('Failed to update restaurant settings');
+            return;
         }
+
+        // Save per-tenant notification email (optional but recommended)
+        if (token) {
+            const profileRes = await fetch(`${API_URL}/restaurants/me`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ orderNotificationEmail: notificationEmail })
+            });
+
+            if (!profileRes.ok) {
+                const err = await profileRes.json().catch(() => ({}));
+                alert(err.error || 'Settings saved, but failed to update notification email');
+                return;
+            }
+        }
+
+        alert('Restaurant settings updated successfully!');
     } catch (error) {
         console.error('Error updating restaurant settings:', error);
         alert('Error updating restaurant settings');
@@ -2908,9 +2943,413 @@ async function loadOrders() {
         if (response.ok) {
             orders = await response.json();
             renderPendingOrders();
+            renderOrdersHistory();
         }
     } catch (error) {
         console.error('Error loading orders:', error);
+    }
+}
+
+function getOrderStatusLabel(status) {
+    const s = (status || '').toString();
+    const normalized = s === 'confirmed' ? 'approved' : s;
+    if (normalized === 'pending') return 'received';
+    if (normalized === 'approved') return 'approved';
+    if (normalized === 'delivering') return 'delivering';
+    if (normalized === 'ready_for_pickup') return 'ready for pickup';
+    if (normalized === 'completed') return 'done';
+    if (normalized === 'cancelled') return 'cancelled';
+    return normalized;
+}
+
+function formatOrderDateTime(ts) {
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return '';
+    const date = d.toLocaleDateString('bg-BG', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const time = d.toLocaleTimeString('bg-BG', { hour: '2-digit', minute: '2-digit' });
+    return `${date} ${time}`;
+}
+
+function safeToFixed(n, digits = 2) {
+    const x = typeof n === 'number' ? n : Number(n);
+    if (!Number.isFinite(x)) return (0).toFixed(digits);
+    return x.toFixed(digits);
+}
+
+function getOrdersHistoryFilters() {
+    const search = (document.getElementById('orders-history-search')?.value || '').toString().trim().toLowerCase();
+    const status = (document.getElementById('orders-history-status')?.value || '').toString().trim();
+    const method = (document.getElementById('orders-history-method')?.value || '').toString().trim();
+    return { search, status, method };
+}
+
+function orderMatchesSearch(order, search) {
+    if (!search) return true;
+    const hay = [
+        order?.id,
+        order?.customerInfo?.name,
+        order?.customerInfo?.phone,
+        order?.customerInfo?.email
+    ].filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(search);
+}
+
+function getNextActionsForOrder(order) {
+    const status = (order?.status || '').toString();
+    const normalized = status === 'confirmed' ? 'approved' : status;
+    const method = (order?.deliveryMethod || order?.deliveryType || '').toString();
+
+    if (normalized === 'pending') {
+        return [
+            { status: 'approved', label: 'Approve', kind: 'success', icon: 'fa-check' },
+            { status: 'cancelled', label: 'Cancel', kind: 'danger', icon: 'fa-times' }
+        ];
+    }
+
+    if (normalized === 'approved') {
+        if (method === 'delivery') {
+            return [
+                { status: 'delivering', label: 'Set delivering', kind: 'primary', icon: 'fa-truck' },
+                { status: 'completed', label: 'Complete', kind: 'success', icon: 'fa-check-circle' },
+                { status: 'cancelled', label: 'Cancel', kind: 'danger', icon: 'fa-times' }
+            ];
+        }
+        return [
+            { status: 'ready_for_pickup', label: 'Ready', kind: 'primary', icon: 'fa-box' },
+            { status: 'completed', label: 'Complete', kind: 'success', icon: 'fa-check-circle' },
+            { status: 'cancelled', label: 'Cancel', kind: 'danger', icon: 'fa-times' }
+        ];
+    }
+
+    if (normalized === 'delivering') {
+        return [
+            { status: 'completed', label: 'Complete', kind: 'success', icon: 'fa-check-circle' },
+            { status: 'cancelled', label: 'Cancel', kind: 'danger', icon: 'fa-times' }
+        ];
+    }
+
+    if (normalized === 'ready_for_pickup') {
+        return [
+            { status: 'completed', label: 'Complete', kind: 'success', icon: 'fa-check-circle' },
+            { status: 'cancelled', label: 'Cancel', kind: 'danger', icon: 'fa-times' }
+        ];
+    }
+
+    return [];
+}
+
+function renderOrdersHistory() {
+    const container = document.getElementById('orders-history-list');
+    const stats = document.getElementById('orders-history-stats');
+    if (!container) return;
+
+    const { search, status, method } = getOrdersHistoryFilters();
+
+    const filtered = (orders || [])
+        .filter(o => orderMatchesSearch(o, search))
+        .filter(o => {
+            if (!status) return true;
+            const normalized = (o.status || '').toString() === 'confirmed' ? 'approved' : (o.status || '').toString();
+            return normalized === status;
+        })
+        .filter(o => {
+            if (!method) return true;
+            const m = (o.deliveryMethod || o.deliveryType || '').toString();
+            return m === method;
+        })
+        .sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
+
+    if (stats) {
+        stats.textContent = `Showing ${filtered.length} order(s)`;
+    }
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div style="padding: 20px; color: #999; text-align: center; background: #fff; border: 1px solid #eee; border-radius: 10px;">
+                No orders match the filters.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = filtered.map(order => {
+        const created = formatOrderDateTime(order.timestamp || order.createdAt);
+        const methodLabel = (order.deliveryMethod || order.deliveryType) === 'delivery' ? 'Delivery' : 'Pickup';
+        const statusLabel = getOrderStatusLabel(order.status);
+        const totalShown = (order.ownerDiscount && order.ownerDiscount > 0 && order.finalTotal != null) ? order.finalTotal : order.total;
+        const actions = getNextActionsForOrder(order);
+
+        const actionsHtml = actions.map(a => `
+            <button onclick="updateOrderStatus('${order.id}', '${a.status}')" class="btn btn-${a.kind}" style="padding: 6px 10px;">
+                <i class="fas ${a.icon}"></i> ${a.label}
+            </button>
+        `).join('');
+
+        return `
+            <div class="order-card" style="margin-bottom: 14px;">
+                <div class="order-header">
+                    <div>
+                        <div class="order-id">#${order.id}</div>
+                        <div class="order-time">${created}</div>
+                    </div>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <span class="delivery-badge ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? 'delivery' : 'pickup'}">
+                            ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? '<i class="fas fa-truck"></i>' : '<i class="fas fa-shopping-bag"></i>'}
+                            ${methodLabel}
+                        </span>
+                        <span class="order-status ${order.status}">${statusLabel}</span>
+                    </div>
+                </div>
+
+                <div class="order-body">
+                    <div class="order-section" style="margin-bottom: 10px;">
+                        <div class="order-info-row"><span class="order-info-label">Customer:</span><span class="order-info-value">${order.customerInfo?.name || ''}</span></div>
+                        <div class="order-info-row"><span class="order-info-label">Phone:</span><span class="order-info-value">${order.customerInfo?.phone || ''}</span></div>
+                        <div class="order-info-row"><span class="order-info-label">Email:</span><span class="order-info-value">${order.customerInfo?.email || ''}</span></div>
+                        ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? `
+                            <div class="order-info-row"><span class="order-info-label">City:</span><span class="order-info-value">${order.customerInfo?.city || ''}</span></div>
+                            <div class="order-info-row"><span class="order-info-label">Address:</span><span class="order-info-value">${order.customerInfo?.address || ''}</span></div>
+                        ` : ''}
+                    </div>
+
+                    <div class="order-section">
+                        <div class="order-total" style="margin-top: 0;">
+                            <span class="order-total-label">Total:</span>
+                            <span class="order-total-value">${safeToFixed(totalShown)} лв</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="order-actions">
+                    <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
+                        <button onclick="openOrderEditModal('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
+                            <i class="fas fa-pen"></i> Edit
+                        </button>
+                        ${actionsHtml}
+                        <button onclick="deleteOrder('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const search = document.getElementById('orders-history-search');
+    const status = document.getElementById('orders-history-status');
+    const method = document.getElementById('orders-history-method');
+    if (search) {
+        let t;
+        search.addEventListener('input', () => {
+            clearTimeout(t);
+            t = setTimeout(renderOrdersHistory, 200);
+        });
+    }
+    if (status) status.addEventListener('change', renderOrdersHistory);
+    if (method) method.addEventListener('change', renderOrdersHistory);
+});
+
+// -------------------- Order editing --------------------
+let currentEditingOrderId = null;
+
+function openOrderEditModal(orderId) {
+    const modal = document.getElementById('order-edit-modal');
+    if (!modal) return;
+
+    const order = (orders || []).find(o => o.id === orderId);
+    if (!order) {
+        alert('Order not found');
+        return;
+    }
+
+    currentEditingOrderId = orderId;
+    const title = document.getElementById('order-edit-title');
+    if (title) title.textContent = `#${order.id}`;
+
+    document.getElementById('order-edit-status').value = (order.status === 'confirmed' ? 'approved' : order.status) || 'pending';
+    document.getElementById('order-edit-method').value = (order.deliveryMethod || order.deliveryType) || 'delivery';
+    document.getElementById('order-edit-delivery-fee').value = (order.deliveryFee != null ? Number(order.deliveryFee) : 0);
+    document.getElementById('order-edit-discount').value = (order.discount != null ? Number(order.discount) : 0);
+
+    document.getElementById('order-edit-customer-name').value = order.customerInfo?.name || '';
+    document.getElementById('order-edit-customer-phone').value = order.customerInfo?.phone || '';
+    document.getElementById('order-edit-customer-email').value = order.customerInfo?.email || '';
+    document.getElementById('order-edit-customer-city').value = order.customerInfo?.city || '';
+    document.getElementById('order-edit-customer-address').value = order.customerInfo?.address || '';
+    document.getElementById('order-edit-customer-notes').value = order.customerInfo?.notes || '';
+
+    const itemsWrap = document.getElementById('order-edit-items');
+    if (itemsWrap) {
+        itemsWrap.innerHTML = '';
+        (order.items || []).forEach(item => orderEditAddItemRow(item));
+    }
+
+    orderEditRecomputeTotals();
+    modal.style.display = 'block';
+}
+
+function closeOrderEditModal() {
+    const modal = document.getElementById('order-edit-modal');
+    if (modal) modal.style.display = 'none';
+    currentEditingOrderId = null;
+}
+
+function orderEditAddItemRow(item = null) {
+    const wrap = document.getElementById('order-edit-items');
+    if (!wrap) return;
+
+    const rowId = `edit-item-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const name = item?.name || '';
+    const price = item?.price != null ? Number(item.price) : 0;
+    const quantity = item?.quantity != null ? Number(item.quantity) : 1;
+
+    const row = document.createElement('div');
+    row.id = rowId;
+    row.style.display = 'grid';
+    row.style.gridTemplateColumns = '2fr 1fr 1fr auto';
+    row.style.gap = '10px';
+    row.style.alignItems = 'end';
+    row.innerHTML = `
+        <div class="form-group" style="margin:0;">
+            <label>Name</label>
+            <input type="text" class="order-edit-item-name" value="${String(name).replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="form-group" style="margin:0;">
+            <label>Price</label>
+            <input type="number" min="0" step="0.01" class="order-edit-item-price" value="${price}" />
+        </div>
+        <div class="form-group" style="margin:0;">
+            <label>Qty</label>
+            <input type="number" min="1" step="1" class="order-edit-item-qty" value="${quantity}" />
+        </div>
+        <button class="btn btn-danger" style="height: 40px;" onclick="orderEditRemoveItemRow('${rowId}')">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+
+    row.querySelectorAll('input').forEach(inp => inp.addEventListener('input', orderEditRecomputeTotals));
+    wrap.appendChild(row);
+}
+
+function orderEditRemoveItemRow(rowId) {
+    const row = document.getElementById(rowId);
+    if (row) row.remove();
+    orderEditRecomputeTotals();
+}
+
+function orderEditCollectItems() {
+    const wrap = document.getElementById('order-edit-items');
+    if (!wrap) return [];
+    const rows = Array.from(wrap.children);
+    return rows.map(r => {
+        const name = (r.querySelector('.order-edit-item-name')?.value || '').toString().trim();
+        const price = Number(r.querySelector('.order-edit-item-price')?.value);
+        const quantity = Number(r.querySelector('.order-edit-item-qty')?.value);
+        return {
+            name,
+            price: Number.isFinite(price) ? price : 0,
+            quantity: Number.isFinite(quantity) ? quantity : 1
+        };
+    }).filter(i => i.name && i.quantity > 0);
+}
+
+function orderEditRecomputeTotals() {
+    const items = orderEditCollectItems();
+    const deliveryFee = Number(document.getElementById('order-edit-delivery-fee')?.value);
+    const discountPercent = Number(document.getElementById('order-edit-discount')?.value);
+
+    const subtotal = items.reduce((sum, i) => sum + (Number(i.price) * Number(i.quantity)), 0);
+    const pct = (Number.isFinite(discountPercent) ? discountPercent : 0);
+    const discountAmount = subtotal * (Math.max(0, Math.min(100, pct)) / 100);
+    const fee = Number.isFinite(deliveryFee) ? deliveryFee : 0;
+    const total = Math.max(0, subtotal - discountAmount + fee);
+
+    const box = document.getElementById('order-edit-totals');
+    if (box) {
+        box.innerHTML = `
+            <div style="display:flex; justify-content: space-between;"><span>Subtotal</span><strong>${safeToFixed(subtotal)} лв</strong></div>
+            <div style="display:flex; justify-content: space-between;"><span>Discount</span><strong>-${safeToFixed(discountAmount)} лв</strong></div>
+            <div style="display:flex; justify-content: space-between;"><span>Delivery fee</span><strong>${safeToFixed(fee)} лв</strong></div>
+            <div style="display:flex; justify-content: space-between; margin-top: 6px; border-top: 1px dashed #ddd; padding-top: 6px;"><span>Total</span><strong>${safeToFixed(total)} лв</strong></div>
+        `;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    ['order-edit-delivery-fee', 'order-edit-discount', 'order-edit-method', 'order-edit-status'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', orderEditRecomputeTotals);
+        if (el) el.addEventListener('change', orderEditRecomputeTotals);
+    });
+});
+
+async function saveOrderEdits() {
+    if (!currentEditingOrderId) return;
+
+    const status = document.getElementById('order-edit-status')?.value;
+    const deliveryMethod = document.getElementById('order-edit-method')?.value;
+    const deliveryFee = Number(document.getElementById('order-edit-delivery-fee')?.value);
+    const discount = Number(document.getElementById('order-edit-discount')?.value);
+
+    const customerInfo = {
+        name: (document.getElementById('order-edit-customer-name')?.value || '').toString().trim(),
+        phone: (document.getElementById('order-edit-customer-phone')?.value || '').toString().trim(),
+        email: (document.getElementById('order-edit-customer-email')?.value || '').toString().trim(),
+        city: (document.getElementById('order-edit-customer-city')?.value || '').toString().trim(),
+        address: (document.getElementById('order-edit-customer-address')?.value || '').toString().trim(),
+        notes: (document.getElementById('order-edit-customer-notes')?.value || '').toString().trim()
+    };
+
+    const items = orderEditCollectItems();
+    if (items.length === 0) {
+        alert('Order must have at least 1 item.');
+        return;
+    }
+
+    if (!customerInfo.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerInfo.email)) {
+        alert('Valid customer email is required.');
+        return;
+    }
+
+    if (deliveryMethod === 'delivery') {
+        if (!customerInfo.city || !customerInfo.address) {
+            alert('City and address are required for delivery orders.');
+            return;
+        }
+    }
+
+    try {
+        const token = sessionStorage.getItem('adminToken');
+        const response = await fetch(`${API_URL}/orders/${currentEditingOrderId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                status,
+                deliveryMethod,
+                deliveryType: deliveryMethod,
+                deliveryFee: Number.isFinite(deliveryFee) ? deliveryFee : 0,
+                discount: Number.isFinite(discount) ? discount : 0,
+                customerInfo,
+                items
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            alert(err.error || 'Failed to update order');
+            return;
+        }
+
+        closeOrderEditModal();
+        await loadOrders();
+    } catch (e) {
+        console.error('saveOrderEdits failed:', e);
+        alert('Failed to update order');
     }
 }
 
@@ -2932,6 +3371,18 @@ function renderPendingOrders() {
     section.style.display = 'block';
     badge.textContent = pendingOrders.length;
 
+    function formatStatusLabel(status, deliveryMethod) {
+        const s = (status || '').toString();
+        const normalized = s === 'confirmed' ? 'approved' : s;
+        if (normalized === 'pending') return 'received';
+        if (normalized === 'approved') return 'approved';
+        if (normalized === 'delivering') return 'delivering';
+        if (normalized === 'ready_for_pickup') return 'waiting';
+        if (normalized === 'completed') return 'done';
+        if (normalized === 'cancelled') return 'cancelled';
+        return normalized;
+    }
+
     list.innerHTML = pendingOrders.map(order => {
         const orderDate = new Date(order.timestamp);
         const formattedDate = orderDate.toLocaleDateString('bg-BG', {
@@ -2947,6 +3398,8 @@ function renderPendingOrders() {
         const deliveryIcon = order.deliveryMethod === 'delivery' 
             ? '<i class="fas fa-truck"></i> Доставка' 
             : '<i class="fas fa-shopping-bag"></i> Взимане';
+
+        const statusLabel = formatStatusLabel(order.status, order.deliveryMethod);
 
         const itemsList = order.items.map(item => `
             <div class="order-item">
@@ -2967,7 +3420,7 @@ function renderPendingOrders() {
                     </div>
                     <div style="display: flex; gap: 10px; align-items: center;">
                         <span class="delivery-badge ${order.deliveryMethod}">${deliveryIcon}</span>
-                        <span class="order-status ${order.status}">${order.status}</span>
+                        <span class="order-status ${order.status}">${statusLabel}</span>
                     </div>
                 </div>
                 
@@ -3058,14 +3511,14 @@ function renderPendingOrders() {
                             <input type="number" id="discount-${order.id}" min="0" max="100" step="1" value="0" 
                                    style="width: 70px; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
                         </div>
-                        <button onclick="updateOrderStatus(${order.id}, 'confirmed')" class="btn btn-success">
-                            <i class="fas fa-check"></i> Потвърди Поръчка
+                        <button onclick="updateOrderStatus('${order.id}', 'approved')" class="btn btn-success">
+                            <i class="fas fa-check"></i> Одобри Поръчка
                         </button>
-                        <button onclick="updateOrderStatus(${order.id}, 'cancelled')" class="btn btn-danger">
+                        <button onclick="updateOrderStatus('${order.id}', 'cancelled')" class="btn btn-danger">
                             <i class="fas fa-times"></i> Откажи Поръчка
                         </button>
                         ` : ''}
-                        <button onclick="deleteOrder(${order.id})" class="btn btn-secondary">
+                        <button onclick="deleteOrder('${order.id}')" class="btn btn-secondary">
                             <i class="fas fa-trash"></i> Изтрий
                         </button>
                     </div>
@@ -3084,7 +3537,7 @@ function renderPendingOrders() {
 async function updateOrderStatus(orderId, status) {
     // Get the owner discount if confirming
     let ownerDiscount = 0;
-    if (status === 'confirmed') {
+    if (status === 'approved') {
         const discountInput = document.getElementById(`discount-${orderId}`);
         ownerDiscount = discountInput ? parseFloat(discountInput.value) || 0 : 0;
         
@@ -3094,9 +3547,9 @@ async function updateOrderStatus(orderId, status) {
         }
     }
     
-    const confirmMessage = status === 'confirmed' && ownerDiscount > 0
-        ? `Сигурни ли сте, че искате да потвърдите тази поръчка с ${ownerDiscount}% отстъпка?`
-        : `Сигурни ли сте, че искате да ${status === 'confirmed' ? 'потвърдите' : 'откажете'} тази поръчка?`;
+    const confirmMessage = status === 'approved' && ownerDiscount > 0
+        ? `Сигурни ли сте, че искате да одобрите тази поръчка с ${ownerDiscount}% отстъпка?`
+        : `Сигурни ли сте, че искате да ${status === 'approved' ? 'одобрите' : (status === 'cancelled' ? 'откажете' : 'обновите')} тази поръчка?`;
     
     if (!confirm(confirmMessage)) {
         return;
@@ -3117,9 +3570,9 @@ async function updateOrderStatus(orderId, status) {
         });
 
         if (response.ok) {
-            const successMessage = status === 'confirmed' && ownerDiscount > 0
-                ? `Поръчката е потвърдена с ${ownerDiscount}% отстъпка успешно!`
-                : `Поръчката е ${status === 'confirmed' ? 'потвърдена' : 'отказана'} успешно!`;
+            const successMessage = status === 'approved' && ownerDiscount > 0
+                ? `Поръчката е одобрена с ${ownerDiscount}% отстъпка успешно!`
+                : `Поръчката е обновена успешно!`;
             alert(successMessage);
             await loadOrders();
         } else {
