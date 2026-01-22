@@ -1024,10 +1024,19 @@ body {
 }
 
 .product-modal-qtyline {
-    font-size: 14px;
+    font-size: 16px;
     color: #666;
-    font-weight: 600;
+    font-weight: 700;
     margin-bottom: 6px;
+}
+
+.product-modal-unitprice {
+    color: #2c3e50;
+}
+
+.product-modal-unitprice-label {
+    color: #7f8c8d;
+    font-weight: 700;
 }
 
 .product-modal-bigprice {

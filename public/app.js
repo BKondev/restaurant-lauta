@@ -476,9 +476,11 @@ function openProductModal(product) {
     const qtyLine = document.getElementById('modal-qty-line');
     const bigPrice = document.getElementById('modal-big-price');
 
+    const unitPriceLabel = currentLanguage === 'bg' ? 'ед. цена' : 'unit price';
+    qtyLine.innerHTML = `<span class="product-modal-unitprice">${formatPrice(unitPrice)}</span> <span class="product-modal-unitprice-label">${unitPriceLabel}</span>`;
+
     function updateModalPricing() {
         qtyDisplay.textContent = String(modalQuantity);
-        qtyLine.innerHTML = `${modalQuantity} × ${formatPrice(unitPrice)}`;
         bigPrice.innerHTML = `${formatPrice(unitPrice * modalQuantity)}`;
     }
 
