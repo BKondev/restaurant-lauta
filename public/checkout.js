@@ -11,6 +11,7 @@ let orderTime = ''; // '' empty by default, 'now' or 'later'
 let scheduledTime = '';
 let selectedTimeSlot = '';
 let paymentMethod = 'cash'; // 'cash' or 'card'
+let cardPaymentsEnabled = false;
 let currentStep = 1; // Track current checkout step
 let customerInfo = {
     name: '',
@@ -37,6 +38,57 @@ let workingHours = {
     openingTime: '09:00',
     closingTime: '22:00'
 };
+
+const CHECKOUT_STATE_KEY = 'checkoutState_v1';
+
+function saveCheckoutState() {
+    try {
+        const state = {
+            deliveryMethod,
+            orderTime,
+            scheduledTime,
+            selectedTimeSlot,
+            paymentMethod,
+            currentStep,
+            customerInfo
+        };
+        localStorage.setItem(CHECKOUT_STATE_KEY, JSON.stringify(state));
+    } catch (e) {
+        // ignore
+    }
+}
+
+function loadCheckoutState() {
+    try {
+        const raw = localStorage.getItem(CHECKOUT_STATE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return;
+
+        const nextDeliveryMethod = ['delivery', 'pickup', ''].includes(parsed.deliveryMethod) ? parsed.deliveryMethod : '';
+        const nextOrderTime = ['now', 'later', ''].includes(parsed.orderTime) ? parsed.orderTime : '';
+        const nextPaymentMethod = ['cash', 'card'].includes(parsed.paymentMethod) ? parsed.paymentMethod : 'cash';
+
+        deliveryMethod = nextDeliveryMethod;
+        orderTime = nextOrderTime;
+        scheduledTime = typeof parsed.scheduledTime === 'string' ? parsed.scheduledTime : '';
+        selectedTimeSlot = typeof parsed.selectedTimeSlot === 'string' ? parsed.selectedTimeSlot : '';
+
+        paymentMethod = (nextPaymentMethod === 'card' && !cardPaymentsEnabled) ? 'cash' : nextPaymentMethod;
+
+        const stepNum = Number(parsed.currentStep);
+        currentStep = Number.isFinite(stepNum) && stepNum >= 1 ? stepNum : 1;
+
+        if (parsed.customerInfo && typeof parsed.customerInfo === 'object') {
+            customerInfo = {
+                ...customerInfo,
+                ...parsed.customerInfo
+            };
+        }
+    } catch (e) {
+        // ignore
+    }
+}
 
 function escapeHtmlAttribute(value) {
     return String(value)
@@ -196,16 +248,73 @@ document.addEventListener('DOMContentLoaded', async () => {
         link.href = BASE_PATH + '/';
     });
     await loadRestaurantInfo();
+    await loadCurrencySettings();
     await loadDeliverySettings();
     await loadOrderSettings();
     await loadWorkingHours();
+    await loadPaymentsConfig();
+    loadCheckoutState();
     loadCart();
     await syncCartFromServerIfNeeded();
     setupLanguageSwitcher();
     setupResponsiveCheckoutHandlers();
+    setupBackArrowMobile();
     updateLanguage();
     renderCheckout();
+
+    window.addEventListener('beforeunload', saveCheckoutState);
 });
+
+// Create a back arrow button before the logo and name in the top bar (mobile only)
+function setupBackArrowMobile() {
+    const topBar = document.getElementById('top-bar') || document.querySelector('.top-bar');
+    const container = topBar?.querySelector('.container');
+    const logo = document.getElementById('header-logo');
+
+    if (!topBar || !container || !logo) return;
+    if (topBar.querySelector('.back-arrow-btn')) return;
+
+    // Hide any existing textual back links inside page content
+    document.querySelectorAll('a[data-translate="back"], a[href="../"]').forEach(a => {
+        a.style.display = 'none';
+    });
+
+    const btn = document.createElement('button');
+    btn.className = 'back-arrow-btn';
+    btn.setAttribute('aria-label', 'Back');
+    btn.innerHTML = '←';
+    btn.onclick = () => {
+        saveCheckoutState();
+        window.location.href = BASE_PATH + '/';
+    };
+
+    container.insertBefore(btn, container.firstChild);
+}
+
+async function loadCurrencySettings() {
+    try {
+        const res = await fetch(`${API_URL}/settings/currency`);
+        if (res.ok) {
+            currencySettings = await res.json();
+        }
+    } catch (e) {
+        // keep defaults
+    }
+}
+
+async function loadPaymentsConfig() {
+    try {
+        const res = await fetch(`${API_URL}/payments/config`);
+        if (!res.ok) return;
+        const cfg = await res.json();
+        cardPaymentsEnabled = !!(cfg?.cardPayments?.enabled);
+        if (!cardPaymentsEnabled && paymentMethod === 'card') {
+            paymentMethod = 'cash';
+        }
+    } catch (e) {
+        cardPaymentsEnabled = false;
+    }
+}
 
 function setupResponsiveCheckoutHandlers() {
     if (!window || !window.matchMedia) return;
@@ -508,7 +617,6 @@ function renderCheckout() {
         </div>
         </div>
         <div id="payment-customer-section" class="checkout-step" style="display: none;">
-        ${deliveryMethod === 'pickup' ? `
         <h2 class="section-title" data-translate="paymentMethod" style="margin-top: 30px;"><span class="step-number-badge">3</span> ${translations[currentLanguage].paymentMethod}</h2>
         <div class="delivery-method">
             <label class="delivery-option ${paymentMethod === 'cash' ? 'active' : ''}" onclick="selectPaymentMethod('cash')">
@@ -517,14 +625,15 @@ function renderCheckout() {
                 <div class="delivery-option-title" data-translate="cash">${translations[currentLanguage].cash}</div>
                 <div class="delivery-option-desc" data-translate="cashDesc">${translations[currentLanguage].cashDesc}</div>
             </label>
+            ${cardPaymentsEnabled ? `
             <label class="delivery-option ${paymentMethod === 'card' ? 'active' : ''}" onclick="selectPaymentMethod('card')">
                 <input type="radio" name="payment" value="card" ${paymentMethod === 'card' ? 'checked' : ''}>
                 <div class="delivery-option-icon"><i class="fas fa-credit-card"></i></div>
                 <div class="delivery-option-title" data-translate="card">${translations[currentLanguage].card}</div>
                 <div class="delivery-option-desc" data-translate="cardDesc">${translations[currentLanguage].cardDesc}</div>
             </label>
+            ` : ''}
         </div>
-        ` : ''}
         <h3 class="section-title" data-translate="customerInfo" style="margin-top: 30px;">${translations[currentLanguage].customerInfo}</h3>
         <form class="customer-form" id="customer-form">
             <div class="form-row">
@@ -709,6 +818,7 @@ function adjustTime(minutes) {
     selectedTimeSlot = `${finalHours}:${finalMins}`;
     
     updateTimeDisplay();
+    saveCheckoutState();
 }
 
 // Update time display
@@ -734,6 +844,7 @@ function selectOrderTime(time) {
     }
     
     renderCheckout();
+    saveCheckoutState();
 }
 
 // Navigate to next step
@@ -799,7 +910,7 @@ function renderCartItems() {
             ? item.translations.bg.name 
             : item.name;
 
-        const displayNameForUi = truncateMobileName(displayName, 25);
+        const displayNameForUi = displayName;
         
         const displayCategory = currentLanguage === 'bg' && item.translations?.bg?.category 
             ? item.translations.bg.category 
@@ -998,7 +1109,8 @@ async function placeOrder() {
         deliveryType: deliveryMethod,
         customerInfo: customerInfo,
         timestamp: new Date().toISOString(),
-        status: 'pending'
+        status: 'pending',
+        paymentMethod: paymentMethod
     };
 
     try {
@@ -1017,6 +1129,11 @@ async function placeOrder() {
 
         const result = await response.json();
         console.log('Order placed:', result);
+
+        if (result?.payment?.redirectUrl) {
+            window.location.href = result.payment.redirectUrl;
+            return;
+        }
 
         // Clear cart and show success message
         cart = [];
@@ -1037,6 +1154,7 @@ async function placeOrder() {
 
 // Select delivery method
 function selectDeliveryMethod(method) {
+    const prev = deliveryMethod;
     deliveryMethod = method;
 
     // One-time pickup heads-up
@@ -1049,6 +1167,14 @@ function selectDeliveryMethod(method) {
                 : 'Heads up: Pickup orders may take up to 1 hour.');
         }
     }
+
+    if (prev && prev !== method) {
+        // Reset dependent steps when switching delivery type
+        orderTime = '';
+        scheduledTime = '';
+        selectedTimeSlot = '';
+        currentStep = 1;
+    }
     
     // Handle address fields visibility
     const addressField = document.getElementById('address-field');
@@ -1059,7 +1185,6 @@ function selectDeliveryMethod(method) {
         if (addressField) addressField.classList.add('show');
         if (addressStreetField) addressStreetField.classList.add('show');
         if (addressInput) addressInput.required = true;
-        paymentMethod = 'cash'; // Delivery only supports cash
     } else {
         if (addressField) addressField.classList.remove('show');
         if (addressStreetField) addressStreetField.classList.remove('show');
@@ -1093,6 +1218,8 @@ function selectDeliveryMethod(method) {
             orderTimeSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }, 50);
     }
+
+    saveCheckoutState();
 }
 
 // Select order time
@@ -1144,8 +1271,13 @@ function selectOrderTime(time) {
 
 // Select payment method
 function selectPaymentMethod(method) {
-    paymentMethod = method;
+    if (method === 'card' && !cardPaymentsEnabled) {
+        paymentMethod = 'cash';
+    } else {
+        paymentMethod = method;
+    }
     renderCheckout();
+    saveCheckoutState();
 }
 
 // Update delivery fee when city is selected
@@ -1166,12 +1298,13 @@ function setupFormListeners() {
     const cityInput = document.getElementById('customer-city');
     const notesInput = document.getElementById('customer-notes');
 
-    if (nameInput) nameInput.addEventListener('input', (e) => customerInfo.name = e.target.value);
-    if (phoneInput) phoneInput.addEventListener('input', (e) => customerInfo.phone = e.target.value);
-    if (emailInput) emailInput.addEventListener('input', (e) => customerInfo.email = e.target.value);
-    if (cityInput) cityInput.addEventListener('change', (e) => customerInfo.city = e.target.value);
-    if (addressInput) addressInput.addEventListener('input', (e) => customerInfo.address = e.target.value);
-    if (notesInput) notesInput.addEventListener('input', (e) => customerInfo.notes = e.target.value);
+    const persist = () => saveCheckoutState();
+    if (nameInput) nameInput.addEventListener('input', (e) => { customerInfo.name = e.target.value; persist(); });
+    if (phoneInput) phoneInput.addEventListener('input', (e) => { customerInfo.phone = e.target.value; persist(); });
+    if (emailInput) emailInput.addEventListener('input', (e) => { customerInfo.email = e.target.value; persist(); });
+    if (cityInput) cityInput.addEventListener('change', (e) => { customerInfo.city = e.target.value; persist(); });
+    if (addressInput) addressInput.addEventListener('input', (e) => { customerInfo.address = e.target.value; persist(); });
+    if (notesInput) notesInput.addEventListener('input', (e) => { customerInfo.notes = e.target.value; persist(); });
 }
 
 // Calculate delivery fee based on selected city

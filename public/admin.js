@@ -288,6 +288,27 @@ function checkAuth() {
     return !!token;
 }
 
+async function ensureAuthOrRedirect() {
+    const token = sessionStorage.getItem('adminToken');
+    if (!token) return false;
+
+    try {
+        const res = await fetch(`${API_URL}/restaurants/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) return true;
+    } catch (e) {
+        // fall through
+    }
+
+    // Token is missing/expired (server restarts clear in-memory tokens)
+    sessionStorage.removeItem('adminToken');
+    sessionStorage.removeItem('adminUser');
+    alert('Session expired. Please login again.');
+    window.location.href = `${BASE_PATH}/login`;
+    return false;
+}
+
 // Logout function
 function logout() {
     sessionStorage.removeItem('adminToken');
@@ -298,28 +319,31 @@ function logout() {
 // Load data on page load
 document.addEventListener('DOMContentLoaded', function() {
     // Check authentication first
-    if (!checkAuth()) {
-        return;
-    }
-    
-    loadProducts();
-    loadRestaurantName();
-    loadCustomization();
-    setupForm();
-    setupColorInputs();
-    loadPromoCodes();
-    initManageControls();
-    loadCategories();
-    initProductSearchUI();
-    loadProductsForSearch();
-    loadDeliverySettings();
-    loadCities();
-    loadProductsForCombo();
-    startOrdersPolling();
-    loadCurrencySettings();
-    loadWorkingHours();
-    loadSlideshowSettings();
-    initializeZonesMap();
+    if (!checkAuth()) return;
+
+    (async () => {
+        const ok = await ensureAuthOrRedirect();
+        if (!ok) return;
+
+        loadProducts();
+        loadRestaurantName();
+        loadCustomization();
+        setupForm();
+        setupColorInputs();
+        loadPromoCodes();
+        initManageControls();
+        loadCategories();
+        initProductSearchUI();
+        loadProductsForSearch();
+        loadDeliverySettings();
+        loadCities();
+        loadProductsForCombo();
+        startOrdersPolling();
+        loadCurrencySettings();
+        loadWorkingHours();
+        loadSlideshowSettings();
+        initializeZonesMap();
+    })();
 });
 
 // --- Product Search & Bulk Promo ---
@@ -721,6 +745,19 @@ async function loadRestaurantName() {
                 if (emailInput) {
                     emailInput.value = profile.orderNotificationEmail || profile.email || '';
                 }
+
+                const boricaEnabledEl = document.getElementById('borica-enabled');
+                const boricaDebugEl = document.getElementById('borica-debug-mode');
+                const boricaTerminalEl = document.getElementById('borica-terminal-id');
+                const boricaPrivEl = document.getElementById('borica-private-key');
+                const boricaPubEl = document.getElementById('borica-public-cert');
+
+                const borica = profile.borica || {};
+                if (boricaEnabledEl) boricaEnabledEl.checked = !!borica.enabled;
+                if (boricaDebugEl) boricaDebugEl.checked = borica.debugMode !== undefined ? !!borica.debugMode : true;
+                if (boricaTerminalEl) boricaTerminalEl.value = borica.terminalId || '';
+                if (boricaPrivEl) boricaPrivEl.value = borica.privateKeyPem || '';
+                if (boricaPubEl) boricaPubEl.value = borica.publicCertPem || '';
             }
         }
     } catch (error) {
@@ -733,6 +770,12 @@ async function updateRestaurantSettings() {
     const name = document.getElementById('restaurant-name-input').value.trim();
     const logo = document.getElementById('restaurant-logo-input').value.trim();
     const notificationEmail = (document.getElementById('restaurant-notification-email-input')?.value || '').toString().trim();
+
+    const boricaEnabled = !!document.getElementById('borica-enabled')?.checked;
+    const boricaDebugMode = document.getElementById('borica-debug-mode')?.checked !== false;
+    const boricaTerminalId = (document.getElementById('borica-terminal-id')?.value || '').toString().trim();
+    const boricaPrivateKeyPem = (document.getElementById('borica-private-key')?.value || '').toString();
+    const boricaPublicCertPem = (document.getElementById('borica-public-cert')?.value || '').toString();
     
     if (!name) {
         alert('Please enter a restaurant name');
@@ -769,7 +812,16 @@ async function updateRestaurantSettings() {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ orderNotificationEmail: notificationEmail })
+                body: JSON.stringify({
+                    orderNotificationEmail: notificationEmail,
+                    borica: {
+                        enabled: boricaEnabled,
+                        debugMode: boricaDebugMode,
+                        terminalId: boricaTerminalId,
+                        privateKeyPem: boricaPrivateKeyPem,
+                        publicCertPem: boricaPublicCertPem
+                    }
+                })
             });
 
             if (!profileRes.ok) {
@@ -2940,10 +2992,18 @@ async function loadOrders() {
             }
         });
 
+        if (response.status === 401) {
+            // Server restarts clear activeTokens (in-memory). Force re-login.
+            await ensureAuthOrRedirect();
+            return;
+        }
+
         if (response.ok) {
             orders = await response.json();
             renderPendingOrders();
             renderOrdersHistory();
+        } else {
+            console.error('Error loading orders:', response.status);
         }
     } catch (error) {
         console.error('Error loading orders:', error);

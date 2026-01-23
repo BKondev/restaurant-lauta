@@ -303,11 +303,7 @@ function createProductCard(product) {
     const description = (currentLanguage === 'bg' && product.translations?.bg?.description) ? product.translations.bg.description : product.description;
     const category = (currentLanguage === 'bg' && product.translations?.bg?.category) ? product.translations.bg.category : product.category;
     
-    // Truncate name to 25 characters on mobile
-    const isMobile = window.innerWidth <= 768;
-    if (isMobile && name.length > 25) {
-        name = name.substring(0, 25) + '...';
-    }
+    // Name wrapping is handled in CSS (2-line clamp), avoid JS truncation.
     
     // Handle image URL (check if it's a server upload or external URL)
     let imageUrl = product.image;
@@ -397,13 +393,15 @@ function createProductCard(product) {
     
     card.innerHTML = `
         ${badgeHTML}
-        <img src="${imageUrl}" 
-             alt="${name}" 
-             class="product-image"
-             onerror="this.src='https://via.placeholder.com/280x200?text=No+Image'">
+        <div class="product-image-wrap">
+            <img src="${imageUrl}" 
+                 alt="${name}" 
+                 class="product-image"
+                 onerror="this.src='https://via.placeholder.com/280x200?text=No+Image'">
+            ${product.weight ? `<span class="product-weight-overlay">${product.weight}</span>` : ''}
+        </div>
         <div class="product-info">
             <div class="product-name">${name}</div>
-            ${product.weight ? `<div class="product-weight"><i class="fas fa-weight"></i> ${product.weight}</div>` : ''}
             <div class="product-description">${description}</div>
             <div class="product-footer">
                 ${priceHTML}
@@ -601,7 +599,10 @@ function renderSearchDropdown() {
                 <img class="search-result-img" src="${imageUrl}" alt="${name}" onerror="this.src='https://via.placeholder.com/80x80?text=No+Image'">
                 <div class="search-result-info">
                     <div class="search-result-name">${name}</div>
-                    <div class="search-result-category">${getCategoryDisplayName(product.category)}</div>
+                    <div class="search-result-meta">
+                        ${product.weight ? `<span class="search-result-weight">${product.weight}</span>` : ''}
+                        <span class="search-result-category">${getCategoryDisplayName(product.category)}</span>
+                    </div>
                 </div>
                 <div class="search-result-price">${formatPrice(effectivePrice)}</div>
             `;
@@ -609,9 +610,9 @@ function renderSearchDropdown() {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                searchInput.value = '';
-                hideSearchDropdown();
-                jumpToProduct(product);
+                // Close search UI first (especially on mobile) before navigating.
+                closeMobileSearch();
+                setTimeout(() => jumpToProduct(product), 0);
             });
 
             dropdown.appendChild(item);

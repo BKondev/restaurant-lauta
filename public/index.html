@@ -97,11 +97,13 @@
             <div class="modal-content product-modal-content">
                 <div class="product-modal-inner">
                     <h2 id="modal-name" class="product-modal-name"></h2>
-                    <div id="modal-weight" class="product-modal-weight" style="display:none;"></div>
                     <div id="modal-qty-line" class="product-modal-qtyline"></div>
                     <div id="modal-big-price" class="product-modal-bigprice"></div>
                     <p id="modal-description" class="product-modal-description"></p>
-                    <img id="modal-image" class="product-modal-image" src="" alt="">
+                    <div class="product-modal-image-wrap">
+                        <img id="modal-image" class="product-modal-image" src="" alt="">
+                        <div id="modal-weight" class="product-modal-weight product-modal-weight-overlay" style="display:none;"></div>
+                    </div>
                 </div>
 
                 <div class="product-modal-footer">

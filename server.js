@@ -3,6 +3,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { sendToDeliveryService } = require('./delivery-integration');
 const { printOrder } = require('./printer-service');
 
@@ -139,6 +140,13 @@ function initDatabase() {
                     phone: "+359888123456",
                     email: "contact@bojole.bg",
                     orderNotificationEmail: "contact@bojole.bg",
+                    borica: {
+                        enabled: false,
+                        debugMode: true,
+                        terminalId: "",
+                        privateKeyPem: "",
+                        publicCertPem: ""
+                    },
                     active: true,
                     createdAt: new Date().toISOString()
                 }
@@ -178,6 +186,128 @@ function writeDatabase(data) {
         console.error('Error writing database:', error);
         return false;
     }
+}
+
+function padLeft(value, length, char = '0') {
+    let str = String(value ?? '');
+    while (str.length < length) str = char + str;
+    return str;
+}
+
+function padRight(value, length, char = ' ') {
+    let str = String(value ?? '');
+    while (str.length < length) str = str + char;
+    return str;
+}
+
+function getDateYMDHS() {
+    const d = new Date();
+    const yyyy = d.getFullYear().toString();
+    const MM = padLeft(d.getMonth() + 1, 2);
+    const dd = padLeft(d.getDate(), 2);
+    const hh = padLeft(d.getHours(), 2);
+    const mm = padLeft(d.getMinutes(), 2);
+    const ss = padLeft(d.getSeconds(), 2);
+    return `${yyyy}${MM}${dd}${hh}${mm}${ss}`;
+}
+
+function generateBoricaProviderOrderId() {
+    // BORICA orderId field is 15 chars; keep numeric-only for broad compatibility.
+    const ts = String(Date.now()); // 13 digits
+    const rnd = padLeft(Math.floor(Math.random() * 100), 2); // 2 digits
+    return `${ts}${rnd}`.slice(0, 15);
+}
+
+function boricaGetGatewayBaseUrl(debugMode) {
+    return debugMode ? 'https://gatet.borica.bg/boreps/' : 'https://gate.borica.bg/boreps/';
+}
+
+function boricaBuildRegisterTransactionMessage({
+    amountBGN,
+    terminalId,
+    providerOrderId,
+    orderDescription,
+    language = 'BG',
+    protocolVersion = '1.1'
+}) {
+    const messageType = '10';
+    const timestamp = getDateYMDHS();
+
+    const amountCents = Math.round(Number(amountBGN) * 100);
+    const amountField = padLeft(Number.isFinite(amountCents) ? amountCents : 0, 12, '0');
+
+    const terminalField = padLeft(String(terminalId ?? '').trim(), 8, '0');
+    const orderIdField = padRight(String(providerOrderId ?? '').trim(), 15, ' ');
+    const descField = padRight(String(orderDescription ?? ''), 125, ' ');
+    const langField = padRight(String(language ?? 'BG').toUpperCase().slice(0, 2), 2, ' ');
+    const protocolField = padRight(String(protocolVersion ?? '1.1').slice(0, 3), 3, ' ');
+
+    return `${messageType}${timestamp}${amountField}${terminalField}${orderIdField}${descField}${langField}${protocolField}`;
+}
+
+function boricaSignMessageToEBoricaBase64(message, privateKeyPem) {
+    const dataBuffer = Buffer.from(message, 'utf8');
+    const sign = crypto.createSign('RSA-SHA1');
+    sign.update(dataBuffer);
+    sign.end();
+    const signature = sign.sign(privateKeyPem);
+    return Buffer.concat([dataBuffer, signature]).toString('base64');
+}
+
+function boricaVerifyAndParseEBorica(eBoricaBase64, publicCertPem) {
+    const signedBuffer = Buffer.from(String(eBoricaBase64 || ''), 'base64');
+    if (!signedBuffer || signedBuffer.length < 60) {
+        return { ok: false, error: 'Invalid eBorica payload' };
+    }
+
+    let sigLen = 128;
+    try {
+        const publicKey = crypto.createPublicKey(publicCertPem);
+        const modulusBits = publicKey.asymmetricKeyDetails?.modulusLength;
+        if (modulusBits && Number.isFinite(modulusBits)) {
+            sigLen = Math.floor(modulusBits / 8);
+        }
+    } catch (e) {
+        // fallback to default
+    }
+
+    if (signedBuffer.length <= sigLen) {
+        return { ok: false, error: 'eBorica payload too short' };
+    }
+
+    const dataBuffer = signedBuffer.slice(0, signedBuffer.length - sigLen);
+    const signatureBuffer = signedBuffer.slice(signedBuffer.length - sigLen);
+
+    const verify = crypto.createVerify('RSA-SHA1');
+    verify.update(dataBuffer);
+    verify.end();
+    const ok = verify.verify(publicCertPem, signatureBuffer);
+
+    const text = dataBuffer.toString('utf8');
+    const transactionCode = text.substring(0, 2);
+    const transactionTime = text.substring(2, 16);
+    const amountField = text.substring(16, 28);
+    const terminalId = text.substring(28, 36);
+    const orderIdField = text.substring(36, 51);
+    const responseCode = text.substring(51, 53);
+    const protocolVersion = text.substring(53, 56);
+
+    const amountCents = Number.parseInt(String(amountField || '').trim(), 10);
+    const amountBGN = Number.isFinite(amountCents) ? amountCents / 100 : null;
+    const providerOrderId = String(orderIdField || '').trim();
+
+    return {
+        ok,
+        data: {
+            transactionCode,
+            transactionTime,
+            amountBGN,
+            terminalId,
+            providerOrderId,
+            responseCode,
+            protocolVersion
+        }
+    };
 }
 
 // Initialize database on startup
@@ -252,7 +382,14 @@ app.get(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
             id: restaurant.id,
             name: restaurant.name,
             email: restaurant.email || '',
-            orderNotificationEmail: restaurant.orderNotificationEmail || ''
+            orderNotificationEmail: restaurant.orderNotificationEmail || '',
+            borica: restaurant.borica || {
+                enabled: false,
+                debugMode: true,
+                terminalId: '',
+                privateKeyPem: '',
+                publicCertPem: ''
+            }
         });
     } catch (e) {
         console.error('Error loading restaurant profile:', e);
@@ -262,7 +399,7 @@ app.get(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
 
 app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
     try {
-        const { orderNotificationEmail } = req.body;
+        const { orderNotificationEmail, borica } = req.body;
         const db = readDatabase();
 
         const idx = db.restaurants?.findIndex(r => r.id === req.restaurantId);
@@ -278,12 +415,47 @@ app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
             db.restaurants[idx].orderNotificationEmail = email;
         }
 
+        if (borica !== undefined) {
+            const enabled = !!borica.enabled;
+            const debugMode = borica.debugMode !== undefined ? !!borica.debugMode : true;
+            const terminalId = (borica.terminalId || '').toString().trim();
+            const privateKeyPem = (borica.privateKeyPem || '').toString();
+            const publicCertPem = (borica.publicCertPem || '').toString();
+
+            if (enabled) {
+                if (!/^[0-9]{8}$/.test(terminalId)) {
+                    return res.status(400).json({ error: 'BORICA Terminal ID must be exactly 8 digits' });
+                }
+                if (!privateKeyPem.includes('BEGIN') || !privateKeyPem.includes('PRIVATE KEY')) {
+                    return res.status(400).json({ error: 'BORICA Private Key PEM looks invalid' });
+                }
+                if (!publicCertPem.includes('BEGIN') || !publicCertPem.includes('CERTIFICATE')) {
+                    return res.status(400).json({ error: 'BORICA Public Certificate PEM looks invalid' });
+                }
+            }
+
+            db.restaurants[idx].borica = {
+                enabled,
+                debugMode,
+                terminalId,
+                privateKeyPem,
+                publicCertPem
+            };
+        }
+
         if (writeDatabase(db)) {
             res.json({
                 id: db.restaurants[idx].id,
                 name: db.restaurants[idx].name,
                 email: db.restaurants[idx].email || '',
-                orderNotificationEmail: db.restaurants[idx].orderNotificationEmail || ''
+                orderNotificationEmail: db.restaurants[idx].orderNotificationEmail || '',
+                borica: db.restaurants[idx].borica || {
+                    enabled: false,
+                    debugMode: true,
+                    terminalId: '',
+                    privateKeyPem: '',
+                    publicCertPem: ''
+                }
             });
         } else {
             res.status(500).json({ error: 'Failed to update restaurant profile' });
@@ -291,6 +463,155 @@ app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
     } catch (e) {
         console.error('Error updating restaurant profile:', e);
         res.status(500).json({ error: 'Failed to update restaurant profile' });
+    }
+});
+
+// Public: expose whether card payments are enabled for a restaurant
+app.get(API_PREFIX + '/payments/config', (req, res) => {
+    try {
+        const data = readDatabase();
+        const headerRestaurantId = req.headers['x-restaurant-id'];
+        let targetRestaurantId = req.query.restaurantId || headerRestaurantId;
+
+        if (!targetRestaurantId) {
+            const activeRestaurants = (data.restaurants || []).filter(r => r && r.active);
+            if (activeRestaurants.length === 1) {
+                targetRestaurantId = activeRestaurants[0].id;
+            }
+        }
+
+        const restaurant = data.restaurants?.find(r => r.id === targetRestaurantId && r.active);
+        const borica = restaurant?.borica;
+        const enabled = !!(borica?.enabled && borica?.terminalId && borica?.privateKeyPem && borica?.publicCertPem);
+
+        res.json({
+            cardPayments: {
+                enabled,
+                provider: enabled ? 'borica' : null
+            },
+            borica: {
+                enabled
+            }
+        });
+    } catch (e) {
+        res.json({ cardPayments: { enabled: false, provider: null }, borica: { enabled: false } });
+    }
+});
+
+// BORICA return endpoint (configured in BORICA portal)
+app.get(API_PREFIX + '/payments/borica/return', (req, res) => {
+    try {
+        const eBorica = req.query.eBorica || req.query.eborica;
+        if (!eBorica) {
+            return res.status(400).send('Missing eBorica');
+        }
+
+        const db = readDatabase();
+
+        // Guess terminalId from payload prefix to select correct cert.
+        let terminalIdGuess = '';
+        try {
+            const buf = Buffer.from(String(eBorica), 'base64');
+            terminalIdGuess = buf.slice(28, 36).toString('utf8');
+        } catch (e) {
+            terminalIdGuess = '';
+        }
+
+        const restaurant = (db.restaurants || []).find(r => r?.borica?.terminalId === terminalIdGuess);
+        if (!restaurant || !restaurant.borica?.publicCertPem) {
+            return res.status(400).send('Unknown terminal / restaurant');
+        }
+
+        const parsed = boricaVerifyAndParseEBorica(eBorica, restaurant.borica.publicCertPem);
+        if (!parsed.ok) {
+            console.error('[BORICA] Invalid signature', parsed.error, parsed.data);
+            return res.status(400).send('Invalid BORICA signature');
+        }
+
+        const providerOrderId = parsed.data?.providerOrderId;
+        const responseCode = parsed.data?.responseCode;
+
+        const orderIndex = (db.orders || []).findIndex(o =>
+            o?.restaurantId === restaurant.id &&
+            o?.payment?.provider === 'borica' &&
+            String(o.payment.providerOrderId || '') === String(providerOrderId || '')
+        );
+
+        if (orderIndex === -1) {
+            return res.status(404).send('Order not found');
+        }
+
+        const order = db.orders[orderIndex];
+        order.payment = order.payment || { method: 'card', provider: 'borica' };
+        order.payment.lastResponseCode = responseCode;
+        order.payment.lastResponseAt = new Date().toISOString();
+
+        const success = responseCode === '00';
+        if (success) {
+            order.payment.status = 'paid';
+            order.payment.paidAt = new Date().toISOString();
+            if (order.status === 'pending_payment') {
+                order.status = 'pending';
+            }
+
+            // Send emails now that payment is confirmed
+            setImmediate(() => {
+                try {
+                    sendOrderPlacedEmails(order, restaurant)
+                        .then(() => console.log('[EMAIL] order placed emails attempted (post-payment):', order.id))
+                        .catch(err => console.error('[EMAIL] order placed emails failed (post-payment):', err));
+                } catch (e) {
+                    console.error('[EMAIL] post-payment emails error:', e);
+                }
+            });
+        } else {
+            order.payment.status = responseCode === '17' ? 'cancelled' : 'failed';
+            if (order.status === 'pending_payment') {
+                order.status = 'cancelled';
+            }
+        }
+
+        writeDatabase(db);
+
+        const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Payment ${success ? 'Successful' : 'Failed'}</title>
+    <style>
+      body{font-family:Arial, sans-serif; background:#f5f5f5; margin:0; padding:40px;}
+      .card{max-width:720px; margin:0 auto; background:#fff; border-radius:16px; padding:24px; box-shadow:0 4px 14px rgba(0,0,0,.08);}
+      h1{margin:0 0 10px;}
+      .ok{color:#27ae60;} .bad{color:#e74c3c;}
+      a{display:inline-block; margin-top:14px; color:#2c3e50;}
+      code{background:#f0f0f0; padding:2px 6px; border-radius:6px;}
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1 class="${success ? 'ok' : 'bad'}">${success ? 'Payment successful' : 'Payment failed'}</h1>
+      <div>Order: <code>${order.id}</code></div>
+      <div>BORICA response: <code>${responseCode || ''}</code></div>
+      <a href="${BASE_PATH || ''}/">Back to menu</a>
+    </div>
+        <script>
+            (function(){
+                try {
+                    if (${success ? 'true' : 'false'}) {
+                        localStorage.removeItem('cart');
+                    }
+                } catch (e) {}
+            })();
+        </script>
+  </body>
+</html>`;
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(html);
+    } catch (error) {
+        console.error('BORICA return error:', error);
+        res.status(500).send('Payment processing error');
     }
 });
 
@@ -1246,6 +1567,7 @@ function normalizeOrderStatus(rawStatus) {
 function isAllowedOrderStatus(status) {
     return [
         'pending',
+        'pending_payment',
         'approved',
         'delivering',
         'ready_for_pickup',
@@ -1529,7 +1851,8 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             deliveryFee,
             customerInfo,
             timestamp,
-            restaurantId
+            restaurantId,
+            paymentMethod
         } = req.body;
         
         // Get restaurant ID from body or X-Restaurant-Id header.
@@ -1600,6 +1923,53 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             createdAt: createdAt.toISOString(),
             trackingExpiry: trackingExpiry.toISOString()
         };
+
+        const normalizedPaymentMethod = (paymentMethod || 'cash').toString().trim().toLowerCase();
+        if (normalizedPaymentMethod === 'card') {
+            const borica = restaurant.borica;
+            const boricaEnabled = !!(borica?.enabled && borica?.terminalId && borica?.privateKeyPem && borica?.publicCertPem);
+            if (!boricaEnabled) {
+                return res.status(400).json({ error: 'Card payments are not enabled for this restaurant' });
+            }
+
+            const providerOrderId = generateBoricaProviderOrderId();
+            const currencySettings = data.currencySettings || { eurToBgnRate: 1.9558 };
+            const eurToBgnRate = parseNumber(currencySettings.eurToBgnRate, 1.9558);
+            const amountBGN = parseNumber(total, 0) * eurToBgnRate;
+            const orderDescription = `Order ${newOrder.id}`;
+            const message = boricaBuildRegisterTransactionMessage({
+                amountBGN,
+                terminalId: borica.terminalId,
+                providerOrderId,
+                orderDescription,
+                language: 'BG',
+                protocolVersion: '1.1'
+            });
+            const eBorica = boricaSignMessageToEBoricaBase64(message, borica.privateKeyPem);
+            const redirectUrl = `${boricaGetGatewayBaseUrl(!!borica.debugMode)}registerTransaction?eBorica=${encodeURIComponent(eBorica)}`;
+
+            newOrder.payment = {
+                method: 'card',
+                provider: 'borica',
+                status: 'pending',
+                providerOrderId,
+                amountBGN
+            };
+            newOrder.status = 'pending_payment';
+
+            data.orders.push(newOrder);
+            writeDatabase(data);
+
+            return res.status(201).json({
+                success: true,
+                message: 'Payment required',
+                order: newOrder,
+                payment: {
+                    provider: 'borica',
+                    redirectUrl
+                }
+            });
+        }
 
         data.orders.push(newOrder);
         writeDatabase(data);

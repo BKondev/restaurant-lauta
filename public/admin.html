@@ -127,6 +127,47 @@
                 <input type="email" id="restaurant-notification-email-input" placeholder="orders@example.com">
                 <small>We will send order notifications to this email (per restaurant/tenant).</small>
             </div>
+
+            <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
+
+            <h3 style="margin: 0 0 10px;"><i class="fas fa-credit-card"></i> Card Payments (BORICA)</h3>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="borica-enabled">
+                        <span>Enable BORICA card payments</span>
+                    </label>
+                    <small>When enabled, customers can pay by card at checkout.</small>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="borica-debug-mode" checked>
+                        <span>Test/Sandbox mode</span>
+                    </label>
+                    <small>Uses BORICA test gateway when enabled.</small>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="borica-terminal-id">BORICA Terminal ID (8 digits):</label>
+                <input type="text" id="borica-terminal-id" placeholder="00000000" maxlength="8" inputmode="numeric">
+            </div>
+
+            <div class="form-group">
+                <label for="borica-private-key">BORICA Private Key (PEM):</label>
+                <textarea id="borica-private-key" rows="6" placeholder="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"></textarea>
+                <small>Keep this secret. Do not share it.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="borica-public-cert">BORICA Public Certificate (PEM):</label>
+                <textarea id="borica-public-cert" rows="6" placeholder="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"></textarea>
+                <small>
+                    Configure BORICA Return URL to:
+                    <span style="font-family: monospace;">https://YOUR_DOMAIN/resturant-website/api/payments/borica/return</span>
+                </small>
+            </div>
             
             <button onclick="updateRestaurantSettings()" class="btn btn-primary">
                 <i class="fas fa-save"></i> Update Settings
