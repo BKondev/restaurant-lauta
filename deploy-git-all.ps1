@@ -143,6 +143,37 @@ else
   shopt -u nullglob
 fi
 
+# Filter out non-instance folders and any weirdly-named directories
+FILTERED_INSTANCE_DIRS=()
+declare -A SEEN_DIRS
+for d in "${INSTANCE_DIRS[@]}"; do
+  if [ ! -d "$d" ]; then
+    continue
+  fi
+
+  base=$(basename "$d")
+  base_clean=$(printf '%s' "$base" | tr -d '\r')
+
+  # Skip directories whose name contains a carriage return (breaks discovery/output)
+  if [ "$base_clean" != "$base" ]; then
+    echo "Skip (invalid dir name contains CR): $d"
+    continue
+  fi
+
+  # Skip backups folders
+  if printf '%s' "$base" | grep -qi 'backup'; then
+    echo "Skip (backup dir): $d"
+    continue
+  fi
+
+  if [ -n "${SEEN_DIRS[$d]+x}" ]; then
+    continue
+  fi
+  SEEN_DIRS[$d]=1
+  FILTERED_INSTANCE_DIRS+=("$d")
+done
+INSTANCE_DIRS=("${FILTERED_INSTANCE_DIRS[@]}")
+
 if [ ${#INSTANCE_DIRS[@]} -eq 0 ]; then
   echo "No instance folders found. Check DeployRoot/DeployDirGlob or pass -DeployDirs explicitly."
   exit 4

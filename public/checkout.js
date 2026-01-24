@@ -10,7 +10,7 @@ let deliveryMethod = ''; // '' empty by default, 'delivery' or 'pickup'
 let orderTime = ''; // '' empty by default, 'now' or 'later'
 let scheduledTime = '';
 let selectedTimeSlot = '';
-let paymentMethod = 'cash'; // 'cash' or 'card'
+let paymentMethod = ''; // '' = not selected yet; 'cash' or 'card'
 let cardPaymentsEnabled = false;
 let currentStep = 1; // Track current checkout step
 let customerInfo = {
@@ -41,6 +41,51 @@ let workingHours = {
 
 const CHECKOUT_STATE_KEY = 'checkoutState_v1';
 
+function captureCustomerInfoFromDom() {
+    // Needed because we sometimes re-render the checkout when switching steps.
+    // Preserve whatever the user has already typed.
+    const nameInput = document.getElementById('customer-name');
+    const phoneInput = document.getElementById('customer-phone');
+    const emailInput = document.getElementById('customer-email');
+    const cityInput = document.getElementById('customer-city');
+    const addressInput = document.getElementById('customer-address');
+    const notesInput = document.getElementById('customer-notes');
+
+    if (nameInput) customerInfo.name = nameInput.value;
+    if (phoneInput) customerInfo.phone = phoneInput.value;
+    if (emailInput) customerInfo.email = emailInput.value;
+    if (cityInput) customerInfo.city = cityInput.value;
+    if (addressInput) customerInfo.address = addressInput.value;
+    if (notesInput) customerInfo.notes = notesInput.value;
+}
+
+function resetCheckoutFlowBelowDeliveryMethod() {
+    // Keep customerInfo, but require re-selecting time/payment.
+    orderTime = '';
+    scheduledTime = '';
+    selectedTimeSlot = '';
+    paymentMethod = '';
+    currentStep = 1;
+}
+
+function applyCheckoutStepVisibility() {
+    const orderTimeSection = document.getElementById('order-time-section');
+    const paymentCustomerSection = document.getElementById('payment-customer-section');
+    const timePickerSection = document.getElementById('time-picker-section');
+
+    if (orderTimeSection) {
+        orderTimeSection.style.display = deliveryMethod ? 'block' : 'none';
+    }
+
+    if (paymentCustomerSection) {
+        paymentCustomerSection.style.display = orderTime ? 'block' : 'none';
+    }
+
+    if (timePickerSection) {
+        timePickerSection.style.display = orderTime === 'later' ? 'block' : 'none';
+    }
+}
+
 function saveCheckoutState() {
     try {
         const state = {
@@ -67,14 +112,14 @@ function loadCheckoutState() {
 
         const nextDeliveryMethod = ['delivery', 'pickup', ''].includes(parsed.deliveryMethod) ? parsed.deliveryMethod : '';
         const nextOrderTime = ['now', 'later', ''].includes(parsed.orderTime) ? parsed.orderTime : '';
-        const nextPaymentMethod = ['cash', 'card'].includes(parsed.paymentMethod) ? parsed.paymentMethod : 'cash';
+        const nextPaymentMethod = ['cash', 'card', ''].includes(parsed.paymentMethod) ? parsed.paymentMethod : '';
 
         deliveryMethod = nextDeliveryMethod;
         orderTime = nextOrderTime;
         scheduledTime = typeof parsed.scheduledTime === 'string' ? parsed.scheduledTime : '';
         selectedTimeSlot = typeof parsed.selectedTimeSlot === 'string' ? parsed.selectedTimeSlot : '';
 
-        paymentMethod = (nextPaymentMethod === 'card' && !cardPaymentsEnabled) ? 'cash' : nextPaymentMethod;
+        paymentMethod = (nextPaymentMethod === 'card' && !cardPaymentsEnabled) ? '' : nextPaymentMethod;
 
         const stepNum = Number(parsed.currentStep);
         currentStep = Number.isFinite(stepNum) && stepNum >= 1 ? stepNum : 1;
@@ -309,7 +354,7 @@ async function loadPaymentsConfig() {
         const cfg = await res.json();
         cardPaymentsEnabled = !!(cfg?.cardPayments?.enabled);
         if (!cardPaymentsEnabled && paymentMethod === 'card') {
-            paymentMethod = 'cash';
+            paymentMethod = '';
         }
     } catch (e) {
         cardPaymentsEnabled = false;
@@ -747,6 +792,7 @@ function renderCheckout() {
     cartContent.appendChild(summarySection);
 
     renderCartItems();
+    applyCheckoutStepVisibility();
     setupFormListeners();
     initializeTimePicker();
 }
@@ -827,24 +873,6 @@ function updateTimeDisplay() {
     if (display) {
         display.textContent = selectedTimeSlot || '11:00';
     }
-}
-
-// Select order time (now or later)
-function selectOrderTime(time) {
-    orderTime = time;
-    const timePickerSection = document.getElementById('time-picker-section');
-    
-    if (time === 'later') {
-        timePickerSection.style.display = 'block';
-        initializeTimePicker();
-    } else {
-        timePickerSection.style.display = 'none';
-        scheduledTime = '';
-        selectedTimeSlot = '';
-    }
-    
-    renderCheckout();
-    saveCheckoutState();
 }
 
 // Navigate to next step
@@ -1079,6 +1107,24 @@ function removePromoCode() {
 
 // Place order
 async function placeOrder() {
+    // Basic flow validation (prevents stale step states when user goes back)
+    if (!deliveryMethod) {
+        alert(currentLanguage === 'bg' ? 'Моля, изберете метод на доставка' : 'Please select a delivery method');
+        return;
+    }
+    if (!orderTime) {
+        alert(currentLanguage === 'bg' ? 'Моля, изберете време за поръчката' : 'Please select an order time');
+        return;
+    }
+    if (orderTime === 'later' && !selectedTimeSlot) {
+        alert(translations[currentLanguage].timeRequired);
+        return;
+    }
+    if (!paymentMethod) {
+        alert(currentLanguage === 'bg' ? 'Моля, изберете метод на плащане' : 'Please select a payment method');
+        return;
+    }
+
     // Validate customer info
     const name = document.getElementById('customer-name').value.trim();
     const phone = document.getElementById('customer-phone').value.trim();
@@ -1154,6 +1200,7 @@ async function placeOrder() {
 
 // Select delivery method
 function selectDeliveryMethod(method) {
+    captureCustomerInfoFromDom();
     const prev = deliveryMethod;
     deliveryMethod = method;
 
@@ -1168,55 +1215,18 @@ function selectDeliveryMethod(method) {
         }
     }
 
-    if (prev && prev !== method) {
-        // Reset dependent steps when switching delivery type
-        orderTime = '';
-        scheduledTime = '';
-        selectedTimeSlot = '';
-        currentStep = 1;
+    const hasProgressBelow = !!(orderTime || scheduledTime || selectedTimeSlot || paymentMethod);
+    if (prev && (prev !== method || hasProgressBelow)) {
+        resetCheckoutFlowBelowDeliveryMethod();
     }
     
-    // Handle address fields visibility
-    const addressField = document.getElementById('address-field');
-    const addressStreetField = document.getElementById('address-street-field');
-    const addressInput = document.getElementById('customer-address');
-    
-    if (method === 'delivery') {
-        if (addressField) addressField.classList.add('show');
-        if (addressStreetField) addressStreetField.classList.add('show');
-        if (addressInput) addressInput.required = true;
-    } else {
-        if (addressField) addressField.classList.remove('show');
-        if (addressStreetField) addressStreetField.classList.remove('show');
-        if (addressInput) addressInput.required = false;
-    }
-    
-    // Update active state on buttons (first set of delivery options)
-    const deliveryOptions = document.querySelectorAll('.delivery-method .delivery-option');
-    deliveryOptions.forEach((opt, index) => {
-        if (index < 2) { // Only first 2 are delivery method options
-            opt.classList.remove('active');
-            const input = opt.querySelector('input');
-            if (input && input.value === method) {
-                opt.classList.add('active');
-            }
-        }
-    });
-    
-    // Show order time section with animation
+    renderCheckout();
+    applyCheckoutStepVisibility();
+
+    // Scroll user to the next step
     const orderTimeSection = document.getElementById('order-time-section');
     if (orderTimeSection) {
-        orderTimeSection.style.display = 'block';
-        // Remove any previous animation class
-        orderTimeSection.classList.remove('slide-in');
-        // Trigger reflow
-        void orderTimeSection.offsetWidth;
-        // Add animation class
-        setTimeout(() => {
-            orderTimeSection.classList.add('slide-in');
-            // Scroll to the section smoothly
-            orderTimeSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 50);
+        orderTimeSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     saveCheckoutState();
@@ -1224,6 +1234,7 @@ function selectDeliveryMethod(method) {
 
 // Select order time
 function selectOrderTime(time) {
+    captureCustomerInfoFromDom();
     orderTime = time;
     
     // Update active state on order time buttons
@@ -1236,48 +1247,22 @@ function selectOrderTime(time) {
         }
     });
     
-    const timePickerSection = document.getElementById('time-picker-section');
-    if (timePickerSection) {
-        if (time === 'later') {
-            timePickerSection.style.display = 'block';
-            timePickerSection.classList.remove('slide-in');
-            void timePickerSection.offsetWidth;
-            setTimeout(() => {
-                timePickerSection.classList.add('slide-in');
-            }, 50);
-            // Initialize time picker
-            if (!selectedTimeSlot) {
-                initializeTimePicker();
-            }
-        } else {
-            timePickerSection.style.display = 'none';
-            timePickerSection.classList.remove('slide-in');
-        }
+    if (time !== 'later') {
+        scheduledTime = '';
+        selectedTimeSlot = '';
     }
     
-    // Show payment/customer section with animation
-    const paymentCustomerSection = document.getElementById('payment-customer-section');
-    if (paymentCustomerSection) {
-        paymentCustomerSection.style.display = 'block';
-        paymentCustomerSection.classList.remove('slide-in');
-        void paymentCustomerSection.offsetWidth;
-        setTimeout(() => {
-            paymentCustomerSection.classList.add('slide-in');
-            // Scroll to the section smoothly
-            paymentCustomerSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 50);
-    }
+    renderCheckout();
+    saveCheckoutState();
 }
 
 // Select payment method
 function selectPaymentMethod(method) {
-    if (method === 'card' && !cardPaymentsEnabled) {
-        paymentMethod = 'cash';
-    } else {
-        paymentMethod = method;
-    }
-    renderCheckout();
+    captureCustomerInfoFromDom();
+    if (method === 'card' && !cardPaymentsEnabled) return;
+    paymentMethod = method;
     saveCheckoutState();
+    renderCheckout();
 }
 
 // Update delivery fee when city is selected
