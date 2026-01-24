@@ -1254,6 +1254,19 @@ function selectOrderTime(time) {
     
     renderCheckout();
     saveCheckoutState();
+
+    if (time === 'later') {
+        // After re-render, ensure the time picker is centered on mobile.
+        const isMobile = !!(window?.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+        setTimeout(() => {
+            const timePickerSection = document.getElementById('time-picker-section');
+            if (!timePickerSection) return;
+            timePickerSection.scrollIntoView({
+                behavior: 'smooth',
+                block: isMobile ? 'center' : 'nearest'
+            });
+        }, 100);
+    }
 }
 
 // Select payment method
