@@ -136,28 +136,14 @@ fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));  // БЕЗ 'utf8'!
 
 ### 7. 🚀 DEPLOYMENT - МНОГО ВАЖНО!
 
-**⚠️ ВИНАГИ ДАВАЙ ТЕЗИ КОМАНДИ НА ПОТРЕБИТЕЛЯ - НЕ ГИ ИЗПЪЛНЯВАЙ САМИ!**
-
-**ВАЖНО: РАБОТЕН ПРОЦЕС:**
-1. **Потребителят** изпълнява SCP командите (deploy)
-2. **AI** рестартира PM2 след това с: `ssh root@46.62.174.218 "pm2 restart restaurant-backend"`
-3. **НЕ ДОБАВЯЙ** `&& pm2 logs` след рестарт!
-4. **НЕ изпълнявай** SCP командите автоматично - само ги покажи на потребителя
-
 **⚠️ ВАЖНО: IP АДРЕСЪТ НА СЪРВЪРА Е 46.62.174.218 (ЗАПОЧВА С 4, НЕ СЪС 178!)**
-
-**СТАНДАРТНА ПРОЦЕДУРА ЗА DEPLOY ПРЕЗ SCP (БЕЗ GIT):**
 
 **ВАЖНО: PM2 процесът се казва `restaurant-backend`, НЕ `resturant-website`!**
 
-```bash
-# 1. Отиди в директорията на проекта
-cd /c/Users/User/Desktop/resturant-template
+✅ **Единствен препоръчителен workflow:** GitHub → Server pull (без SCP)
 
-# 2. Копирай файловете на сървъра със SCP (САМО ДАЙ КОМАНДАТА, НЕ Я ИЗПЪЛНЯВАЙ!)
-scp server.js root@46.62.174.218:/opt/resturant-website/
-scp GUIDE-AI.md root@46.62.174.218:/opt/resturant-website/
-```
+- За единична инстанция: използвай `deploy-git.ps1`
+- За всички инстанции под `/opt/resturant-website*`: използвай `deploy-git-all.ps1`
 
 ## ✅ DEPLOY (официално): GitHub → Server pull
 
@@ -168,6 +154,13 @@ scp GUIDE-AI.md root@46.62.174.218:/opt/resturant-website/
 ```powershell
 cd C:\Users\User\Desktop\resturant-template
 .\deploy-git.ps1 -RepoUrl "git@github.com:BKondev/restaurant-platform.git" -CommitMessage "deploy"
+```
+
+Ако имаш много инстанции на сървъра (multi-tenant directories като `/opt/resturant-website2`, `/opt/resturant-website3`), използвай:
+
+```powershell
+cd C:\Users\User\Desktop\resturant-template
+.\deploy-git-all.ps1 -RepoUrl "git@github.com:BKondev/restaurant-platform.git" -CommitMessage "deploy all"
 ```
 
 Какво прави:
@@ -341,7 +334,7 @@ ssh root@46.62.174.218 "node -e \"const fs=require('fs'); const s=fs.readFileSyn
 
 **ГРЕШКИ НАПРАВЕНИ ОТ AI:**
 - ❌ Използван грешен IP адрес 178.128.199.94 вместо 46.62.174.218
-- ❌ Предложен Git deploy вместо SCP (потребителят използва SCP)
+- ❌ Използван SCP/частичен deploy (води до half-updated production и encoding проблеми)
 - ❌ Гледани локални файлове вместо да се провери какво е на сървъра
 - ❌ Добавяне на `&& pm2 logs` след рестарт команда (НЕ ТРЯБВА!)
 - ❌ Използван грешен PM2 процес име `resturant-website` вместо `restaurant-backend`

@@ -3,6 +3,13 @@ uploads/
 *.log
 .DS_Store
 
+# Cypress artifacts
+cypress/screenshots/
+cypress/videos/
+
+# Local test db
+.tmp/
+
 # Local/prod data (never commit)
 database.json
 production_database.json

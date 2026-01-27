@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Restaurant Menu - Template</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260126">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
@@ -84,15 +84,23 @@
             <div class="modal-body">
                 <img id="modal-image" src="" alt="">
                 <div class="modal-info">
-                    <h2 id="modal-name"></h2>
-                    <p id="modal-description"></p>
-                    <div class="modal-details">
-                        <span class="modal-price" id="modal-price"></span>
-                        <span class="modal-category" id="modal-category"></span>
-                    </div>
-                    <button class="add-to-cart-btn" id="modal-add-to-cart" style="margin-top: 20px;">
-                        <i class="fas fa-shopping-cart"></i> Add to Cart
-                    </button>
+                            <h2 id="modal-name"></h2>
+                            <p id="modal-description"></p>
+                            <img id="modal-image" src="" alt="">
+
+                            <div class="product-modal-pricing" aria-label="Pricing">
+                                <div id="modal-qty-line" class="product-modal-qtyline"></div>
+                                <div id="modal-big-price" class="product-modal-bigprice"></div>
+                            </div>
+
+                            <div class="quantity-controls">
+                                <button id="modal-qty-minus">-</button>
+                                <span id="modal-qty-display">1</span>
+                                <button id="modal-qty-plus">+</button>
+                            </div>
+                            <button class="add-to-cart-btn" id="modal-add-to-cart" style="margin-top: 20px;">
+                                <i class="fas fa-shopping-cart"></i> Add to Cart
+                            </button>
                 </div>
             </div>
         </div>

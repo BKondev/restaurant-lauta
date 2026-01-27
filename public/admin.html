@@ -130,6 +130,21 @@
 
             <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
 
+            <h3 style="margin: 0 0 10px;"><i class="fas fa-envelope"></i> Customer Email Template (Order Placed)</h3>
+            <div class="form-group">
+                <label for="email-template-order-placed-subject">Subject:</label>
+                <input type="text" id="email-template-order-placed-subject" placeholder="Order successfully placed: {{orderId}}">
+            </div>
+            <div class="form-group">
+                <label for="email-template-order-placed-body">Body (text):</label>
+                <textarea id="email-template-order-placed-body" rows="8" placeholder="Order successfully placed.\nOrder ID: {{orderId}}\n{{deliveryText}}\n{{itemsText}}\n{{totalText}}\n{{trackUrlLine}}"></textarea>
+                <small>
+                    Placeholders: <span style="font-family: monospace;">{{orderId}}</span>, <span style="font-family: monospace;">{{deliveryText}}</span>, <span style="font-family: monospace;">{{itemsText}}</span>, <span style="font-family: monospace;">{{totalText}}</span>, <span style="font-family: monospace;">{{trackUrl}}</span>, <span style="font-family: monospace;">{{trackUrlLine}}</span>
+                </small>
+            </div>
+
+            <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
+
             <h3 style="margin: 0 0 10px;"><i class="fas fa-credit-card"></i> Card Payments (BORICA)</h3>
 
             <div class="form-row">
@@ -141,17 +156,43 @@
                     <small>When enabled, customers can pay by card at checkout.</small>
                 </div>
                 <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="borica-debug-mode" checked>
-                        <span>Test/Sandbox mode</span>
-                    </label>
-                    <small>Uses BORICA test gateway when enabled.</small>
+                    <label for="borica-mode">Gateway mode:</label>
+                    <select id="borica-mode">
+                        <option value="test">Test / Sandbox</option>
+                        <option value="prod">Production</option>
+                    </select>
+                    <small>Select which BORICA gateway to use.</small>
                 </div>
             </div>
 
             <div class="form-group">
                 <label for="borica-terminal-id">BORICA Terminal ID (8 digits):</label>
                 <input type="text" id="borica-terminal-id" placeholder="00000000" maxlength="8" inputmode="numeric">
+            </div>
+
+            <div class="form-group">
+                <label for="borica-merchant-id">BORICA Merchant ID (optional):</label>
+                <input type="text" id="borica-merchant-id" placeholder="Merchant ID">
+            </div>
+
+            <div class="form-group">
+                <label for="borica-backref-url">BORICA Backref/Return URL (optional):</label>
+                <input type="url" id="borica-backref-url" placeholder="https://your-domain/api/payments/borica/return">
+                <small>
+                    Configure BORICA Return URL to:
+                    <span style="font-family: monospace;">https://YOUR_DOMAIN/resturant-website/api/payments/borica/return</span>
+                </small>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="borica-gateway-test">Custom Test Gateway URL (optional):</label>
+                    <input type="url" id="borica-gateway-test" placeholder="https://gatet.borica.bg/boreps/">
+                </div>
+                <div class="form-group">
+                    <label for="borica-gateway-prod">Custom Production Gateway URL (optional):</label>
+                    <input type="url" id="borica-gateway-prod" placeholder="https://gate.borica.bg/boreps/">
+                </div>
             </div>
 
             <div class="form-group">
@@ -163,14 +204,111 @@
             <div class="form-group">
                 <label for="borica-public-cert">BORICA Public Certificate (PEM):</label>
                 <textarea id="borica-public-cert" rows="6" placeholder="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"></textarea>
-                <small>
-                    Configure BORICA Return URL to:
-                    <span style="font-family: monospace;">https://YOUR_DOMAIN/resturant-website/api/payments/borica/return</span>
-                </small>
+                <small>Used to verify BORICA return signature.</small>
             </div>
             
             <button onclick="updateRestaurantSettings()" class="btn btn-primary">
                 <i class="fas fa-save"></i> Update Settings
+            </button>
+        </div>
+
+        <!-- Site Content & Legal Pages -->
+        <div class="admin-section">
+            <h2><i class="fas fa-globe"></i> Site Content</h2>
+
+            <div class="form-group">
+                <label for="site-search-mode">Search mode:</label>
+                <select id="site-search-mode">
+                    <option value="names_and_descriptions">Names + Descriptions</option>
+                    <option value="names_only">Names only</option>
+                </select>
+                <small>Controls which fields are searchable in the storefront.</small>
+            </div>
+
+            <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
+
+            <h3 style="margin: 0 0 10px;"><i class="fas fa-address-card"></i> Footer</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="site-footer-phone">Phone:</label>
+                    <input type="text" id="site-footer-phone" placeholder="+359...">
+                </div>
+                <div class="form-group">
+                    <label for="site-footer-email">Email:</label>
+                    <input type="email" id="site-footer-email" placeholder="contact@example.com">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="site-footer-address">Address:</label>
+                <input type="text" id="site-footer-address" placeholder="Street, city">
+            </div>
+
+            <div class="form-group">
+                <label for="site-footer-about">About text:</label>
+                <textarea id="site-footer-about" rows="4" placeholder="Short about text..."></textarea>
+            </div>
+
+            <h4 style="margin: 10px 0 6px;">Social links</h4>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="site-social-1-label">Label 1:</label>
+                    <input type="text" id="site-social-1-label" placeholder="Facebook">
+                </div>
+                <div class="form-group">
+                    <label for="site-social-1-url">URL 1:</label>
+                    <input type="url" id="site-social-1-url" placeholder="https://facebook.com/...">
+                </div>
+                <div class="form-group">
+                    <label for="site-social-1-icon">Icon 1 (FA class):</label>
+                    <input type="text" id="site-social-1-icon" placeholder="fab fa-facebook">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="site-social-2-label">Label 2:</label>
+                    <input type="text" id="site-social-2-label" placeholder="Instagram">
+                </div>
+                <div class="form-group">
+                    <label for="site-social-2-url">URL 2:</label>
+                    <input type="url" id="site-social-2-url" placeholder="https://instagram.com/...">
+                </div>
+                <div class="form-group">
+                    <label for="site-social-2-icon">Icon 2 (FA class):</label>
+                    <input type="text" id="site-social-2-icon" placeholder="fab fa-instagram">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="site-social-3-label">Label 3:</label>
+                    <input type="text" id="site-social-3-label" placeholder="Google Maps">
+                </div>
+                <div class="form-group">
+                    <label for="site-social-3-url">URL 3:</label>
+                    <input type="url" id="site-social-3-url" placeholder="https://maps.google.com/...">
+                </div>
+                <div class="form-group">
+                    <label for="site-social-3-icon">Icon 3 (FA class):</label>
+                    <input type="text" id="site-social-3-icon" placeholder="fas fa-map-marker-alt">
+                </div>
+            </div>
+
+            <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
+
+            <h3 style="margin: 0 0 10px;"><i class="fas fa-file-alt"></i> Legal Pages</h3>
+            <div class="form-group">
+                <label for="site-privacy-html">Privacy Policy (HTML):</label>
+                <textarea id="site-privacy-html" rows="10" placeholder="<h1>Privacy Policy</h1>..."></textarea>
+                <small>This HTML is rendered on the public privacy page.</small>
+            </div>
+            <div class="form-group">
+                <label for="site-terms-html">Terms & Conditions (HTML):</label>
+                <textarea id="site-terms-html" rows="10" placeholder="<h1>Terms</h1>..."></textarea>
+                <small>This HTML is rendered on the public terms page.</small>
+            </div>
+
+            <button onclick="updateSiteSettings()" class="btn btn-success">
+                <i class="fas fa-save"></i> Save Site Content
             </button>
         </div>
 
@@ -222,31 +360,6 @@
 
             <button onclick="updateCustomization()" class="btn btn-success">
                 <i class="fas fa-save"></i> Save Customization
-            </button>
-        </div>
-
-        <!-- Currency Settings Section -->
-        <div class="admin-section">
-            <h2><i class="fas fa-euro-sign"></i> Currency Settings</h2>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="eur-to-bgn-rate">EUR to BGN Exchange Rate:</label>
-                    <input type="number" id="eur-to-bgn-rate" step="0.0001" min="0" value="1.9558" placeholder="1.9558">
-                    <small>Official fixed rate: 1 EUR = 1.9558 BGN</small>
-                </div>
-                
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="show-bgn-prices">
-                        <span>Show BGN Prices</span>
-                    </label>
-                    <small>When unchecked, only EUR prices will be displayed</small>
-                </div>
-            </div>
-
-            <button onclick="updateCurrencySettings()" class="btn btn-primary">
-                <i class="fas fa-save"></i> Save Currency Settings
             </button>
         </div>
 

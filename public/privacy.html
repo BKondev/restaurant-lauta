@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy</title>
+    <link rel="stylesheet" href="styles.css?v=20260127a" />
+</head>
+<body>
+    <div class="container" style="padding: 24px 16px; max-width: 900px; margin: 0 auto;">
+        <a href="./" style="display: inline-block; margin-bottom: 12px;">← Back to menu</a>
+        <h1 id="legal-title">Privacy Policy</h1>
+        <div id="legal-content" data-page="privacy"></div>
+    </div>
+
+    <footer id="site-footer" class="site-footer"></footer>
+
+    <script src="legal.js?v=20260127a"></script>
+    <script>
+        // optional footer render: reuse same public settings API
+        (async function () {
+            try {
+                const res = await fetch('api/settings/site');
+                if (!res.ok) return;
+                const s = await res.json();
+                const footerEl = document.getElementById('site-footer');
+                if (!footerEl) return;
+                const contacts = (s && s.footer && s.footer.contacts) ? s.footer.contacts : {};
+                const aboutText = ((s && s.footer && s.footer.aboutText) || '').toString().trim();
+                const socials = Array.isArray(s && s.footer && s.footer.socials) ? s.footer.socials : [];
+
+                const esc = (v) => (v ?? '').toString()
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+
+                const contactLines = [
+                    contacts.phone ? `<li><strong>Phone:</strong> ${esc(contacts.phone)}</li>` : '',
+                    contacts.email ? `<li><strong>Email:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${esc(contacts.email)}</a></li>` : '',
+                    contacts.address ? `<li><strong>Address:</strong> ${esc(contacts.address)}</li>` : ''
+                ].filter(Boolean).join('');
+
+                const socialLinks = socials
+                    .filter(x => x && x.url)
+                    .map(x => {
+                        const label = (x.label || x.url).toString();
+                        const icon = (x.iconClass || '').toString().trim();
+                        const iconHtml = icon ? `<i class="${esc(icon)}"></i>` : '<i class="fas fa-link"></i>';
+                        return `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${iconHtml}<span>${esc(label)}</span></a>`;
+                    })
+                    .join('');
+
+                footerEl.innerHTML = `
+                    <div class="footer-inner">
+                        <div class="footer-grid">
+                            <div class="footer-col">
+                                <h3>Contacts</h3>
+                                <ul>${contactLines || '<li>—</li>'}</ul>
+                            </div>
+                            <div class="footer-col">
+                                <h3>Information</h3>
+                                <ul>
+                                    <li><a href="privacy">Privacy Policy</a></li>
+                                    <li><a href="terms">Terms &amp; Conditions</a></li>
+                                </ul>
+                            </div>
+                            <div class="footer-col">
+                                <h3>About</h3>
+                                <p>${aboutText ? esc(aboutText) : '—'}</p>
+                                ${socialLinks ? `<div class="footer-socials">${socialLinks}</div>` : ''}
+                            </div>
+                        </div>
+                        <div class="footer-bottom">
+                            <div>Powered by Crystal Automation &amp; Karakashkov</div>
+                            <div>&copy; ${new Date().getFullYear()}</div>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {}
+        })();
+    </script>
+</body>
+</html>

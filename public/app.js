@@ -7,13 +7,13 @@ const API_URL = `${BASE_PATH}/api`;
 let products = [];
 let categories = [];
 let currentCategory = 'all';
-let currentLanguage = localStorage.getItem('language') || 'en';
+let currentLanguage = localStorage.getItem('language') || 'bg';
 let appliedPromoCode = null;
 let cart = JSON.parse(localStorage.getItem('cart')) || [];
-let currencySettings = {
-    eurToBgnRate: 1.9558,
-    showBgnPrices: true
-};
+let currencySettings = {};
+
+let siteSettings = null;
+let siteSearchMode = 'names_and_descriptions';
 
 let modalProductId = null;
 let modalQuantity = 1;
@@ -26,6 +26,7 @@ const translations = {
         allItems: 'ALL ITEMS',
         noResults: 'No products found',
         addToCart: 'Add to Cart',
+        addedToCart: 'Added to cart!',
         promo: 'PROMO',
         bundle: 'BUNDLE',
         save: 'SAVE'
@@ -36,11 +37,17 @@ const translations = {
         allItems: 'ВСИЧКИ ПРОДУКТИ',
         noResults: 'Не са намерени продукти',
         addToCart: 'Добави',
+        addedToCart: 'Добавено в количката!',
         promo: 'ПРОМО',
         bundle: 'КОМБО',
         save: 'СПЕСТИ'
     }
 };
+
+function t(key, fallback) {
+    const value = translations?.[currentLanguage]?.[key];
+    return value || fallback || key;
+}
 
 // Switch language
 function switchLanguage(lang) {
@@ -128,9 +135,22 @@ async function loadData() {
         // Load currency settings
         const currencyResponse = await fetch(`${API_URL}/settings/currency`);
         currencySettings = await currencyResponse.json();
+
+        // Load site settings (search mode, footer, legal)
+        try {
+            const siteRes = await fetch(`${API_URL}/settings/site`);
+            if (siteRes.ok) {
+                siteSettings = await siteRes.json();
+                siteSearchMode = siteSettings?.search?.mode === 'names_only' ? 'names_only' : 'names_and_descriptions';
+            }
+        } catch (e) {
+            // ignore
+        }
         
         // Initialize language
         initLanguage();
+
+        renderSiteFooter();
         
         extractCategories();
         renderCategories();
@@ -139,6 +159,67 @@ async function loadData() {
         console.error('Error loading data:', error);
         showError('Failed to load menu data. Please make sure the server is running.');
     }
+}
+
+function renderSiteFooter() {
+    const footerEl = document.getElementById('site-footer');
+    if (!footerEl) return;
+
+    const contacts = siteSettings?.footer?.contacts || {};
+    const aboutText = (siteSettings?.footer?.aboutText || '').toString().trim();
+    const socials = Array.isArray(siteSettings?.footer?.socials) ? siteSettings.footer.socials : [];
+
+    const contactLines = [
+        contacts.phone ? `<li><strong>Phone:</strong> ${escapeHtml(contacts.phone)}</li>` : '',
+        contacts.email ? `<li><strong>Email:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${escapeHtml(contacts.email)}</a></li>` : '',
+        contacts.address ? `<li><strong>Address:</strong> ${escapeHtml(contacts.address)}</li>` : ''
+    ].filter(Boolean).join('');
+
+    const socialLinks = socials
+        .filter(s => s && s.url)
+        .map(s => {
+            const label = (s.label || s.url).toString();
+            const icon = (s.iconClass || '').toString().trim();
+            const iconHtml = icon ? `<i class="${escapeHtml(icon)}"></i>` : '<i class="fas fa-link"></i>';
+            return `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${iconHtml}<span>${escapeHtml(label)}</span></a>`;
+        })
+        .join('');
+
+    footerEl.innerHTML = `
+        <div class="footer-inner">
+            <div class="footer-grid">
+                <div class="footer-col">
+                    <h3>Contacts</h3>
+                    <ul>${contactLines || '<li>—</li>'}</ul>
+                </div>
+                <div class="footer-col">
+                    <h3>Information</h3>
+                    <ul>
+                        <li><a href="privacy">Privacy Policy</a></li>
+                        <li><a href="terms">Terms &amp; Conditions</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h3>About</h3>
+                    <p>${aboutText ? escapeHtml(aboutText) : '—'}</p>
+                    ${socialLinks ? `<div class="footer-socials">${socialLinks}</div>` : ''}
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <div>Powered by Crystal Automation &amp; Karakashkov</div>
+                <div>&copy; ${new Date().getFullYear()}</div>
+            </div>
+        </div>
+    `;
+}
+
+function escapeHtml(value) {
+    return (value ?? '').toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 // Show error message
@@ -280,15 +361,9 @@ function renderProducts() {
     });
 }
 
-// Format price with EUR and BGN
+// Format price (EUR only)
 function formatPrice(priceEUR) {
-    const priceBGN = (priceEUR * currencySettings.eurToBgnRate).toFixed(2);
-    
-    if (currencySettings.showBgnPrices) {
-        return `<span class="price-bgn">${priceBGN} лв</span> <span class="price-separator">/</span> <span class="price-eur">€${priceEUR.toFixed(2)}</span>`;
-    } else {
-        return `<span class="price-eur">€${priceEUR.toFixed(2)}</span>`;
-    }
+    return `<span class="price-eur">${Number(priceEUR || 0).toFixed(2)} €</span>`;
 }
 
 // Create product card element
@@ -471,11 +546,7 @@ function openProductModal(product) {
 
     const unitPrice = hasPromo ? effectivePrice : getEffectivePrice(product);
     const qtyDisplay = document.getElementById('modal-qty-display');
-    const qtyLine = document.getElementById('modal-qty-line');
     const bigPrice = document.getElementById('modal-big-price');
-
-    const unitPriceLabel = currentLanguage === 'bg' ? 'ед. цена' : 'unit price';
-    qtyLine.innerHTML = `<span class="product-modal-unitprice">${formatPrice(unitPrice)}</span> <span class="product-modal-unitprice-label">${unitPriceLabel}</span>`;
 
     function updateModalPricing() {
         qtyDisplay.textContent = String(modalQuantity);
@@ -497,7 +568,6 @@ function openProductModal(product) {
     addToCartBtn.onclick = () => {
         if (!modalProductId) return;
         addToCartWithQuantity(modalProductId, modalQuantity);
-        showCartNotification('Item(s) added to cart!');
         closeModal();
     };
 
@@ -520,13 +590,25 @@ function isProductMatch(product, searchTerm) {
     const nameBG = (product.translations?.bg?.name || '').toLowerCase();
     const descriptionBG = (product.translations?.bg?.description || '').toLowerCase();
 
+    const includeDescriptions = siteSearchMode !== 'names_only';
+
     return (
         nameEN.includes(term) ||
-        descriptionEN.includes(term) ||
         nameBG.includes(term) ||
-        descriptionBG.includes(term)
+        (includeDescriptions && (descriptionEN.includes(term) || descriptionBG.includes(term)))
     );
 }
+
+// Add-to-cart button click animation (desktop + mobile)
+document.addEventListener('click', (e) => {
+    const btn = e.target?.closest?.('.add-to-cart-btn');
+    if (!btn) return;
+    btn.classList.remove('btn-click-animate');
+    // Force reflow so animation can retrigger
+    void btn.offsetWidth;
+    btn.classList.add('btn-click-animate');
+    window.setTimeout(() => btn.classList.remove('btn-click-animate'), 500);
+});
 
 function hideSearchDropdown() {
     const dropdown = document.getElementById('search-results');
@@ -693,14 +775,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Modal close button
     const closeBtn = document.getElementById('modal-close-btn');
     if (closeBtn) closeBtn.onclick = closeModal;
-    
-    // Close modal when clicking outside
-    window.onclick = function(event) {
-        const modal = document.getElementById('product-modal');
-        if (event.target === modal) {
-            closeModal();
-        }
-    };
+
+    // Close modal when clicking outside (shell overlay covers the full screen)
+    const modal = document.getElementById('product-modal');
+    const shell = document.querySelector('#product-modal .product-modal-shell');
+    if (modal) {
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal) closeModal();
+        });
+    }
+    if (shell) {
+        shell.addEventListener('click', (event) => {
+            if (event.target === shell) closeModal();
+        });
+    }
 
     document.addEventListener('click', (e) => {
         const searchContainer = document.getElementById('search-container');
@@ -821,7 +909,6 @@ async function applyPromoCode() {
 // Add item to cart
 function addToCart(productId) {
     addToCartWithQuantity(productId, 1);
-    showCartNotification('Item added to cart!');
 }
 
 function addToCartWithQuantity(productId, quantity) {
@@ -848,6 +935,7 @@ function addToCartWithQuantity(productId, quantity) {
 
     saveCart();
     updateCartUI();
+    animateCartBadge();
 }
 
 // Remove item from cart
@@ -893,28 +981,17 @@ function updateCartUI() {
     }
 }
 
+function animateCartBadge() {
+    const cartBadge = document.querySelector('.cart-badge');
+    if (!cartBadge) return;
+    cartBadge.classList.remove('cart-badge-animate');
+    void cartBadge.offsetWidth;
+    cartBadge.classList.add('cart-badge-animate');
+}
+
 // Show cart notification
 function showCartNotification(message) {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 80px;
-        right: 20px;
-        background: #27ae60;
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        z-index: 10000;
-        animation: slideIn 0.3s ease-out;
-    `;
-    notification.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease-out';
-        setTimeout(() => notification.remove(), 300);
-    }, 2000);
+    // No-op: replaced with cart badge animation.
 }
 
 // Navigate to menu (scroll to top and show all items)

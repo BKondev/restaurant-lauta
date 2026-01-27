@@ -327,6 +327,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         loadProducts();
         loadRestaurantName();
+        loadSiteSettings();
         loadCustomization();
         setupForm();
         setupColorInputs();
@@ -339,7 +340,6 @@ document.addEventListener('DOMContentLoaded', function() {
         loadCities();
         loadProductsForCombo();
         startOrdersPolling();
-        loadCurrencySettings();
         loadWorkingHours();
         loadSlideshowSettings();
         initializeZonesMap();
@@ -746,16 +746,34 @@ async function loadRestaurantName() {
                     emailInput.value = profile.orderNotificationEmail || profile.email || '';
                 }
 
+                // Email templates
+                const orderPlacedSubjectEl = document.getElementById('email-template-order-placed-subject');
+                const orderPlacedBodyEl = document.getElementById('email-template-order-placed-body');
+                const tpl = profile.emailTemplates?.orderPlaced || {};
+                if (orderPlacedSubjectEl) orderPlacedSubjectEl.value = tpl.subject || '';
+                if (orderPlacedBodyEl) orderPlacedBodyEl.value = tpl.body || '';
+
                 const boricaEnabledEl = document.getElementById('borica-enabled');
-                const boricaDebugEl = document.getElementById('borica-debug-mode');
+                const boricaModeEl = document.getElementById('borica-mode');
                 const boricaTerminalEl = document.getElementById('borica-terminal-id');
+                const boricaMerchantEl = document.getElementById('borica-merchant-id');
+                const boricaBackrefEl = document.getElementById('borica-backref-url');
+                const boricaGwTestEl = document.getElementById('borica-gateway-test');
+                const boricaGwProdEl = document.getElementById('borica-gateway-prod');
                 const boricaPrivEl = document.getElementById('borica-private-key');
                 const boricaPubEl = document.getElementById('borica-public-cert');
 
                 const borica = profile.borica || {};
                 if (boricaEnabledEl) boricaEnabledEl.checked = !!borica.enabled;
-                if (boricaDebugEl) boricaDebugEl.checked = borica.debugMode !== undefined ? !!borica.debugMode : true;
+                if (boricaModeEl) {
+                    const mode = (borica.mode || (borica.debugMode ? 'test' : 'prod') || 'test').toString().toLowerCase();
+                    boricaModeEl.value = (mode === 'prod' || mode === 'production') ? 'prod' : 'test';
+                }
                 if (boricaTerminalEl) boricaTerminalEl.value = borica.terminalId || '';
+                if (boricaMerchantEl) boricaMerchantEl.value = borica.merchantId || '';
+                if (boricaBackrefEl) boricaBackrefEl.value = borica.backrefUrl || '';
+                if (boricaGwTestEl) boricaGwTestEl.value = borica.gatewayBaseUrlTest || '';
+                if (boricaGwProdEl) boricaGwProdEl.value = borica.gatewayBaseUrlProd || '';
                 if (boricaPrivEl) boricaPrivEl.value = borica.privateKeyPem || '';
                 if (boricaPubEl) boricaPubEl.value = borica.publicCertPem || '';
             }
@@ -765,15 +783,129 @@ async function loadRestaurantName() {
     }
 }
 
+async function loadSiteSettings() {
+    try {
+        const res = await fetch(`${API_URL}/settings/site`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const modeEl = document.getElementById('site-search-mode');
+        if (modeEl) modeEl.value = data?.search?.mode === 'names_only' ? 'names_only' : 'names_and_descriptions';
+
+        const phoneEl = document.getElementById('site-footer-phone');
+        const emailEl = document.getElementById('site-footer-email');
+        const addressEl = document.getElementById('site-footer-address');
+        const aboutEl = document.getElementById('site-footer-about');
+
+        if (phoneEl) phoneEl.value = data?.footer?.contacts?.phone || '';
+        if (emailEl) emailEl.value = data?.footer?.contacts?.email || '';
+        if (addressEl) addressEl.value = data?.footer?.contacts?.address || '';
+        if (aboutEl) aboutEl.value = data?.footer?.aboutText || '';
+
+        const socials = Array.isArray(data?.footer?.socials) ? data.footer.socials : [];
+        const setSocial = (i, social) => {
+            const labelEl = document.getElementById(`site-social-${i}-label`);
+            const urlEl = document.getElementById(`site-social-${i}-url`);
+            const iconEl = document.getElementById(`site-social-${i}-icon`);
+            if (labelEl) labelEl.value = social?.label || '';
+            if (urlEl) urlEl.value = social?.url || '';
+            if (iconEl) iconEl.value = social?.iconClass || '';
+        };
+        setSocial(1, socials[0]);
+        setSocial(2, socials[1]);
+        setSocial(3, socials[2]);
+
+        const privacyEl = document.getElementById('site-privacy-html');
+        const termsEl = document.getElementById('site-terms-html');
+        if (privacyEl) privacyEl.value = data?.legal?.privacyHtml || '';
+        if (termsEl) termsEl.value = data?.legal?.termsHtml || '';
+    } catch (e) {
+        console.error('Error loading site settings:', e);
+    }
+}
+
+async function updateSiteSettings() {
+    try {
+        const token = sessionStorage.getItem('adminToken');
+        if (!token) {
+            alert('Not authenticated');
+            return;
+        }
+
+        const mode = (document.getElementById('site-search-mode')?.value || 'names_and_descriptions').toString();
+        const phone = (document.getElementById('site-footer-phone')?.value || '').toString();
+        const email = (document.getElementById('site-footer-email')?.value || '').toString();
+        const address = (document.getElementById('site-footer-address')?.value || '').toString();
+        const aboutText = (document.getElementById('site-footer-about')?.value || '').toString();
+
+        const buildSocial = (i) => {
+            const label = (document.getElementById(`site-social-${i}-label`)?.value || '').toString();
+            const url = (document.getElementById(`site-social-${i}-url`)?.value || '').toString();
+            const iconClass = (document.getElementById(`site-social-${i}-icon`)?.value || '').toString();
+            const trimmedUrl = url.trim();
+            if (!trimmedUrl) return null;
+            return { label: label.trim(), url: trimmedUrl, iconClass: iconClass.trim() };
+        };
+        const socials = [buildSocial(1), buildSocial(2), buildSocial(3)].filter(Boolean);
+
+        const privacyHtml = (document.getElementById('site-privacy-html')?.value || '').toString();
+        const termsHtml = (document.getElementById('site-terms-html')?.value || '').toString();
+
+        const payload = {
+            search: { mode: mode === 'names_only' ? 'names_only' : 'names_and_descriptions' },
+            footer: {
+                contacts: { phone, email, address },
+                aboutText,
+                socials
+            },
+            legal: { privacyHtml, termsHtml }
+        };
+
+        const res = await fetch(`${API_URL}/settings/site`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.status === 401) {
+            alert('Session expired. Please login again.');
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || 'Failed to save site settings');
+            return;
+        }
+
+        alert('Site content saved successfully!');
+    } catch (e) {
+        console.error('Error saving site settings:', e);
+        alert('Error saving site settings');
+    }
+}
+
 // Update restaurant settings (name and logo)
 async function updateRestaurantSettings() {
     const name = document.getElementById('restaurant-name-input').value.trim();
     const logo = document.getElementById('restaurant-logo-input').value.trim();
     const notificationEmail = (document.getElementById('restaurant-notification-email-input')?.value || '').toString().trim();
 
+    const orderPlacedSubject = (document.getElementById('email-template-order-placed-subject')?.value || '').toString();
+    const orderPlacedBody = (document.getElementById('email-template-order-placed-body')?.value || '').toString();
+
     const boricaEnabled = !!document.getElementById('borica-enabled')?.checked;
-    const boricaDebugMode = document.getElementById('borica-debug-mode')?.checked !== false;
+    const boricaMode = (document.getElementById('borica-mode')?.value || 'test').toString().toLowerCase();
+    const boricaDebugMode = boricaMode !== 'prod';
     const boricaTerminalId = (document.getElementById('borica-terminal-id')?.value || '').toString().trim();
+    const boricaMerchantId = (document.getElementById('borica-merchant-id')?.value || '').toString().trim();
+    const boricaBackrefUrl = (document.getElementById('borica-backref-url')?.value || '').toString().trim();
+    const boricaGatewayTest = (document.getElementById('borica-gateway-test')?.value || '').toString().trim();
+    const boricaGatewayProd = (document.getElementById('borica-gateway-prod')?.value || '').toString().trim();
     const boricaPrivateKeyPem = (document.getElementById('borica-private-key')?.value || '').toString();
     const boricaPublicCertPem = (document.getElementById('borica-public-cert')?.value || '').toString();
     
@@ -814,10 +946,21 @@ async function updateRestaurantSettings() {
                 },
                 body: JSON.stringify({
                     orderNotificationEmail: notificationEmail,
+                    emailTemplates: {
+                        orderPlaced: {
+                            subject: orderPlacedSubject,
+                            body: orderPlacedBody
+                        }
+                    },
                     borica: {
                         enabled: boricaEnabled,
+                        mode: boricaMode === 'prod' ? 'prod' : 'test',
                         debugMode: boricaDebugMode,
                         terminalId: boricaTerminalId,
+                        merchantId: boricaMerchantId,
+                        backrefUrl: boricaBackrefUrl,
+                        gatewayBaseUrlTest: boricaGatewayTest,
+                        gatewayBaseUrlProd: boricaGatewayProd,
                         privateKeyPem: boricaPrivateKeyPem,
                         publicCertPem: boricaPublicCertPem
                     }
@@ -1800,59 +1943,7 @@ async function updateCustomization() {
     }
 }
 
-// Update currency settings
-async function updateCurrencySettings() {
-    const currencySettings = {
-        eurToBgnRate: parseFloat(document.getElementById('eur-to-bgn-rate').value) || 1.9558,
-        showBgnPrices: document.getElementById('show-bgn-prices').checked
-    };
-    
-    try {
-        const token = sessionStorage.getItem('adminToken');
-        if (!token) {
-            alert('Session expired. Please login again.');
-            window.location.href = `${BASE_PATH}/login`;
-            return;
-        }
-        
-        const response = await fetch(`${API_URL}/settings/currency`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(currencySettings)
-        });
-        
-        if (response.status === 401) {
-            alert('Session expired. Please login again.');
-            window.location.href = '/login';
-            return;
-        }
-        
-        if (response.ok) {
-            alert('Currency settings updated successfully!');
-        } else {
-            alert('Failed to update currency settings');
-        }
-    } catch (error) {
-        console.error('Error updating currency settings:', error);
-        alert('Error updating currency settings');
-    }
-}
-
-// Load currency settings
-async function loadCurrencySettings() {
-    try {
-        const response = await fetch(`${API_URL}/settings/currency`);
-        const settings = await response.json();
-        
-        document.getElementById('eur-to-bgn-rate').value = settings.eurToBgnRate || 1.9558;
-        document.getElementById('show-bgn-prices').checked = settings.showBgnPrices !== false;
-    } catch (error) {
-        console.error('Error loading currency settings:', error);
-    }
-}
+// Currency Settings removed: storefront is EUR-only.
 
 // ========== ORDER SETTINGS FUNCTIONS ==========
 

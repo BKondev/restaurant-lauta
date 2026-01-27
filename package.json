@@ -5,7 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "start:test": "cross-env NODE_ENV=test PORT=3003 BASE_PATH=/resturant-website DB_FILE_PATH=.tmp/database.test.json node server.js",
+    "cy:open": "cypress open",
+    "cy:run": "cross-env DB_FILE_PATH=.tmp/database.test.json TEST_DB_SEED_PATH=cypress/fixtures/database.seed.json cypress run",
+    "test:e2e": "start-server-and-test \"npm run start:test\" http://localhost:3003/resturant-website/ \"npm run cy:run\""
   },
   "keywords": [
     "restaurant",
@@ -22,6 +26,9 @@
     "nodemailer": "^7.0.12"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "cross-env": "^7.0.3",
+    "cypress": "^13.17.0",
+    "nodemon": "^3.0.1",
+    "start-server-and-test": "^2.1.1"
   }
 }

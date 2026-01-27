@@ -5,7 +5,7 @@ const API_URL = `${BASE_PATH}/api`;
 // State
 let cart = [];
 let appliedPromo = null;
-let currentLanguage = localStorage.getItem('language') || 'en';
+let currentLanguage = localStorage.getItem('language') || 'bg';
 let deliveryMethod = ''; // '' empty by default, 'delivery' or 'pickup'
 let orderTime = ''; // '' empty by default, 'now' or 'later'
 let scheduledTime = '';
@@ -13,6 +13,7 @@ let selectedTimeSlot = '';
 let paymentMethod = ''; // '' = not selected yet; 'cash' or 'card'
 let cardPaymentsEnabled = false;
 let currentStep = 1; // Track current checkout step
+let siteSettings = null;
 let customerInfo = {
     name: '',
     phone: '',
@@ -28,8 +29,7 @@ let deliverySettings = {
     cityPrices: {} // Object with city names as keys and delivery fees as values
 };
 let currencySettings = {
-    eurToBgnRate: 1.9558,
-    showBgnPrices: true
+    showBgnPrices: false
 };
 let orderSettings = {
     minimumOrderAmount: 0
@@ -64,8 +64,64 @@ function resetCheckoutFlowBelowDeliveryMethod() {
     orderTime = '';
     scheduledTime = '';
     selectedTimeSlot = '';
-    paymentMethod = '';
+    paymentMethod = cardPaymentsEnabled ? '' : 'cash';
     currentStep = 1;
+}
+
+function ensureValidPaymentMethod() {
+    // Auto-select if only one payment method is available.
+    // Today cash is always available; card is conditional.
+    const available = ['cash'];
+    if (cardPaymentsEnabled) available.push('card');
+
+    if (available.length === 1) {
+        paymentMethod = available[0];
+        return;
+    }
+
+    if (!available.includes(paymentMethod)) {
+        paymentMethod = '';
+    }
+}
+
+function getDefaultDeliveryFee() {
+    const val = parseFloat(deliverySettings?.deliveryFee);
+    return Number.isFinite(val) ? val : 5;
+}
+
+function getDeliveryFeeForCity(cityRaw) {
+    const city = String(cityRaw || '').trim();
+    const prices = deliverySettings?.cityPrices || {};
+
+    if (!city) {
+        // If user hasn't chosen a city yet, use default fee (still show delivery cost for delivery orders).
+        return getDefaultDeliveryFee();
+    }
+
+    if (prices && prices[city] !== undefined) {
+        const direct = parseFloat(prices[city]);
+        return Number.isFinite(direct) ? direct : getDefaultDeliveryFee();
+    }
+
+    // Case-insensitive lookup
+    const cityNorm = city.toLowerCase();
+    for (const [key, value] of Object.entries(prices)) {
+        if (String(key).trim().toLowerCase() === cityNorm) {
+            const v = parseFloat(value);
+            return Number.isFinite(v) ? v : getDefaultDeliveryFee();
+        }
+    }
+
+    // Fallback keys commonly used for "other regions"
+    const fallbackKeys = ['Други', 'Other', 'other', '*', 'default'];
+    for (const k of fallbackKeys) {
+        if (prices && prices[k] !== undefined) {
+            const v = parseFloat(prices[k]);
+            return Number.isFinite(v) ? v : getDefaultDeliveryFee();
+        }
+    }
+
+    return getDefaultDeliveryFee();
 }
 
 function applyCheckoutStepVisibility() {
@@ -119,7 +175,9 @@ function loadCheckoutState() {
         scheduledTime = typeof parsed.scheduledTime === 'string' ? parsed.scheduledTime : '';
         selectedTimeSlot = typeof parsed.selectedTimeSlot === 'string' ? parsed.selectedTimeSlot : '';
 
-        paymentMethod = (nextPaymentMethod === 'card' && !cardPaymentsEnabled) ? '' : nextPaymentMethod;
+        paymentMethod = nextPaymentMethod;
+        // If card is disabled (or payment invalid), normalize.
+        ensureValidPaymentMethod();
 
         const stepNum = Number(parsed.currentStep);
         currentStep = Number.isFinite(stepNum) && stepNum >= 1 ? stepNum : 1;
@@ -167,15 +225,9 @@ const availableCities = [
     'Други'
 ];
 
-// Format price with BGN and EUR
+// Format price (EUR only)
 function formatPrice(priceEUR) {
-    const priceBGN = (priceEUR * currencySettings.eurToBgnRate).toFixed(2);
-    
-    if (currencySettings.showBgnPrices) {
-        return `${priceBGN} лв / €${priceEUR.toFixed(2)}`;
-    } else {
-        return `€${priceEUR.toFixed(2)}`;
-    }
+    return `${Number(priceEUR || 0).toFixed(2)} €`;
 }
 
 // Translations
@@ -230,7 +282,8 @@ const translations = {
         cardDesc: 'Pay with card',
         orderDelivery: 'Order with Delivery',
         orderPickup: 'Order and Pickup',
-        deliveryTime: 'Delivery Time'
+        deliveryTime: 'Delivery Time',
+        pickupTime: 'Pickup Time'
     },
     bg: {
         back: 'Назад към Менюто',
@@ -282,7 +335,8 @@ const translations = {
         cardDesc: 'Плащане с карта',
         orderDelivery: 'Поръчай с Доставка',
         orderPickup: 'Поръчай и Вземи',
-        deliveryTime: 'Време на доставка'
+        deliveryTime: 'Време на доставка',
+        pickupTime: 'Час за взимане'
     }
 };
 
@@ -298,8 +352,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadOrderSettings();
     await loadWorkingHours();
     await loadPaymentsConfig();
+    await loadSiteSettings();
     loadCheckoutState();
     loadCart();
+    // If checkout state restored a delivery order, compute the correct delivery fee right away.
+    if (deliveryMethod === 'delivery') {
+        calculateDeliveryFee();
+    }
     await syncCartFromServerIfNeeded();
     setupLanguageSwitcher();
     setupResponsiveCheckoutHandlers();
@@ -307,8 +366,81 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateLanguage();
     renderCheckout();
 
+    renderSiteFooter();
+
     window.addEventListener('beforeunload', saveCheckoutState);
 });
+
+async function loadSiteSettings() {
+    try {
+        const res = await fetch(`${API_URL}/settings/site`);
+        if (!res.ok) return;
+        siteSettings = await res.json();
+    } catch (e) {
+        // ignore
+    }
+}
+
+function renderSiteFooter() {
+    const footerEl = document.getElementById('site-footer');
+    if (!footerEl) return;
+
+    const contacts = siteSettings?.footer?.contacts || {};
+    const aboutText = (siteSettings?.footer?.aboutText || '').toString().trim();
+    const socials = Array.isArray(siteSettings?.footer?.socials) ? siteSettings.footer.socials : [];
+
+    const contactLines = [
+        contacts.phone ? `<li><strong>Phone:</strong> ${escapeHtml(contacts.phone)}</li>` : '',
+        contacts.email ? `<li><strong>Email:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${escapeHtml(contacts.email)}</a></li>` : '',
+        contacts.address ? `<li><strong>Address:</strong> ${escapeHtml(contacts.address)}</li>` : ''
+    ].filter(Boolean).join('');
+
+    const socialLinks = socials
+        .filter(s => s && s.url)
+        .map(s => {
+            const label = (s.label || s.url).toString();
+            const icon = (s.iconClass || '').toString().trim();
+            const iconHtml = icon ? `<i class="${escapeHtml(icon)}"></i>` : '<i class="fas fa-link"></i>';
+            return `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${iconHtml}<span>${escapeHtml(label)}</span></a>`;
+        })
+        .join('');
+
+    footerEl.innerHTML = `
+        <div class="footer-inner">
+            <div class="footer-grid">
+                <div class="footer-col">
+                    <h3>Contacts</h3>
+                    <ul>${contactLines || '<li>—</li>'}</ul>
+                </div>
+                <div class="footer-col">
+                    <h3>Information</h3>
+                    <ul>
+                        <li><a href="privacy">Privacy Policy</a></li>
+                        <li><a href="terms">Terms &amp; Conditions</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h3>About</h3>
+                    <p>${aboutText ? escapeHtml(aboutText) : '—'}</p>
+                    ${socialLinks ? `<div class="footer-socials">${socialLinks}</div>` : ''}
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <div>Powered by Crystal Automation &amp; Karakashkov</div>
+                <div>&copy; ${new Date().getFullYear()}</div>
+            </div>
+        </div>
+    `;
+}
+
+function escapeHtml(value) {
+    return (value ?? '').toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 // Create a back arrow button before the logo and name in the top bar (mobile only)
 function setupBackArrowMobile() {
@@ -353,11 +485,10 @@ async function loadPaymentsConfig() {
         if (!res.ok) return;
         const cfg = await res.json();
         cardPaymentsEnabled = !!(cfg?.cardPayments?.enabled);
-        if (!cardPaymentsEnabled && paymentMethod === 'card') {
-            paymentMethod = '';
-        }
+        ensureValidPaymentMethod();
     } catch (e) {
         cardPaymentsEnabled = false;
+        ensureValidPaymentMethod();
     }
 }
 
@@ -623,7 +754,7 @@ function renderCheckout() {
             </label>
         </div>
         <div id="order-time-section" class="checkout-step" style="display: none;">
-        <h2 class="section-title" style="margin-top: 30px;"><span class="step-number-badge">2</span> ${currentLanguage === 'bg' ? 'Време за поръчката' : 'Order Time'}</h2>
+            <h2 class="section-title" style="margin-top: 30px;"><span class="step-number-badge">2</span> ${currentLanguage === 'bg' ? 'Време на Поръчката' : 'Order Time'}</h2>
         <div class="delivery-method">
             <label class="delivery-option ${orderTime === 'now' ? 'active' : ''}" onclick="selectOrderTime('now')">
                 <input type="radio" name="orderTime" value="now" ${orderTime === 'now' ? 'checked' : ''}>
@@ -797,28 +928,141 @@ function renderCheckout() {
     initializeTimePicker();
 }
 
+function parseHHMMToMinutes(hhmm) {
+    if (!hhmm || typeof hhmm !== 'string') return null;
+    const match = hhmm.trim().match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    if (!match) return null;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    return hours * 60 + minutes;
+}
+
+function minutesToHHMM(totalMinutes) {
+    const normalized = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+    const hours = String(Math.floor(normalized / 60)).padStart(2, '0');
+    const minutes = String(normalized % 60).padStart(2, '0');
+    return `${hours}:${minutes}`;
+}
+
+function roundUpTo15Minutes(totalMinutes) {
+    return Math.ceil(totalMinutes / 15) * 15;
+}
+
+function nowMinutesOfDay() {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+}
+
+function getRestaurantWindowMinutes() {
+    const open = parseHHMMToMinutes(workingHours?.openingTime) ?? (9 * 60);
+    const close = parseHHMMToMinutes(workingHours?.closingTime) ?? (22 * 60);
+    return { open, close };
+}
+
+function getDeliveryWindowMinutes() {
+    // Delivery cutoff: last delivery orders must be placed by 21:30
+    // so they can arrive by 22:00.
+    return { open: 11 * 60, close: (21 * 60) + 30 };
+}
+
+function getAllowedWindowMinutes() {
+    const restaurant = getRestaurantWindowMinutes();
+    if (deliveryMethod !== 'delivery') return restaurant;
+    const delivery = getDeliveryWindowMinutes();
+    return {
+        open: Math.max(restaurant.open, delivery.open),
+        close: Math.min(restaurant.close, delivery.close)
+    };
+}
+
+function showUxModal({ title, message, primaryText }) {
+    try {
+        const existing = document.getElementById('ux-modal-overlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'ux-modal-overlay';
+        overlay.className = 'ux-modal-overlay';
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay.remove();
+        });
+
+        const modal = document.createElement('div');
+        modal.className = 'ux-modal';
+        modal.innerHTML = `
+            <div class="ux-modal-header">
+                <div class="ux-modal-title">${title || ''}</div>
+                <button type="button" class="ux-modal-close" aria-label="Close">×</button>
+            </div>
+            <div class="ux-modal-body">${message || ''}</div>
+            <div class="ux-modal-actions">
+                <button type="button" class="ux-modal-btn ux-modal-btn-primary">${primaryText || 'OK'}</button>
+            </div>
+        `;
+
+        modal.querySelector('.ux-modal-close')?.addEventListener('click', () => overlay.remove());
+        modal.querySelector('.ux-modal-btn-primary')?.addEventListener('click', () => overlay.remove());
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+    } catch (e) {
+        // Fallback if DOM insertion fails
+        alert(message || title || '');
+    }
+}
+
+function showWorkingHoursModal() {
+    const restaurant = getRestaurantWindowMinutes();
+    const open = minutesToHHMM(restaurant.open);
+    const close = minutesToHHMM(restaurant.close);
+    showUxModal({
+        title: currentLanguage === 'bg' ? 'Работно време' : 'Working Hours',
+        message: currentLanguage === 'bg'
+            ? `Поръчки се приемат между <b>${open}</b> и <b>${close}</b>.`
+            : `Orders are accepted between <b>${open}</b> and <b>${close}</b>.`,
+        primaryText: currentLanguage === 'bg' ? 'Разбрах' : 'OK'
+    });
+}
+
+function showDeliveryHoursModal() {
+    const delivery = getDeliveryWindowMinutes();
+    showUxModal({
+        title: currentLanguage === 'bg' ? 'Доставка' : 'Delivery',
+        message: currentLanguage === 'bg'
+            ? `Доставки се извършват между <b>${minutesToHHMM(delivery.open)}</b> и <b>${minutesToHHMM(delivery.close)}</b>.`
+            : `Delivery is available between <b>${minutesToHHMM(delivery.open)}</b> and <b>${minutesToHHMM(delivery.close)}</b>.`,
+        primaryText: currentLanguage === 'bg' ? 'Разбрах' : 'OK'
+    });
+}
+
+function navigateTo(url) {
+    window.location.href = url;
+}
+
 // Initialize time picker with default time
 function initializeTimePicker() {
-    if (orderTime === 'later' && !selectedTimeSlot) {
-        // Set default time to 1 hour from now, rounded to next 15 min
-        const now = new Date();
-        const minTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour from now
-        
-        // Round to nearest 15 min
-        minTime.setMinutes(Math.ceil(minTime.getMinutes() / 15) * 15);
-        minTime.setSeconds(0);
-        
-        // Ensure delivery starts from 11:00
-        if (deliveryMethod === 'delivery' && minTime.getHours() < 11) {
-            minTime.setHours(11, 0, 0, 0);
-        }
-        
-        const hours = String(minTime.getHours()).padStart(2, '0');
-        const minutes = String(minTime.getMinutes()).padStart(2, '0');
-        selectedTimeSlot = `${hours}:${minutes}`;
-        
+    if (orderTime !== 'later') return;
+
+    const window = getAllowedWindowMinutes();
+    const minCandidate = roundUpTo15Minutes(nowMinutesOfDay() + 60);
+    const minAllowed = Math.max(window.open, minCandidate);
+    const maxAllowed = window.close;
+
+    if (maxAllowed < minAllowed) {
+        selectedTimeSlot = '';
         updateTimeDisplay();
+        if (deliveryMethod === 'delivery' && nowMinutesOfDay() < getDeliveryWindowMinutes().open) {
+            showDeliveryHoursModal();
+        } else {
+            showWorkingHoursModal();
+        }
+        return;
     }
+
+    const current = parseHHMMToMinutes(selectedTimeSlot);
+    const clamped = current === null ? minAllowed : Math.min(Math.max(current, minAllowed), maxAllowed);
+    selectedTimeSlot = minutesToHHMM(clamped);
+    updateTimeDisplay();
 }
 
 // Adjust time by minutes (В±15)
@@ -827,41 +1071,26 @@ function adjustTime(minutes) {
         initializeTimePicker();
         return;
     }
-    
-    const [hours, mins] = selectedTimeSlot.split(':').map(Number);
-    let currentTime = new Date();
-    currentTime.setHours(hours, mins, 0, 0);
-    
-    // Add/subtract 15 minutes
-    currentTime.setMinutes(currentTime.getMinutes() + minutes);
-    
-    // Get constraints
-    const minHour = deliveryMethod === 'delivery' ? 11 : parseInt(workingHours.openingTime.split(':')[0]);
-    const maxHour = deliveryMethod === 'delivery' ? 22 : parseInt(workingHours.closingTime.split(':')[0]);
-    const maxMinute = deliveryMethod === 'delivery' ? 0 : parseInt(workingHours.closingTime.split(':')[1]);
-    
-    // Check if within bounds
-    const newHours = currentTime.getHours();
-    const newMins = currentTime.getMinutes();
-    
-    if (newHours < minHour) {
-        currentTime.setHours(minHour, 0, 0, 0);
-    } else if (newHours > maxHour || (newHours === maxHour && newMins > maxMinute)) {
-        currentTime.setHours(maxHour, maxMinute, 0, 0);
+
+    const current = parseHHMMToMinutes(selectedTimeSlot);
+    if (current === null) {
+        initializeTimePicker();
+        return;
     }
-    
-    // Also check minimum time (1 hour from now)
-    const now = new Date();
-    const minTime = new Date(now.getTime() + 60 * 60 * 1000);
-    minTime.setMinutes(Math.ceil(minTime.getMinutes() / 15) * 15);
-    
-    if (currentTime < minTime) {
-        currentTime = minTime;
+
+    const window = getAllowedWindowMinutes();
+    const minCandidate = roundUpTo15Minutes(nowMinutesOfDay() + 60);
+    const minAllowed = Math.max(window.open, minCandidate);
+    const maxAllowed = window.close;
+
+    if (maxAllowed < minAllowed) {
+        initializeTimePicker();
+        return;
     }
-    
-    const finalHours = String(currentTime.getHours()).padStart(2, '0');
-    const finalMins = String(currentTime.getMinutes()).padStart(2, '0');
-    selectedTimeSlot = `${finalHours}:${finalMins}`;
+
+    const next = current + minutes;
+    const clamped = Math.min(Math.max(next, minAllowed), maxAllowed);
+    selectedTimeSlot = minutesToHHMM(clamped);
     
     updateTimeDisplay();
     saveCheckoutState();
@@ -871,7 +1100,8 @@ function adjustTime(minutes) {
 function updateTimeDisplay() {
     const display = document.getElementById('selected-time-display');
     if (display) {
-        display.textContent = selectedTimeSlot || '11:00';
+        const fallback = minutesToHHMM(getAllowedWindowMinutes().open);
+        display.textContent = selectedTimeSlot || fallback;
     }
 }
 
@@ -1116,10 +1346,48 @@ async function placeOrder() {
         alert(currentLanguage === 'bg' ? 'Моля, изберете време за поръчката' : 'Please select an order time');
         return;
     }
-    if (orderTime === 'later' && !selectedTimeSlot) {
-        alert(translations[currentLanguage].timeRequired);
-        return;
+
+    // Working hours / delivery hours enforcement
+    if (orderTime === 'now') {
+        const restaurant = getRestaurantWindowMinutes();
+        const nowMins = nowMinutesOfDay();
+        if (nowMins < restaurant.open || nowMins > restaurant.close) {
+            showWorkingHoursModal();
+            return;
+        }
+
+        if (deliveryMethod === 'delivery') {
+            const delivery = getDeliveryWindowMinutes();
+            if (nowMins < delivery.open || nowMins > delivery.close) {
+                showDeliveryHoursModal();
+                return;
+            }
+        }
     }
+
+    if (orderTime === 'later') {
+        const picked = parseHHMMToMinutes(selectedTimeSlot);
+        if (picked === null) {
+            initializeTimePicker();
+            return;
+        }
+
+        const window = getAllowedWindowMinutes();
+        const minCandidate = roundUpTo15Minutes(nowMinutesOfDay() + 60);
+        const minAllowed = Math.max(window.open, minCandidate);
+        if (picked < minAllowed || picked > window.close) {
+            // Force a valid time and explain constraints.
+            initializeTimePicker();
+            if (deliveryMethod === 'delivery' && nowMinutesOfDay() < getDeliveryWindowMinutes().open) {
+                showDeliveryHoursModal();
+            } else {
+                showWorkingHoursModal();
+            }
+            return;
+        }
+    }
+
+    ensureValidPaymentMethod();
     if (!paymentMethod) {
         alert(currentLanguage === 'bg' ? 'Моля, изберете метод на плащане' : 'Please select a payment method');
         return;
@@ -1153,6 +1421,8 @@ async function placeOrder() {
         deliveryMethod: deliveryMethod,
         // Normalized alias (server will persist deliveryType for future flows)
         deliveryType: deliveryMethod,
+        orderTime: orderTime,
+        scheduledTime: orderTime === 'later' ? (selectedTimeSlot || '') : '',
         customerInfo: customerInfo,
         timestamp: new Date().toISOString(),
         status: 'pending',
@@ -1191,7 +1461,7 @@ async function placeOrder() {
         alert(translations[currentLanguage].orderSuccess);
 
         // Redirect to menu
-        window.location.href = BASE_PATH + '/';
+        navigateTo(BASE_PATH + '/');
     } catch (error) {
         console.error('Error placing order:', error);
         alert(translations[currentLanguage].orderError);
@@ -1204,15 +1474,9 @@ function selectDeliveryMethod(method) {
     const prev = deliveryMethod;
     deliveryMethod = method;
 
-    // One-time pickup heads-up
-    if (method === 'pickup') {
-        const key = 'pickupTimeAlertShown_v1';
-        if (!sessionStorage.getItem(key)) {
-            sessionStorage.setItem(key, '1');
-            alert(currentLanguage === 'bg'
-                ? 'Внимание: При взимане на място поръчката може да отнеме до 1 час.'
-                : 'Heads up: Pickup orders may take up to 1 hour.');
-        }
+    if (deliveryMethod === 'delivery') {
+        // Ensure delivery fee reflects the (possibly preselected) city.
+        calculateDeliveryFee();
     }
 
     const hasProgressBelow = !!(orderTime || scheduledTime || selectedTimeSlot || paymentMethod);
@@ -1256,6 +1520,9 @@ function selectOrderTime(time) {
     saveCheckoutState();
 
     if (time === 'later') {
+        // Ensure the selected time is always valid for the chosen delivery method.
+        initializeTimePicker();
+
         // After re-render, ensure the time picker is centered on mobile.
         const isMobile = !!(window?.matchMedia && window.matchMedia('(max-width: 768px)').matches);
         setTimeout(() => {
@@ -1310,17 +1577,16 @@ function calculateDeliveryFee() {
     const city = customerInfo.city;
     
     if (!city || deliveryMethod !== 'delivery') {
-        deliverySettings.deliveryFee = 0;
+        if (deliveryMethod !== 'delivery') {
+            deliverySettings.deliveryFee = 0;
+            return;
+        }
+        deliverySettings.deliveryFee = getDeliveryFeeForCity('');
+        updateOrderSummary();
         return;
     }
-    
-    // Check if city has a specific price
-    if (deliverySettings.cityPrices && deliverySettings.cityPrices[city] !== undefined) {
-        deliverySettings.deliveryFee = parseFloat(deliverySettings.cityPrices[city]);
-    } else {
-        // Use default delivery fee if city not found
-        deliverySettings.deliveryFee = parseFloat(deliverySettings.deliveryFee) || 5;
-    }
+
+    deliverySettings.deliveryFee = getDeliveryFeeForCity(city);
     
     console.log(`Delivery fee for ${city}: ${deliverySettings.deliveryFee} EUR`);
     
@@ -1359,7 +1625,7 @@ function updateOrderSummary() {
         </div>
         ${orderTime === 'later' && selectedTimeSlot ? `
         <div class="summary-row time">
-            <span>${currentLanguage === 'bg' ? translations[currentLanguage].deliveryTime : translations[currentLanguage].deliveryTime}</span>
+            <span>${deliveryMethod === 'pickup' ? translations[currentLanguage].pickupTime : translations[currentLanguage].deliveryTime}</span>
             <span style="color: #e67e22; font-weight: 700;">${selectedTimeSlot}</span>
         </div>
         ` : ''}

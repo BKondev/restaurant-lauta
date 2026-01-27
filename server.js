@@ -17,7 +17,7 @@ try {
 const app = express();
 const PORT = process.env.PORT || 3003;
 // Base path for mounting the app (e.g. '/resturant-website'). Empty string means root.
-const BASE_PATH = process.env.BASE_PATH || '/resturant-website';
+const BASE_PATH = (process.env.BASE_PATH ?? '/resturant-website');
 
 // Multi-tenant authentication system
 // Each restaurant has its own credentials and API key
@@ -80,6 +80,13 @@ if (BASE_PATH) {
     app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 }
 
+// Vendor static assets (keeps the UI working without external CDNs; helps E2E tests)
+const fontawesomeDir = path.join(__dirname, 'node_modules', '@fortawesome', 'fontawesome-free');
+if (fs.existsSync(fontawesomeDir)) {
+    const mount = (BASE_PATH ? BASE_PATH : '') + '/vendor/fontawesome';
+    app.use(mount, express.static(fontawesomeDir));
+}
+
 // Create uploads directory if it doesn't exist
 if (!fs.existsSync('uploads')) {
     fs.mkdirSync('uploads');
@@ -112,11 +119,20 @@ const upload = multer({
 });
 
 // Database file path
-const DB_FILE = path.join(__dirname, 'database.json');
+// Allows tests to run against an isolated DB file without touching production/local data.
+const DB_FILE = process.env.DB_FILE_PATH
+    ? path.resolve(process.env.DB_FILE_PATH)
+    : path.join(__dirname, 'database.json');
 
 // Initialize database if it doesn't exist
 function initDatabase() {
     if (!fs.existsSync(DB_FILE)) {
+        // Ensure DB directory exists (needed for test DB paths like .tmp/database.test.json)
+        try {
+            fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+        } catch (e) {
+            // ignore; writeFileSync will surface errors if it still fails
+        }
         const initialData = {
             restaurantName: "Restaurant Name",
             restaurantLogo: "",
@@ -180,6 +196,11 @@ function readDatabase() {
 // Write database
 function writeDatabase(data) {
     try {
+        try {
+            fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+        } catch (e) {
+            // ignore
+        }
         fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
         return true;
     } catch (error) {
@@ -218,7 +239,27 @@ function generateBoricaProviderOrderId() {
     return `${ts}${rnd}`.slice(0, 15);
 }
 
-function boricaGetGatewayBaseUrl(debugMode) {
+function boricaGetGatewayBaseUrl(boricaOrDebugMode) {
+    const ensureSlash = (url) => {
+        const u = (url || '').toString().trim();
+        if (!u) return u;
+        return u.endsWith('/') ? u : (u + '/');
+    };
+
+    if (boricaOrDebugMode && typeof boricaOrDebugMode === 'object') {
+        const b = boricaOrDebugMode;
+        const modeRaw = (b.mode || '').toString().trim().toLowerCase();
+        const isTest = modeRaw
+            ? (modeRaw === 'test' || modeRaw === 'sandbox')
+            : !!b.debugMode;
+
+        const override = isTest ? b.gatewayBaseUrlTest : b.gatewayBaseUrlProd;
+        if (override) return ensureSlash(override);
+
+        return isTest ? 'https://gatet.borica.bg/boreps/' : 'https://gate.borica.bg/boreps/';
+    }
+
+    const debugMode = !!boricaOrDebugMode;
     return debugMode ? 'https://gatet.borica.bg/boreps/' : 'https://gate.borica.bg/boreps/';
 }
 
@@ -310,6 +351,79 @@ function boricaVerifyAndParseEBorica(eBoricaBase64, publicCertPem) {
     };
 }
 
+function normalizeText(value, maxLen) {
+    const s = (value ?? '').toString();
+    const trimmed = s.replace(/\r/g, '').trim();
+    if (!maxLen || maxLen <= 0) return trimmed;
+    return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
+}
+
+function getActiveRestaurantForPublicRequest(db, req) {
+    const headerRestaurantId = (req.headers['x-restaurant-id'] || '').toString().trim();
+    const queryRestaurantId = (req.query?.restaurantId || '').toString().trim();
+    const targetRestaurantId = queryRestaurantId || headerRestaurantId;
+
+    const activeRestaurants = (db.restaurants || []).filter(r => r && r.active);
+
+    if (targetRestaurantId) {
+        return activeRestaurants.find(r => r.id === targetRestaurantId) || null;
+    }
+
+    if (activeRestaurants.length === 1) return activeRestaurants[0];
+    return null;
+}
+
+function getDefaultSiteSettings() {
+    return {
+        search: { mode: 'names_and_descriptions' },
+        footer: {
+            contacts: { phone: '', email: '', address: '' },
+            aboutText: '',
+            socials: []
+        },
+        legal: { privacyHtml: '', termsHtml: '' }
+    };
+}
+
+function normalizeSiteSettings(input) {
+    const base = getDefaultSiteSettings();
+    const src = input && typeof input === 'object' ? input : {};
+
+    const modeRaw = (src.search?.mode || base.search.mode).toString();
+    const mode = (modeRaw === 'names_only' || modeRaw === 'names_and_descriptions') ? modeRaw : base.search.mode;
+
+    const contacts = src.footer?.contacts || {};
+    const footer = {
+        contacts: {
+            phone: normalizeText(contacts.phone, 100),
+            email: normalizeText(contacts.email, 120),
+            address: normalizeText(contacts.address, 240)
+        },
+        aboutText: normalizeText(src.footer?.aboutText, 600),
+        socials: Array.isArray(src.footer?.socials)
+            ? src.footer.socials.slice(0, 6).map(s => ({
+                label: normalizeText(s?.label, 40),
+                url: normalizeText(s?.url, 300),
+                iconClass: normalizeText(s?.iconClass, 60)
+            })).filter(s => s.url)
+            : []
+    };
+
+    const legal = {
+        privacyHtml: normalizeText(src.legal?.privacyHtml, 20000),
+        termsHtml: normalizeText(src.legal?.termsHtml, 20000)
+    };
+
+    return { search: { mode }, footer, legal };
+}
+
+function isOrderForRestaurant(order, restaurantId, db) {
+    if (!order) return false;
+    if (order.restaurantId) return order.restaurantId === restaurantId;
+    const activeRestaurants = (db.restaurants || []).filter(r => r && r.active);
+    return activeRestaurants.length === 1 && activeRestaurants[0].id === restaurantId;
+}
+
 // Initialize database on startup
 initDatabase();
 
@@ -378,17 +492,30 @@ app.get(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
             return res.status(404).json({ error: 'Restaurant not found' });
         }
 
+        const orderPlacedTpl = restaurant.emailTemplates?.orderPlaced || {};
+
         res.json({
             id: restaurant.id,
             name: restaurant.name,
             email: restaurant.email || '',
             orderNotificationEmail: restaurant.orderNotificationEmail || '',
-            borica: restaurant.borica || {
-                enabled: false,
-                debugMode: true,
-                terminalId: '',
-                privateKeyPem: '',
-                publicCertPem: ''
+            emailTemplates: {
+                orderPlaced: {
+                    subject: (orderPlacedTpl.subject || '').toString(),
+                    body: (orderPlacedTpl.body || '').toString()
+                }
+            },
+            borica: {
+                enabled: !!restaurant.borica?.enabled,
+                mode: (restaurant.borica?.mode || (restaurant.borica?.debugMode ? 'test' : 'prod') || 'test').toString(),
+                debugMode: restaurant.borica?.debugMode !== undefined ? !!restaurant.borica.debugMode : true,
+                terminalId: (restaurant.borica?.terminalId || '').toString(),
+                merchantId: (restaurant.borica?.merchantId || '').toString(),
+                backrefUrl: (restaurant.borica?.backrefUrl || '').toString(),
+                gatewayBaseUrlTest: (restaurant.borica?.gatewayBaseUrlTest || '').toString(),
+                gatewayBaseUrlProd: (restaurant.borica?.gatewayBaseUrlProd || '').toString(),
+                privateKeyPem: (restaurant.borica?.privateKeyPem || '').toString(),
+                publicCertPem: (restaurant.borica?.publicCertPem || '').toString()
             }
         });
     } catch (e) {
@@ -399,7 +526,7 @@ app.get(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
 
 app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
     try {
-        const { orderNotificationEmail, borica } = req.body;
+        const { orderNotificationEmail, borica, emailTemplates } = req.body;
         const db = readDatabase();
 
         const idx = db.restaurants?.findIndex(r => r.id === req.restaurantId);
@@ -417,14 +544,31 @@ app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
 
         if (borica !== undefined) {
             const enabled = !!borica.enabled;
-            const debugMode = borica.debugMode !== undefined ? !!borica.debugMode : true;
+            const modeRaw = (borica.mode || '').toString().trim().toLowerCase();
+            const mode = (modeRaw === 'prod' || modeRaw === 'production') ? 'prod' : 'test';
+            const debugMode = borica.debugMode !== undefined ? !!borica.debugMode : (mode === 'test');
             const terminalId = (borica.terminalId || '').toString().trim();
+            const merchantId = (borica.merchantId || '').toString().trim();
+            const backrefUrl = (borica.backrefUrl || '').toString().trim();
+            const gatewayBaseUrlTest = (borica.gatewayBaseUrlTest || '').toString().trim();
+            const gatewayBaseUrlProd = (borica.gatewayBaseUrlProd || '').toString().trim();
             const privateKeyPem = (borica.privateKeyPem || '').toString();
             const publicCertPem = (borica.publicCertPem || '').toString();
+
+            const looksLikeHttpsUrl = (u) => /^https?:\/\//i.test((u || '').toString().trim());
 
             if (enabled) {
                 if (!/^[0-9]{8}$/.test(terminalId)) {
                     return res.status(400).json({ error: 'BORICA Terminal ID must be exactly 8 digits' });
+                }
+                if (backrefUrl && !looksLikeHttpsUrl(backrefUrl)) {
+                    return res.status(400).json({ error: 'BORICA Backref URL must start with http:// or https://' });
+                }
+                if (gatewayBaseUrlTest && !looksLikeHttpsUrl(gatewayBaseUrlTest)) {
+                    return res.status(400).json({ error: 'BORICA Test Gateway URL must start with http:// or https://' });
+                }
+                if (gatewayBaseUrlProd && !looksLikeHttpsUrl(gatewayBaseUrlProd)) {
+                    return res.status(400).json({ error: 'BORICA Production Gateway URL must start with http:// or https://' });
                 }
                 if (!privateKeyPem.includes('BEGIN') || !privateKeyPem.includes('PRIVATE KEY')) {
                     return res.status(400).json({ error: 'BORICA Private Key PEM looks invalid' });
@@ -436,25 +580,54 @@ app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
 
             db.restaurants[idx].borica = {
                 enabled,
+                mode,
                 debugMode,
                 terminalId,
+                merchantId,
+                backrefUrl,
+                gatewayBaseUrlTest,
+                gatewayBaseUrlProd,
                 privateKeyPem,
                 publicCertPem
             };
         }
 
+        if (emailTemplates !== undefined) {
+            const orderPlaced = emailTemplates?.orderPlaced || {};
+            const subject = normalizeEmailTemplateText(orderPlaced.subject, 500);
+            const body = normalizeEmailTemplateText(orderPlaced.body, 8000);
+
+            if (!db.restaurants[idx].emailTemplates) db.restaurants[idx].emailTemplates = {};
+            db.restaurants[idx].emailTemplates.orderPlaced = {
+                subject,
+                body
+            };
+        }
+
         if (writeDatabase(db)) {
+            const orderPlacedTpl = db.restaurants[idx].emailTemplates?.orderPlaced || {};
             res.json({
                 id: db.restaurants[idx].id,
                 name: db.restaurants[idx].name,
                 email: db.restaurants[idx].email || '',
                 orderNotificationEmail: db.restaurants[idx].orderNotificationEmail || '',
-                borica: db.restaurants[idx].borica || {
-                    enabled: false,
-                    debugMode: true,
-                    terminalId: '',
-                    privateKeyPem: '',
-                    publicCertPem: ''
+                emailTemplates: {
+                    orderPlaced: {
+                        subject: (orderPlacedTpl.subject || '').toString(),
+                        body: (orderPlacedTpl.body || '').toString()
+                    }
+                },
+                borica: {
+                    enabled: !!db.restaurants[idx].borica?.enabled,
+                    mode: (db.restaurants[idx].borica?.mode || (db.restaurants[idx].borica?.debugMode ? 'test' : 'prod') || 'test').toString(),
+                    debugMode: db.restaurants[idx].borica?.debugMode !== undefined ? !!db.restaurants[idx].borica.debugMode : true,
+                    terminalId: (db.restaurants[idx].borica?.terminalId || '').toString(),
+                    merchantId: (db.restaurants[idx].borica?.merchantId || '').toString(),
+                    backrefUrl: (db.restaurants[idx].borica?.backrefUrl || '').toString(),
+                    gatewayBaseUrlTest: (db.restaurants[idx].borica?.gatewayBaseUrlTest || '').toString(),
+                    gatewayBaseUrlProd: (db.restaurants[idx].borica?.gatewayBaseUrlProd || '').toString(),
+                    privateKeyPem: (db.restaurants[idx].borica?.privateKeyPem || '').toString(),
+                    publicCertPem: (db.restaurants[idx].borica?.publicCertPem || '').toString()
                 }
             });
         } else {
@@ -665,25 +838,81 @@ function requireApiKey(req, res, next) {
 
 let mailTransport = null;
 
+let cachedSmtpCreds = null;
+
+function loadSmtpCredentials() {
+    if (cachedSmtpCreds) return cachedSmtpCreds;
+
+    const directUser = (process.env.SMTP_USER || '').toString().trim();
+    const directPass = (process.env.SMTP_PASS || '').toString();
+
+    // Prefer explicit env vars when present.
+    if (directUser && directPass) {
+        cachedSmtpCreds = { user: directUser, pass: directPass };
+        return cachedSmtpCreds;
+    }
+
+    const credsFile = (process.env.SMTP_CREDENTIALS_FILE || process.env.SMTP_PASS_FILE || '').toString().trim();
+    if (!credsFile) {
+        cachedSmtpCreds = { user: directUser, pass: directPass };
+        return cachedSmtpCreds;
+    }
+
+    try {
+        const raw = fs.readFileSync(credsFile, 'utf8');
+        const text = raw.replace(/\r/g, '');
+
+        let user = directUser;
+        let pass = directPass;
+
+        for (const line of text.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            if (trimmed.startsWith('#')) continue;
+            if (trimmed.startsWith('user=')) user = trimmed.slice('user='.length).trim();
+            if (trimmed.startsWith('pass=')) pass = trimmed.slice('pass='.length);
+        }
+
+        // If file is just a password (legacy), treat as pass.
+        if (!pass && !text.includes('pass=') && text.trim().length > 0) {
+            pass = text.trim();
+        }
+
+        cachedSmtpCreds = { user: (user || '').trim(), pass: pass || '' };
+        return cachedSmtpCreds;
+    } catch (err) {
+        console.error('[EMAIL] Failed to read SMTP credentials file:', credsFile, err?.message || err);
+        cachedSmtpCreds = { user: directUser, pass: directPass };
+        return cachedSmtpCreds;
+    }
+}
+
 function isEmailEnabled() {
-    return !!(nodemailer && process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_FROM);
+    const host = (process.env.SMTP_HOST || '').toString().trim();
+    const from = (process.env.SMTP_FROM || '').toString().trim();
+    const creds = loadSmtpCredentials();
+    return !!(nodemailer && host && from && creds.user && creds.pass);
 }
 
 function getMailTransport() {
     if (!isEmailEnabled()) return null;
     if (mailTransport) return mailTransport;
 
+    // Credentials may have changed between restarts.
+    cachedSmtpCreds = null;
+
     const host = process.env.SMTP_HOST;
     const port = parseInt(process.env.SMTP_PORT || '587', 10);
     const secure = (process.env.SMTP_SECURE || '').toString().toLowerCase() === 'true';
+    const creds = loadSmtpCredentials();
 
     mailTransport = nodemailer.createTransport({
         host,
         port,
         secure,
         auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
+            user: creds.user,
+            pass: creds.pass
         }
     });
 
@@ -735,7 +964,19 @@ function formatOrderItemsText(order) {
 function getPublicOrderTrackUrl(orderId) {
     const base = (process.env.PUBLIC_BASE_URL || '').toString().trim().replace(/\/$/, '');
     if (!base) return '';
-    return `${base}${BASE_PATH}/track-order.html?id=${encodeURIComponent(orderId)}`;
+
+    // PUBLIC_BASE_PATH controls how links are rendered to the outside world.
+    // This allows nginx to expose the app at '/' (e.g. https://bojole.bg/checkout)
+    // while the internal Express mount path stays at /resturant-website.
+    const rawPublicBasePath = (process.env.PUBLIC_BASE_PATH ?? BASE_PATH ?? '').toString().trim();
+    let publicBasePath = rawPublicBasePath;
+    if (publicBasePath === '/') publicBasePath = '';
+    if (publicBasePath.endsWith('/') && publicBasePath.length > 1) publicBasePath = publicBasePath.slice(0, -1);
+    if (!publicBasePath) {
+        return `${base}/track-order.html?id=${encodeURIComponent(orderId)}`;
+    }
+
+    return `${base}${publicBasePath}/track-order.html?id=${encodeURIComponent(orderId)}`;
 }
 
 async function sendOrderPlacedEmails(order, restaurant) {
@@ -744,22 +985,39 @@ async function sendOrderPlacedEmails(order, restaurant) {
     const customerTo = (order.customerInfo?.email || '').toString().trim();
 
     const subjectRestaurant = `New order ${order.id} (${order.deliveryMethod})`;
-    const subjectCustomer = `Поръчката е получена: ${order.id}`;
 
     const itemsText = formatOrderItemsText(order);
-    const totalText = `Обща сума: ${parseNumber(order.total, 0).toFixed(2)} лв`;
+    const totalText = `Total: ${parseNumber(order.total, 0).toFixed(2)} лв`;
     const deliveryText = order.deliveryMethod === 'delivery'
-        ? `Доставка до: ${order.customerInfo?.city || ''}, ${order.customerInfo?.address || ''}`
-        : 'Взимане от място';
+        ? `Delivery to: ${order.customerInfo?.city || ''}, ${order.customerInfo?.address || ''}`
+        : 'Pickup';
 
-    const customerText = [
-        'Благодарим Ви за поръчката!',
-        `Номер: ${order.id}`,
-        deliveryText,
+    const templateVars = {
+        orderId: order.id,
+        deliveryMethod: order.deliveryMethod,
+        customerName: order.customerInfo?.name || '',
+        customerPhone: order.customerInfo?.phone || '',
+        customerEmail: order.customerInfo?.email || '',
         itemsText,
         totalText,
-        trackUrl ? `Проследяване: ${trackUrl}` : ''
-    ].filter(Boolean).join('\n');
+        deliveryText,
+        trackUrl,
+        trackUrlLine: trackUrl ? `Track your order: ${trackUrl}` : ''
+    };
+
+    const tpl = restaurant?.emailTemplates?.orderPlaced || {};
+    const subjectCustomer = (tpl.subject || '').toString().trim() || `Order successfully placed: ${order.id}`;
+    const bodyCustomer = (tpl.body || '').toString().trim() || [
+        'Order successfully placed.',
+        `Order ID: {{orderId}}`,
+        '{{deliveryText}}',
+        '{{itemsText}}',
+        '{{totalText}}',
+        '{{trackUrlLine}}'
+    ].join('\n');
+
+    const customerText = renderTemplateText(bodyCustomer, templateVars);
+    const finalSubjectCustomer = renderTemplateText(subjectCustomer, templateVars);
 
     const restaurantText = [
         `New order received: ${order.id}`,
@@ -772,7 +1030,7 @@ async function sendOrderPlacedEmails(order, restaurant) {
     // Customer email
     await sendEmail({
         to: customerTo,
-        subject: subjectCustomer,
+        subject: finalSubjectCustomer,
         text: customerText
     });
 
@@ -1027,6 +1285,44 @@ app.get(API_PREFIX + '/settings/customization', (req, res) => {
     });
 });
 
+// Get site settings (public) - search mode, footer, legal pages
+app.get(API_PREFIX + '/settings/site', (req, res) => {
+    try {
+        const db = readDatabase();
+        const restaurant = getActiveRestaurantForPublicRequest(db, req);
+        if (!restaurant) {
+            return res.json(getDefaultSiteSettings());
+        }
+
+        const normalized = normalizeSiteSettings(restaurant.siteSettings);
+        res.json(normalized);
+    } catch (error) {
+        console.error('Error getting site settings:', error);
+        res.status(500).json({ error: 'Failed to get site settings' });
+    }
+});
+
+// Update site settings (admin only) - stored per restaurant
+app.put(API_PREFIX + '/settings/site', requireAuth, (req, res) => {
+    try {
+        const db = readDatabase();
+        const restaurant = db.restaurants?.find(r => r.id === req.restaurantId);
+        if (!restaurant) {
+            return res.status(404).json({ error: 'Restaurant not found' });
+        }
+
+        restaurant.siteSettings = normalizeSiteSettings(req.body);
+        if (writeDatabase(db)) {
+            res.json(restaurant.siteSettings);
+        } else {
+            res.status(500).json({ error: 'Failed to update site settings' });
+        }
+    } catch (error) {
+        console.error('Error updating site settings:', error);
+        res.status(500).json({ error: 'Failed to update site settings' });
+    }
+});
+
 // Update customization settings
 app.put(API_PREFIX + '/settings/customization', requireAuth, (req, res) => {
     const db = readDatabase();
@@ -1042,9 +1338,10 @@ app.put(API_PREFIX + '/settings/customization', requireAuth, (req, res) => {
 // Get currency settings
 app.get(API_PREFIX + '/settings/currency', (req, res) => {
     const db = readDatabase();
-    res.json(db.currencySettings || {
-        eurToBgnRate: 1.9558,
-        showBgnPrices: true
+    const existing = db.currencySettings || {};
+    res.json({
+        eurToBgnRate: existing.eurToBgnRate || 1.9558,
+        showBgnPrices: false
     });
 });
 
@@ -1053,7 +1350,7 @@ app.put(API_PREFIX + '/settings/currency', requireAuth, (req, res) => {
     const db = readDatabase();
     db.currencySettings = {
         eurToBgnRate: parseFloat(req.body.eurToBgnRate) || 1.9558,
-        showBgnPrices: req.body.showBgnPrices !== undefined ? req.body.showBgnPrices : true
+        showBgnPrices: false
     };
     
     if (writeDatabase(db)) {
@@ -1586,6 +1883,20 @@ function isValidEmail(email) {
     return !!e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
 
+function normalizeEmailTemplateText(value, maxLen = 8000) {
+    const s = (value === undefined || value === null) ? '' : String(value);
+    // Prevent huge payloads from bloating database.json
+    return s.length > maxLen ? s.slice(0, maxLen) : s;
+}
+
+function renderTemplateText(template, variables) {
+    const vars = variables || {};
+    return String(template || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => {
+        const v = vars[key];
+        return (v === undefined || v === null) ? '' : String(v);
+    });
+}
+
 function sanitizeOrderItems(items) {
     if (!Array.isArray(items)) return null;
     const sanitized = items
@@ -1644,7 +1955,7 @@ app.get(API_PREFIX + '/orders', requireAuth, (req, res) => {
         const orders = data.orders || [];
         
         // Filter orders by restaurant
-        const restaurantOrders = orders.filter(order => order.restaurantId === req.restaurantId);
+        const restaurantOrders = orders.filter(order => isOrderForRestaurant(order, req.restaurantId, data));
         
         res.json(restaurantOrders);
     } catch (error) {
@@ -1660,7 +1971,7 @@ app.get(API_PREFIX + '/orders/pending', requireAuth, (req, res) => {
         
         // Filter by restaurant and pending status
         const pendingOrders = orders.filter(order => 
-            order.restaurantId === req.restaurantId && order.status === 'pending'
+            isOrderForRestaurant(order, req.restaurantId, data) && order.status === 'pending'
         );
         res.json(pendingOrders);
     } catch (error) {
@@ -1676,7 +1987,7 @@ app.get(API_PREFIX + '/orders/mobile/pending', requireApiKey, (req, res) => {
         
         // Filter by restaurant and pending status
         const pendingOrders = orders.filter(order => 
-            order.restaurantId === req.restaurantId && order.status === 'pending'
+            isOrderForRestaurant(order, req.restaurantId, data) && order.status === 'pending'
         );
         
         res.json(pendingOrders);
@@ -1714,7 +2025,7 @@ app.put(API_PREFIX + '/orders/mobile/:id', requireApiKey, async (req, res) => {
         const order = data.orders[orderIndex];
         
         // Verify order belongs to this restaurant
-        if (order.restaurantId !== req.restaurantId) {
+        if (!isOrderForRestaurant(order, req.restaurantId, data)) {
             return res.status(403).json({ error: 'Access denied - order belongs to different restaurant' });
         }
         
@@ -1849,6 +2160,8 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             deliveryMethod,
             deliveryType,
             deliveryFee,
+            orderTime,
+            scheduledTime,
             customerInfo,
             timestamp,
             restaurantId,
@@ -1914,6 +2227,8 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             // Normalized field for future flows
             deliveryType: deliveryType || deliveryMethod,
             deliveryFee: typeof deliveryFee === 'number' ? deliveryFee : (deliveryFee ? Number(deliveryFee) : 0),
+            orderTime: (orderTime === 'now' || orderTime === 'later') ? orderTime : undefined,
+            scheduledTime: (typeof scheduledTime === 'string' && scheduledTime.trim()) ? scheduledTime.trim() : undefined,
             customerInfo: {
                 ...customerInfo,
                 previousOrders: previousOrders
@@ -1946,7 +2261,7 @@ app.post(API_PREFIX + '/orders', (req, res) => {
                 protocolVersion: '1.1'
             });
             const eBorica = boricaSignMessageToEBoricaBase64(message, borica.privateKeyPem);
-            const redirectUrl = `${boricaGetGatewayBaseUrl(!!borica.debugMode)}registerTransaction?eBorica=${encodeURIComponent(eBorica)}`;
+            const redirectUrl = `${boricaGetGatewayBaseUrl(borica)}registerTransaction?eBorica=${encodeURIComponent(eBorica)}`;
 
             newOrder.payment = {
                 method: 'card',
@@ -2221,7 +2536,7 @@ app.delete(API_PREFIX + '/orders/:id', requireAuth, (req, res) => {
         }
 
         // Verify order belongs to this restaurant
-        if (data.orders[orderIndex].restaurantId !== req.restaurantId) {
+        if (!isOrderForRestaurant(data.orders[orderIndex], req.restaurantId, data)) {
             return res.status(403).json({ error: 'Access denied - order belongs to different restaurant' });
         }
 
@@ -2298,7 +2613,7 @@ app.post(API_PREFIX + '/printer/print/:orderId', requireAuth, async (req, res) =
         }
 
         // Verify order belongs to this restaurant
-        if (order.restaurantId !== req.restaurantId) {
+        if (!isOrderForRestaurant(order, req.restaurantId, data)) {
             return res.status(403).json({ error: 'Access denied - order belongs to different restaurant' });
         }
 
@@ -2332,6 +2647,8 @@ app.get(API_PREFIX + '/delivery/status/:deliveryId', requireAuth, async (req, re
 const INDEX_PATH = path.join(__dirname, 'public', 'index.html');
 const ADMIN_PATH = path.join(__dirname, 'public', 'admin.html');
 const LOGIN_PATH = path.join(__dirname, 'public', 'login.html');
+const PRIVACY_PATH = path.join(__dirname, 'public', 'privacy.html');
+const TERMS_PATH = path.join(__dirname, 'public', 'terms.html');
 
 if (BASE_PATH) {
     // Normalize: allow access without trailing slash
@@ -2352,6 +2669,14 @@ app.get(BASE_PATH + '/login', (req, res) => {
 
 app.get(BASE_PATH + '/checkout', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'checkout.html'));
+});
+
+app.get(BASE_PATH + '/privacy', (req, res) => {
+    res.sendFile(PRIVACY_PATH);
+});
+
+app.get(BASE_PATH + '/terms', (req, res) => {
+    res.sendFile(TERMS_PATH);
 });
 
 // Start server
