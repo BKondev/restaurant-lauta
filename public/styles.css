@@ -2020,9 +2020,21 @@ body {
 /* Site Footer */
 .site-footer {
     margin-top: 32px;
-    background: #0f172a;
+    background: var(--top-bar-color);
     color: #e2e8f0;
     padding: 28px 0 16px;
+}
+
+/* Map above footer */
+.site-map {
+    width: 100%;
+    height: 360px;
+    margin-top: 32px;
+    background: #e5e7eb;
+}
+
+.site-map .leaflet-container {
+    font: inherit;
 }
 
 .site-footer a {

@@ -376,6 +376,7 @@ function getActiveRestaurantForPublicRequest(db, req) {
 function getDefaultSiteSettings() {
     return {
         search: { mode: 'names_and_descriptions' },
+        map: { enabled: false, lat: null, lng: null, zoom: 16, label: '' },
         footer: {
             contacts: { phone: '', email: '', address: '' },
             aboutText: '',
@@ -389,8 +390,32 @@ function normalizeSiteSettings(input) {
     const base = getDefaultSiteSettings();
     const src = input && typeof input === 'object' ? input : {};
 
+    const toFiniteNumberOrNull = (value) => {
+        if (value === null || value === undefined) return null;
+        const n = typeof value === 'number' ? value : parseFloat(value);
+        return Number.isFinite(n) ? n : null;
+    };
+
+    const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+
     const modeRaw = (src.search?.mode || base.search.mode).toString();
     const mode = (modeRaw === 'names_only' || modeRaw === 'names_and_descriptions') ? modeRaw : base.search.mode;
+
+    const mapSrc = src.map && typeof src.map === 'object' ? src.map : {};
+    const mapEnabled = !!mapSrc.enabled;
+    const mapLat = toFiniteNumberOrNull(mapSrc.lat);
+    const mapLng = toFiniteNumberOrNull(mapSrc.lng);
+    const mapZoomRaw = toFiniteNumberOrNull(mapSrc.zoom);
+    const mapZoom = mapZoomRaw === null ? base.map.zoom : clamp(Math.round(mapZoomRaw), 1, 19);
+    const mapLabel = normalizeText(mapSrc.label, 140);
+
+    const map = {
+        enabled: mapEnabled && mapLat !== null && mapLng !== null,
+        lat: (mapEnabled && mapLat !== null && mapLng !== null) ? clamp(mapLat, -90, 90) : null,
+        lng: (mapEnabled && mapLat !== null && mapLng !== null) ? clamp(mapLng, -180, 180) : null,
+        zoom: mapZoom,
+        label: mapLabel
+    };
 
     const contacts = src.footer?.contacts || {};
     const footer = {
@@ -414,7 +439,7 @@ function normalizeSiteSettings(input) {
         termsHtml: normalizeText(src.legal?.termsHtml, 20000)
     };
 
-    return { search: { mode }, footer, legal };
+    return { search: { mode }, map, footer, legal };
 }
 
 function isOrderForRestaurant(order, restaurantId, db) {

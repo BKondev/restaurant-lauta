@@ -802,6 +802,19 @@ async function loadSiteSettings() {
         if (addressEl) addressEl.value = data?.footer?.contacts?.address || '';
         if (aboutEl) aboutEl.value = data?.footer?.aboutText || '';
 
+        const mapEnabledEl = document.getElementById('site-map-enabled');
+        const mapLabelEl = document.getElementById('site-map-label');
+        const mapLatEl = document.getElementById('site-map-lat');
+        const mapLngEl = document.getElementById('site-map-lng');
+        const mapZoomEl = document.getElementById('site-map-zoom');
+
+        const map = data?.map || {};
+        if (mapEnabledEl) mapEnabledEl.checked = !!map.enabled;
+        if (mapLabelEl) mapLabelEl.value = (map.label || '').toString();
+        if (mapLatEl) mapLatEl.value = (map.lat ?? '').toString();
+        if (mapLngEl) mapLngEl.value = (map.lng ?? '').toString();
+        if (mapZoomEl) mapZoomEl.value = (map.zoom ?? '').toString();
+
         const socials = Array.isArray(data?.footer?.socials) ? data.footer.socials : [];
         const setSocial = (i, social) => {
             const labelEl = document.getElementById(`site-social-${i}-label`);
@@ -838,6 +851,23 @@ async function updateSiteSettings() {
         const address = (document.getElementById('site-footer-address')?.value || '').toString();
         const aboutText = (document.getElementById('site-footer-about')?.value || '').toString();
 
+        const mapEnabled = !!document.getElementById('site-map-enabled')?.checked;
+        const mapLabel = (document.getElementById('site-map-label')?.value || '').toString();
+        const mapLatRaw = (document.getElementById('site-map-lat')?.value || '').toString();
+        const mapLngRaw = (document.getElementById('site-map-lng')?.value || '').toString();
+        const mapZoomRaw = (document.getElementById('site-map-zoom')?.value || '').toString();
+
+        const mapLat = mapLatRaw.trim() === '' ? null : Number(mapLatRaw);
+        const mapLng = mapLngRaw.trim() === '' ? null : Number(mapLngRaw);
+        const mapZoom = mapZoomRaw.trim() === '' ? null : Number(mapZoomRaw);
+
+        if (mapEnabled) {
+            if (!Number.isFinite(mapLat) || !Number.isFinite(mapLng)) {
+                alert('Map is enabled but Latitude/Longitude are invalid.');
+                return;
+            }
+        }
+
         const buildSocial = (i) => {
             const label = (document.getElementById(`site-social-${i}-label`)?.value || '').toString();
             const url = (document.getElementById(`site-social-${i}-url`)?.value || '').toString();
@@ -853,6 +883,13 @@ async function updateSiteSettings() {
 
         const payload = {
             search: { mode: mode === 'names_only' ? 'names_only' : 'names_and_descriptions' },
+            map: {
+                enabled: mapEnabled,
+                label: mapLabel,
+                lat: mapLat,
+                lng: mapLng,
+                zoom: mapZoom
+            },
             footer: {
                 contacts: { phone, email, address },
                 aboutText,

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Privacy Policy</title>
     <link rel="stylesheet" href="styles.css?v=20260127a" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
     <div class="container" style="padding: 24px 16px; max-width: 900px; margin: 0 auto;">
@@ -13,9 +14,11 @@
         <div id="legal-content" data-page="privacy"></div>
     </div>
 
+    <div id="site-map" class="site-map" style="display:none;"></div>
     <footer id="site-footer" class="site-footer"></footer>
 
     <script src="legal.js?v=20260127a"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         // optional footer render: reuse same public settings API
         (async function () {
@@ -23,6 +26,34 @@
                 const res = await fetch('api/settings/site');
                 if (!res.ok) return;
                 const s = await res.json();
+
+                // map (above footer)
+                try {
+                    const mapEl = document.getElementById('site-map');
+                    const mapCfg = s?.map || {};
+                    const enabled = !!mapCfg.enabled;
+                    const lat = typeof mapCfg.lat === 'number' ? mapCfg.lat : parseFloat(mapCfg.lat);
+                    const lng = typeof mapCfg.lng === 'number' ? mapCfg.lng : parseFloat(mapCfg.lng);
+                    const zoom = Number.isFinite(Number(mapCfg.zoom)) ? Math.max(1, Math.min(19, Math.round(Number(mapCfg.zoom)))) : 16;
+                    const label = (mapCfg.label || s?.footer?.contacts?.address || '').toString().trim();
+
+                    if (mapEl && enabled && Number.isFinite(lat) && Number.isFinite(lng) && window.L) {
+                        mapEl.style.display = 'block';
+                        mapEl.innerHTML = '<div id="site-map-leaflet" style="width:100%;height:100%;"></div>';
+                        const map = window.L.map('site-map-leaflet', { scrollWheelZoom: false });
+                        map.setView([lat, lng], zoom);
+                        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            maxZoom: 19,
+                            attribution: '&copy; OpenStreetMap'
+                        }).addTo(map);
+                        const marker = window.L.marker([lat, lng]).addTo(map);
+                        if (label) {
+                            marker.bindTooltip(label, { permanent: true, direction: 'top', offset: [0, -10] });
+                            marker.bindPopup(label);
+                        }
+                    }
+                } catch (e) {}
+
                 const footerEl = document.getElementById('site-footer');
                 if (!footerEl) return;
                 const contacts = (s && s.footer && s.footer.contacts) ? s.footer.contacts : {};

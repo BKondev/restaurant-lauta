@@ -6,6 +6,7 @@
     <title>Restaurant Menu - Template</title>
     <link rel="stylesheet" href="styles.css?v=20260127a">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
     <div id="search-focus-overlay" class="search-focus-overlay" aria-hidden="true"></div>
@@ -31,10 +32,10 @@
                     <i class="fas fa-search"></i>
                 </button>
                 <div class="language-switcher">
-                    <button class="lang-btn active" data-lang="en" onclick="switchLanguage('en')" title="English">
+                    <button class="lang-btn" data-lang="en" onclick="switchLanguage('en')" title="English">
                         EN
                     </button>
-                    <button class="lang-btn" data-lang="bg" onclick="switchLanguage('bg')" title="Български">
+                    <button class="lang-btn active" data-lang="bg" onclick="switchLanguage('bg')" title="Български">
                         BG
                     </button>
                     <select class="lang-dropdown" id="lang-dropdown" onchange="switchLanguage(this.value)">
@@ -122,8 +123,11 @@
         </div>
     </div>
 
+
+        <div id="site-map" class="site-map" style="display:none;"></div>
 		<footer id="site-footer" class="site-footer"></footer>
 
-    <script src="app.js?v=20260126e"></script>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="app.js?v=20260127b"></script>
 </body>
 </html>

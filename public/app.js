@@ -7,7 +7,22 @@ const API_URL = `${BASE_PATH}/api`;
 let products = [];
 let categories = [];
 let currentCategory = 'all';
-let currentLanguage = localStorage.getItem('language') || 'bg';
+const LANGUAGE_STORAGE_KEY = 'language';
+const LANGUAGE_USER_SELECTED_KEY = 'language_user_selected_v1';
+
+function getInitialLanguage() {
+    const stored = (localStorage.getItem(LANGUAGE_STORAGE_KEY) || '').toString().trim().toLowerCase();
+    const storedValid = (stored === 'en' || stored === 'bg') ? stored : '';
+
+    // If the user has never explicitly chosen a language, force BG as the initial language.
+    // This avoids older versions accidentally persisting EN as default.
+    const userSelected = localStorage.getItem(LANGUAGE_USER_SELECTED_KEY) === '1';
+    if (!userSelected) return 'bg';
+
+    return storedValid || 'bg';
+}
+
+let currentLanguage = getInitialLanguage();
 let appliedPromoCode = null;
 let cart = JSON.parse(localStorage.getItem('cart')) || [];
 let currencySettings = {};
@@ -51,8 +66,9 @@ function t(key, fallback) {
 
 // Switch language
 function switchLanguage(lang) {
-    currentLanguage = lang;
-    localStorage.setItem('language', lang);
+    currentLanguage = (lang === 'en' || lang === 'bg') ? lang : 'bg';
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLanguage);
+    localStorage.setItem(LANGUAGE_USER_SELECTED_KEY, '1');
     
     // Update active button
     document.querySelectorAll('.lang-btn').forEach(btn => {
@@ -150,6 +166,7 @@ async function loadData() {
         // Initialize language
         initLanguage();
 
+        renderSiteMap();
         renderSiteFooter();
         
         extractCategories();
@@ -211,6 +228,50 @@ function renderSiteFooter() {
             </div>
         </div>
     `;
+}
+
+function renderSiteMap() {
+    const mapEl = document.getElementById('site-map');
+    if (!mapEl) return;
+
+    const mapCfg = siteSettings?.map || {};
+    const enabled = !!mapCfg.enabled;
+    const lat = typeof mapCfg.lat === 'number' ? mapCfg.lat : parseFloat(mapCfg.lat);
+    const lng = typeof mapCfg.lng === 'number' ? mapCfg.lng : parseFloat(mapCfg.lng);
+    const zoom = Number.isFinite(Number(mapCfg.zoom)) ? Math.max(1, Math.min(19, Math.round(Number(mapCfg.zoom)))) : 16;
+    const label = (mapCfg.label || siteSettings?.footer?.contacts?.address || '').toString().trim();
+
+    if (!enabled || !Number.isFinite(lat) || !Number.isFinite(lng) || !window.L) {
+        mapEl.style.display = 'none';
+        mapEl.innerHTML = '';
+        return;
+    }
+
+    mapEl.style.display = 'block';
+    mapEl.innerHTML = '<div id="site-map-leaflet" style="width:100%;height:100%;"></div>';
+
+    try {
+        if (window.__siteLeafletMap && typeof window.__siteLeafletMap.remove === 'function') {
+            window.__siteLeafletMap.remove();
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    const map = window.L.map('site-map-leaflet', { scrollWheelZoom: false });
+    window.__siteLeafletMap = map;
+    map.setView([lat, lng], zoom);
+
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    const marker = window.L.marker([lat, lng]).addTo(map);
+    if (label) {
+        marker.bindTooltip(label, { permanent: true, direction: 'top', offset: [0, -10] });
+        marker.bindPopup(label);
+    }
 }
 
 function escapeHtml(value) {
@@ -608,7 +669,7 @@ document.addEventListener('click', (e) => {
     void btn.offsetWidth;
     btn.classList.add('btn-click-animate');
     window.setTimeout(() => btn.classList.remove('btn-click-animate'), 500);
-});
+}, true);
 
 function hideSearchDropdown() {
     const dropdown = document.getElementById('search-results');

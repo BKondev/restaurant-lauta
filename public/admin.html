@@ -295,6 +295,38 @@
 
             <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
 
+            <h3 style="margin: 0 0 10px;"><i class="fas fa-map-marked-alt"></i> Map</h3>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="site-map-enabled" />
+                    Show map above footer
+                </label>
+                <small>Requires latitude and longitude.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="site-map-label">Pin label (address name):</label>
+                <input type="text" id="site-map-label" placeholder="Restaurant address / name">
+                <small>Shown next to the pin. If empty, the Footer address is used.</small>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="site-map-lat">Latitude:</label>
+                    <input type="number" id="site-map-lat" step="any" placeholder="42.6977">
+                </div>
+                <div class="form-group">
+                    <label for="site-map-lng">Longitude:</label>
+                    <input type="number" id="site-map-lng" step="any" placeholder="23.3219">
+                </div>
+                <div class="form-group">
+                    <label for="site-map-zoom">Zoom:</label>
+                    <input type="number" id="site-map-zoom" min="1" max="19" step="1" placeholder="16">
+                </div>
+            </div>
+
+            <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
+
             <h3 style="margin: 0 0 10px;"><i class="fas fa-file-alt"></i> Legal Pages</h3>
             <div class="form-group">
                 <label for="site-privacy-html">Privacy Policy (HTML):</label>

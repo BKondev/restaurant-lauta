@@ -5,7 +5,18 @@ const API_URL = `${BASE_PATH}/api`;
 // State
 let cart = [];
 let appliedPromo = null;
-let currentLanguage = localStorage.getItem('language') || 'bg';
+const LANGUAGE_STORAGE_KEY = 'language';
+const LANGUAGE_USER_SELECTED_KEY = 'language_user_selected_v1';
+
+function getInitialLanguage() {
+    const stored = (localStorage.getItem(LANGUAGE_STORAGE_KEY) || '').toString().trim().toLowerCase();
+    const storedValid = (stored === 'en' || stored === 'bg') ? stored : '';
+    const userSelected = localStorage.getItem(LANGUAGE_USER_SELECTED_KEY) === '1';
+    if (!userSelected) return 'bg';
+    return storedValid || 'bg';
+}
+
+let currentLanguage = getInitialLanguage();
 let deliveryMethod = ''; // '' empty by default, 'delivery' or 'pickup'
 let orderTime = ''; // '' empty by default, 'now' or 'later'
 let scheduledTime = '';
@@ -366,6 +377,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateLanguage();
     renderCheckout();
 
+    renderSiteMap();
     renderSiteFooter();
 
     window.addEventListener('beforeunload', saveCheckoutState);
@@ -431,6 +443,50 @@ function renderSiteFooter() {
             </div>
         </div>
     `;
+}
+
+function renderSiteMap() {
+    const mapEl = document.getElementById('site-map');
+    if (!mapEl) return;
+
+    const mapCfg = siteSettings?.map || {};
+    const enabled = !!mapCfg.enabled;
+    const lat = typeof mapCfg.lat === 'number' ? mapCfg.lat : parseFloat(mapCfg.lat);
+    const lng = typeof mapCfg.lng === 'number' ? mapCfg.lng : parseFloat(mapCfg.lng);
+    const zoom = Number.isFinite(Number(mapCfg.zoom)) ? Math.max(1, Math.min(19, Math.round(Number(mapCfg.zoom)))) : 16;
+    const label = (mapCfg.label || siteSettings?.footer?.contacts?.address || '').toString().trim();
+
+    if (!enabled || !Number.isFinite(lat) || !Number.isFinite(lng) || !window.L) {
+        mapEl.style.display = 'none';
+        mapEl.innerHTML = '';
+        return;
+    }
+
+    mapEl.style.display = 'block';
+    mapEl.innerHTML = '<div id="site-map-leaflet" style="width:100%;height:100%;"></div>';
+
+    try {
+        if (window.__siteLeafletMap && typeof window.__siteLeafletMap.remove === 'function') {
+            window.__siteLeafletMap.remove();
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    const map = window.L.map('site-map-leaflet', { scrollWheelZoom: false });
+    window.__siteLeafletMap = map;
+    map.setView([lat, lng], zoom);
+
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    const marker = window.L.marker([lat, lng]).addTo(map);
+    if (label) {
+        marker.bindTooltip(label, { permanent: true, direction: 'top', offset: [0, -10] });
+        marker.bindPopup(label);
+    }
 }
 
 function escapeHtml(value) {
@@ -684,8 +740,9 @@ function syncLanguageUi() {
 function switchLanguage(lang) {
     if (!lang) return;
     if (!translations[lang]) return;
-    currentLanguage = lang;
-    localStorage.setItem('language', currentLanguage);
+    currentLanguage = (lang === 'en' || lang === 'bg') ? lang : 'bg';
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLanguage);
+    localStorage.setItem(LANGUAGE_USER_SELECTED_KEY, '1');
     syncLanguageUi();
     updateLanguage();
     renderCheckout();
