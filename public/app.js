@@ -618,6 +618,25 @@ function hideSearchDropdown() {
     }
 }
 
+function isDesktopSearch() {
+    return !!(window?.matchMedia && window.matchMedia('(min-width: 769px)').matches);
+}
+
+function setSearchFocusActive(active) {
+    if (!isDesktopSearch()) return;
+    document.body.classList.toggle('search-focus-active', !!active);
+}
+
+function closeSearchFocus() {
+    const input = document.getElementById('search-input');
+    if (input) {
+        input.value = '';
+        input.blur();
+    }
+    hideSearchDropdown();
+    setSearchFocusActive(false);
+}
+
 function renderSearchDropdown() {
     const searchInput = document.getElementById('search-input');
     const dropdown = document.getElementById('search-results');
@@ -749,6 +768,7 @@ function closeMobileSearch() {
     const container = document.getElementById('search-container');
     if (container) container.classList.remove('active');
     document.body.classList.remove('mobile-search-open');
+    setSearchFocusActive(false);
     const input = document.getElementById('search-input');
     if (input) input.value = '';
     hideSearchDropdown();
@@ -761,9 +781,23 @@ document.addEventListener('DOMContentLoaded', function() {
     // Search input
     const searchInput = document.getElementById('search-input');
     searchInput.addEventListener('input', renderSearchDropdown);
+    searchInput.addEventListener('focus', () => {
+        setSearchFocusActive(true);
+    });
+    searchInput.addEventListener('blur', () => {
+        // If user leaves search with no query and no dropdown, remove overlay.
+        setTimeout(() => {
+            const val = (searchInput.value || '').trim();
+            const dropdown = document.getElementById('search-results');
+            const dropdownOpen = !!(dropdown && dropdown.classList.contains('show'));
+            if (!dropdownOpen && !val) {
+                setSearchFocusActive(false);
+            }
+        }, 0);
+    });
     searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            hideSearchDropdown();
+            closeSearchFocus();
             return;
         }
         if (e.key === 'Enter') {
@@ -771,6 +805,14 @@ document.addEventListener('DOMContentLoaded', function() {
             if (firstItem) firstItem.click();
         }
     });
+
+    // Clicking the blurred overlay should close the search (desktop)
+    const overlay = document.getElementById('search-focus-overlay');
+    if (overlay) {
+        overlay.addEventListener('click', () => {
+            closeSearchFocus();
+        });
+    }
     
     // Modal close button
     const closeBtn = document.getElementById('modal-close-btn');
@@ -794,7 +836,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const searchContainer = document.getElementById('search-container');
         if (!searchContainer) return;
         if (!searchContainer.contains(e.target)) {
-            hideSearchDropdown();
+            closeSearchFocus();
         }
     });
 });

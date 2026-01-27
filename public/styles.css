@@ -21,6 +21,31 @@ body {
     line-height: 1.6;
 }
 
+/* ==================== Search Focus Overlay (Desktop) ==================== */
+.search-focus-overlay {
+    display: none;
+}
+
+@media (min-width: 769px) {
+    .search-focus-overlay {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.18);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 160ms ease;
+        z-index: 900; /* below .top-bar (1000), above page content */
+    }
+
+    body.search-focus-active .search-focus-overlay {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+
 .container {
     max-width: 1400px;
     margin: 0 auto;
