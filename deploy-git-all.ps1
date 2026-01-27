@@ -225,7 +225,8 @@ restart_one() {
       git diff > "$PRESERVE_DIR/local-changes.$TS.patch" || true
       git diff --cached > "$PRESERVE_DIR/local-staged.$TS.patch" || true
       git reset --hard || true
-      git clean -fd || true
+      # Keep backups/uploads while cleaning untracked repo junk
+      git clean -fd -e .preserve -e uploads || true
     fi
   fi
 
