@@ -236,8 +236,7 @@ restart_one() {
   git checkout -f -B "$BRANCH" "$REMOTE/$BRANCH"
   git reset --hard "$REMOTE/$BRANCH"
 
-  # Remove internal/dev docs from production
-  rm -f "$DIR/GUIDE-AI.md" || true
+  # Keep docs that are tracked in the repo (removing them makes the server working tree dirty)
 
   # Restore preserved files if missing
   if [ ! -f "$DIR/database.json" ] && [ -f "$PRESERVE_DIR/database.json.$TS" ]; then
