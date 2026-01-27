@@ -138,7 +138,8 @@ fi
 # If server working tree has local changes, preserve a patch and force reset.
 # (Production should be driven by Git; database/.env/uploads are preserved separately above.)
 if [ -d .git ]; then
-  if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+  # Ignore untracked files (like .preserve/) when checking for local changes.
+  if [ -n "$(git status --porcelain -uno 2>/dev/null)" ]; then
     echo "Server repo has local changes; preserving patch and resetting..."
     git diff > "$PRESERVE_DIR/local-changes.$TS.patch" || true
     git diff --cached > "$PRESERVE_DIR/local-staged.$TS.patch" || true
