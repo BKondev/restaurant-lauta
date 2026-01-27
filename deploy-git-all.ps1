@@ -217,9 +217,21 @@ restart_one() {
     git remote add "$REMOTE" "$REPO_URL" || true
   fi
 
+  # If server working tree has local changes, preserve a patch and force reset.
+  # (database/.env/uploads are preserved separately above.)
+  if [ -d .git ]; then
+    if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+      echo "Server repo has local changes; preserving patch and resetting..."
+      git diff > "$PRESERVE_DIR/local-changes.$TS.patch" || true
+      git diff --cached > "$PRESERVE_DIR/local-staged.$TS.patch" || true
+      git reset --hard || true
+      git clean -fd || true
+    fi
+  fi
+
   git remote set-url "$REMOTE" "$REPO_URL" || true
   git fetch "$REMOTE" --prune
-  git checkout -B "$BRANCH" "$REMOTE/$BRANCH"
+  git checkout -f -B "$BRANCH" "$REMOTE/$BRANCH"
   git reset --hard "$REMOTE/$BRANCH"
 
   # Remove internal/dev docs from production
