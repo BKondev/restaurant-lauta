@@ -283,14 +283,31 @@ function updateManageSelectionUI() {
 
 // Check authentication on page load
 function checkAuth() {
-    const token = sessionStorage.getItem('adminToken');
-    // Just check if token exists, don't redirect
+    // Token is normally in sessionStorage, but we also accept localStorage as a fallback.
+    // This reduces "Not authenticated" confusion after refresh/navigation.
+    const token = getAdminToken();
     return !!token;
 }
 
+function getAdminToken() {
+    return sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken');
+}
+
+function clearAdminToken() {
+    sessionStorage.removeItem('adminToken');
+    sessionStorage.removeItem('adminUser');
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminUser');
+}
+
 async function ensureAuthOrRedirect() {
-    const token = sessionStorage.getItem('adminToken');
+    const token = getAdminToken();
     if (!token) return false;
+
+    // Prefer sessionStorage for the current tab once we have a token.
+    if (!sessionStorage.getItem('adminToken')) {
+        try { sessionStorage.setItem('adminToken', token); } catch (e) {}
+    }
 
     try {
         const res = await fetch(`${API_URL}/restaurants/me`, {
@@ -302,8 +319,7 @@ async function ensureAuthOrRedirect() {
     }
 
     // Token is missing/expired (server restarts clear in-memory tokens)
-    sessionStorage.removeItem('adminToken');
-    sessionStorage.removeItem('adminUser');
+    clearAdminToken();
     alert('Session expired. Please login again.');
     window.location.href = `${BASE_PATH}/login`;
     return false;
@@ -311,15 +327,17 @@ async function ensureAuthOrRedirect() {
 
 // Logout function
 function logout() {
-    sessionStorage.removeItem('adminToken');
-    sessionStorage.removeItem('adminUser');
+    clearAdminToken();
     window.location.href = `${BASE_PATH}/login`;
 }
 
 // Load data on page load
 document.addEventListener('DOMContentLoaded', function() {
     // Check authentication first
-    if (!checkAuth()) return;
+    if (!checkAuth()) {
+        window.location.href = `${BASE_PATH}/login`;
+        return;
+    }
 
     (async () => {
         const ok = await ensureAuthOrRedirect();
@@ -839,9 +857,9 @@ async function loadSiteSettings() {
 
 async function updateSiteSettings() {
     try {
-        const token = sessionStorage.getItem('adminToken');
+        const token = getAdminToken();
         if (!token) {
-            alert('Not authenticated');
+            window.location.href = `${BASE_PATH}/login`;
             return;
         }
 
@@ -952,7 +970,7 @@ async function updateRestaurantSettings() {
     }
     
     try {
-        const token = sessionStorage.getItem('adminToken');
+        const token = getAdminToken();
         const response = await fetch(`${API_URL}/settings`, {
             method: 'PUT',
             headers: {

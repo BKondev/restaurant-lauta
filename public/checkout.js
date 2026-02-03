@@ -837,7 +837,7 @@ function renderCheckout() {
                         <i class="fas fa-minus"></i>
                     </button>
                     <div class="time-display" id="selected-time-display">
-                        ${selectedTimeSlot || '11:00'}
+                                    ${selectedTimeSlot || minutesToHHMM(getMinAllowedTimeMinutes())}
                     </div>
                     <button type="button" class="time-adjust-btn" onclick="adjustTime(15)">
                         <i class="fas fa-plus"></i>
@@ -937,7 +937,6 @@ function renderCheckout() {
     const { subtotal, discount, deliveryFee, freeDeliveryApplied, total } = calculateTotals();
 
     summarySection.innerHTML = `
-        <h2 class="section-title">Order Summary</h2>
         <div class="summary-row subtotal">
             <span data-translate="subtotal">${translations[currentLanguage].subtotal}</span>
             <span>${formatPrice(subtotal)}</span>
@@ -1022,6 +1021,14 @@ function getDeliveryWindowMinutes() {
     return { open: 11 * 60, close: (21 * 60) + 30 };
 }
 
+function getMinAllowedTimeMinutes() {
+    const window = getAllowedWindowMinutes();
+    const minCandidate = roundUpTo15Minutes(nowMinutesOfDay() + 60);
+    // Delivery starts at 11:00 and needs 60 minutes prep+delivery => earliest 12:00.
+    const deliveryEarliest = deliveryMethod === 'delivery' ? (12 * 60) : 0;
+    return Math.max(window.open, minCandidate, deliveryEarliest);
+}
+
 function getAllowedWindowMinutes() {
     const restaurant = getRestaurantWindowMinutes();
     if (deliveryMethod !== 'delivery') return restaurant;
@@ -1101,8 +1108,7 @@ function initializeTimePicker() {
     if (orderTime !== 'later') return;
 
     const window = getAllowedWindowMinutes();
-    const minCandidate = roundUpTo15Minutes(nowMinutesOfDay() + 60);
-    const minAllowed = Math.max(window.open, minCandidate);
+    const minAllowed = getMinAllowedTimeMinutes();
     const maxAllowed = window.close;
 
     if (maxAllowed < minAllowed) {
@@ -1136,8 +1142,7 @@ function adjustTime(minutes) {
     }
 
     const window = getAllowedWindowMinutes();
-    const minCandidate = roundUpTo15Minutes(nowMinutesOfDay() + 60);
-    const minAllowed = Math.max(window.open, minCandidate);
+    const minAllowed = getMinAllowedTimeMinutes();
     const maxAllowed = window.close;
 
     if (maxAllowed < minAllowed) {
@@ -1157,7 +1162,7 @@ function adjustTime(minutes) {
 function updateTimeDisplay() {
     const display = document.getElementById('selected-time-display');
     if (display) {
-        const fallback = minutesToHHMM(getAllowedWindowMinutes().open);
+        const fallback = minutesToHHMM(getMinAllowedTimeMinutes());
         display.textContent = selectedTimeSlot || fallback;
     }
 }
@@ -1659,7 +1664,6 @@ function updateOrderSummary() {
     const { subtotal, discount, deliveryFee, freeDeliveryApplied, total } = calculateTotals();
     
     summarySection.innerHTML = `
-        <h2 class="section-title">Order Summary</h2>
         <div class="summary-row subtotal">
             <span data-translate="subtotal">${translations[currentLanguage].subtotal}</span>
             <span>${formatPrice(subtotal)}</span>

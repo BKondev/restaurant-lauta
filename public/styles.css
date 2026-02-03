@@ -65,6 +65,10 @@ body {
 }
 
 .top-bar .container {
+    min-height: 48px;
+}
+
+.top-bar .container {
     display: flex;
     justify-content: space-between;
     align-items: center;

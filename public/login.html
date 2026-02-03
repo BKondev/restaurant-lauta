@@ -228,12 +228,6 @@
             </button>
         </form>
 
-        <div class="default-credentials">
-            <h4><i class="fas fa-info-circle"></i> Default Credentials:</h4>
-            <code>Username: admin</code>
-            <code>Password: admin123</code>
-        </div>
-
         <div class="back-link">
             <a href="../">
                 <i class="fas fa-arrow-left"></i> Back to Menu
@@ -277,6 +271,12 @@
                     // Store token in sessionStorage
                     sessionStorage.setItem('adminToken', data.token);
                     sessionStorage.setItem('adminUser', username);
+
+                    // Also store in localStorage as a fallback (sessionStorage clears on tab close)
+                    try {
+                        localStorage.setItem('adminToken', data.token);
+                        localStorage.setItem('adminUser', username);
+                    } catch (e) {}
                     
                     // Redirect to admin within the same BASE_PATH
                     window.location.href = `${BASE_PATH}/admin`;
