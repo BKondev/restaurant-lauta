@@ -1060,6 +1060,33 @@ body {
         -webkit-overflow-scrolling: touch;
     }
     
+    /* Order History (mobile): keep structured layout, scroll horizontally */
+    #orders-history-list {
+        display: flex;
+        gap: 12px;
+        overflow-x: auto;
+        padding-bottom: 8px;
+        -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x mandatory;
+    }
+
+    #orders-history-list .order-card {
+        flex: 0 0 auto;
+        min-width: 720px;
+        scroll-snap-align: start;
+    }
+
+    #orders-history-list .order-body {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    #orders-history-list .order-actions {
+        flex-direction: row;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+
+    /* Pending orders (mobile): keep compact stacked layout */
     .order-body {
         grid-template-columns: 1fr;
     }

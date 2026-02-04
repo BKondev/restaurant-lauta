@@ -1552,7 +1552,7 @@ body {
     }
 
     .top-bar .container {
-        min-height: 38px;
+        min-height: 44px;
     }
 
     /* Mobile header layout: logo left, cart right, search toggle centered */
