@@ -1488,7 +1488,14 @@ async function sendEmail({ to, subject, text, html, replyTo }) {
             html,
             ...(finalReplyTo ? { replyTo: finalReplyTo } : {})
         });
-        return { success: true, messageId: info.messageId };
+        return {
+            success: true,
+            messageId: info?.messageId,
+            accepted: info?.accepted,
+            rejected: info?.rejected,
+            pending: info?.pending,
+            response: info?.response
+        };
     } catch (err) {
         console.error('[EMAIL] sendMail failed:', err);
         return {
