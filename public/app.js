@@ -33,6 +33,34 @@ let siteSearchMode = 'names_and_descriptions';
 let modalProductId = null;
 let modalQuantity = 1;
 
+let topBarHeightSyncInitialized = false;
+
+function syncTopBarHeightCssVar() {
+    const topBar = document.querySelector('.top-bar');
+    if (!topBar) return;
+    const height = Math.ceil(topBar.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--top-bar-height', `${height}px`);
+}
+
+function initTopBarHeightSync() {
+    if (topBarHeightSyncInitialized) return;
+    topBarHeightSyncInitialized = true;
+
+    const run = () => syncTopBarHeightCssVar();
+    run();
+    requestAnimationFrame(run);
+    window.addEventListener('resize', () => requestAnimationFrame(run));
+    window.addEventListener('orientationchange', run);
+}
+
+function getTopBarHeight() {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue('--top-bar-height');
+    const val = parseFloat(raw);
+    if (Number.isFinite(val) && val > 0) return val;
+    const topBar = document.querySelector('.top-bar');
+    return topBar ? topBar.getBoundingClientRect().height : 0;
+}
+
 // Translations
 const translations = {
     en: {
@@ -374,9 +402,7 @@ function scrollToProductsTop({ behavior = 'auto' } = {}) {
     const container = document.getElementById('products-container') || document.querySelector('.content');
     if (!container) return;
 
-    const topBar = document.querySelector('.top-bar');
-    const topBarHeight = topBar ? topBar.getBoundingClientRect().height : 0;
-    const offset = topBarHeight + 12;
+    const offset = getTopBarHeight() + 24;
     const rect = container.getBoundingClientRect();
     const targetTop = rect.top + window.pageYOffset - offset;
 
@@ -687,7 +713,7 @@ document.addEventListener('click', (e) => {
     // Force reflow so animation can retrigger
     void btn.offsetWidth;
     btn.classList.add('btn-click-animate');
-    window.setTimeout(() => btn.classList.remove('btn-click-animate'), 500);
+    window.setTimeout(() => btn.classList.remove('btn-click-animate'), 1100);
 }, true);
 
 function hideSearchDropdown() {
@@ -856,6 +882,7 @@ function closeMobileSearch() {
 
 // Search functionality
 document.addEventListener('DOMContentLoaded', function() {
+    initTopBarHeightSync();
     loadData();
     
     // Search input
