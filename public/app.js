@@ -370,10 +370,29 @@ function renderCategories() {
 }
 
 // Filter products by category
-function filterByCategory(category) {
+function scrollToProductsTop({ behavior = 'auto' } = {}) {
+    const container = document.getElementById('products-container') || document.querySelector('.content');
+    if (!container) return;
+
+    const topBar = document.querySelector('.top-bar');
+    const topBarHeight = topBar ? topBar.getBoundingClientRect().height : 0;
+    const offset = topBarHeight + 12;
+    const rect = container.getBoundingClientRect();
+    const targetTop = rect.top + window.pageYOffset - offset;
+
+    window.scrollTo({ top: Math.max(0, targetTop), behavior });
+}
+
+function filterByCategory(category, options = {}) {
+    const { scrollToTop = true, scrollBehavior = 'auto' } = options;
     currentCategory = category;
     renderCategories();
     renderProducts();
+
+    if (scrollToTop) {
+        // Run after render so layout is stable and scroll target is correct.
+        requestAnimationFrame(() => scrollToProductsTop({ behavior: scrollBehavior }));
+    }
 }
 
 function getCategoryDisplayName(category) {
@@ -790,7 +809,7 @@ function jumpToProduct(product) {
     if (!product) return;
 
     const category = product.category || 'all';
-    filterByCategory(category);
+    filterByCategory(category, { scrollToTop: false });
 
     const tryScroll = () => {
         const card = document.querySelector(`.product-card[data-product-id="${product.id}"]`);
