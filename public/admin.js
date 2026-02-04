@@ -115,7 +115,61 @@ const translations = {
         csvDiscount: 'Discount',
         csvTotal: 'Total',
         csvOwnerDiscount: 'Owner Discount',
-        csvFinalTotal: 'Final Total'
+        csvFinalTotal: 'Final Total',
+
+        previous: 'Previous',
+        next: 'Next',
+        pageInfoEmpty: 'Page 0 of 0',
+        pageInfoProducts: 'Page {current} of {total} ({count} products)',
+
+        noProductsFound: 'No products found',
+        addFirstProductHint: 'Add your first product using the form above',
+
+        createBundle: 'Create Bundle',
+        applyPromoToSelected: 'Apply Promo to Selected',
+        deleteSelected: 'Delete Selected',
+        applyPromoToCategory: 'Apply Promo to Category',
+
+        manageProductsHeading: 'Manage Products',
+        dataManagement: 'Data Management',
+
+        select: 'Select',
+        enName: 'EN Name',
+        bgName: 'BG Name',
+        image: 'Image',
+
+        sessionExpired: 'Session expired. Please login again.',
+        selectAtLeastOneProduct: 'Select at least one product.',
+        selectAtLeastTwoProductsBundle: 'Please select at least 2 products to create a bundle.',
+        deleteSelectedConfirm: 'Delete {count} selected product(s)? This cannot be undone.',
+        deletedProductsSuccess: '{count} product(s) deleted successfully',
+        failedToDeleteProducts: 'Failed to delete products: {error}',
+
+        promoAppliedSelected: 'Promo applied to selected products',
+
+        confirmDeleteTitle: 'Confirm Delete',
+        confirmDeleteProductText: 'Are you sure you want to delete this product?',
+        createBundleFromSelected: 'Create Bundle from Selected Products',
+        bundleNameEn: 'Bundle Name (English):',
+        bundleNameBg: 'Bundle Name (Bulgarian):',
+        bundlePrice: 'Bundle Price (€):',
+        bundleSpecialLabel: 'Special Label (Optional):',
+        bundleImageUrl: 'Image URL (Optional):',
+        leaveEmptyAutoGenerate: 'Leave empty to auto-generate from product names',
+        willAppearAsBadge: 'Will appear as a badge on the product card (like promo labels)',
+        leaveEmptyUseFirstImage: "Leave empty to use first product's image",
+        editOrder: 'Edit Order',
+        addNewProduct: 'Add New Product',
+        selectCategory: 'Select a category.',
+        selectCategoryPlaceholder: 'Select category...',
+        allCategories: 'All Categories',
+        productsWord: 'products',
+        manageProductsSearchPlaceholder: 'Search by EN name, BG name, or ID...',
+        deliveryFeeLabel: 'Delivery Fee',
+        discountPercentLabel: 'Discount (%)',
+        name: 'Name',
+        items: 'Items',
+        addItem: 'Add Item'
     },
     bg: {
         adminPanel: 'Админ Панел',
@@ -224,7 +278,61 @@ const translations = {
         csvDiscount: 'Отстъпка',
         csvTotal: 'Общо',
         csvOwnerDiscount: 'Отстъпка (собственик)',
-        csvFinalTotal: 'Крайна сума'
+        csvFinalTotal: 'Крайна сума',
+
+        previous: 'Предишна',
+        next: 'Следваща',
+        pageInfoEmpty: 'Страница 0 от 0',
+        pageInfoProducts: 'Страница {current} от {total} ({count} продукта)',
+
+        noProductsFound: 'Няма намерени продукти',
+        addFirstProductHint: 'Добавете първия продукт от формата по-горе',
+
+        createBundle: 'Създай Комбо',
+        applyPromoToSelected: 'Промо за избраните',
+        deleteSelected: 'Изтрий избраните',
+        applyPromoToCategory: 'Промо за категория',
+
+        manageProductsHeading: 'Управление на Продукти',
+        dataManagement: 'Управление на Данни',
+
+        select: 'Избор',
+        enName: 'EN Име',
+        bgName: 'BG Име',
+        image: 'Снимка',
+
+        sessionExpired: 'Сесията изтече. Моля, влезте отново.',
+        selectAtLeastOneProduct: 'Изберете поне един продукт.',
+        selectAtLeastTwoProductsBundle: 'Изберете поне 2 продукта за да създадете комбо.',
+        deleteSelectedConfirm: 'Да изтрия {count} избрани продукта? Това не може да се върне.',
+        deletedProductsSuccess: 'Изтрити {count} продукта успешно',
+        failedToDeleteProducts: 'Грешка при изтриване: {error}',
+
+        promoAppliedSelected: 'Промото е приложено към избраните продукти',
+
+        confirmDeleteTitle: 'Потвърдете изтриването',
+        confirmDeleteProductText: 'Сигурни ли сте, че искате да изтриете този продукт?',
+        createBundleFromSelected: 'Създай комбо от избраните продукти',
+        bundleNameEn: 'Име на комбото (Английски):',
+        bundleNameBg: 'Име на комбото (Български):',
+        bundlePrice: 'Цена на комбото (€):',
+        bundleSpecialLabel: 'Специален етикет (по избор):',
+        bundleImageUrl: 'URL на снимка (по избор):',
+        leaveEmptyAutoGenerate: 'Оставете празно за авто-генериране от имената на продуктите',
+        willAppearAsBadge: 'Ще се показва като бадж на картата на продукта (като промо етикет)',
+        leaveEmptyUseFirstImage: 'Оставете празно за да се използва снимката на първия продукт',
+        editOrder: 'Редактирай Поръчка',
+        addNewProduct: 'Добави Нов Продукт',
+        selectCategory: 'Изберете категория.',
+        selectCategoryPlaceholder: 'Изберете категория...',
+        allCategories: 'Всички Категории',
+        productsWord: 'продукта',
+        manageProductsSearchPlaceholder: 'Търси по EN име, BG име или ID...',
+        deliveryFeeLabel: 'Такса доставка',
+        discountPercentLabel: 'Отстъпка (%)',
+        name: 'Име',
+        items: 'Артикули',
+        addItem: 'Добави артикул'
     }
 };
 
@@ -267,6 +375,12 @@ function switchLanguage(lang) {
     document.querySelectorAll('.lang-btn').forEach(btn => {
         btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
     });
+
+    // Re-render dynamic sections so newly generated strings are localized.
+    try { renderProducts(); } catch (e) {}
+    try { renderOrdersHistory(); } catch (e) {}
+    try { renderComboProductSelector(); } catch (e) {}
+    try { updateManageSelectionUI(); } catch (e) {}
 }
 
 // Initialize language on page load
@@ -360,12 +474,12 @@ function updateManageSelectionUI() {
     
     // Update bottom bar count
     if (countEl) {
-        countEl.textContent = `${count} selected`;
+        countEl.textContent = `${count} ${t('selected', 'selected')}`;
     }
     
     // Update top bar count
     if (countElTop) {
-        countElTop.textContent = `${count} selected`;
+        countElTop.textContent = `${count} ${t('selected', 'selected')}`;
     }
     
     // Update bottom bar buttons
@@ -447,7 +561,7 @@ async function ensureAuthOrRedirect() {
 
     // Token is missing/expired (server restarts clear in-memory tokens)
     clearAdminToken();
-    alert('Session expired. Please login again.');
+    alert(t('sessionExpired', 'Session expired. Please login again.'));
     window.location.href = `${BASE_PATH}/login`;
     return false;
 }
@@ -533,7 +647,7 @@ function initManageControls() {
     if (createBundleBtn) {
         createBundleBtn.addEventListener('click', () => {
             if (manageSelected.size < 2) {
-                alert('Please select at least 2 products to create a bundle.');
+                alert(t('selectAtLeastTwoProductsBundle', 'Please select at least 2 products to create a bundle.'));
                 return;
             }
             openBundleModal();
@@ -543,7 +657,7 @@ function initManageControls() {
     if (createBundleBtnTop) {
         createBundleBtnTop.addEventListener('click', () => {
             if (manageSelected.size < 2) {
-                alert('Please select at least 2 products to create a bundle.');
+                alert(t('selectAtLeastTwoProductsBundle', 'Please select at least 2 products to create a bundle.'));
                 return;
             }
             openBundleModal();
@@ -553,7 +667,7 @@ function initManageControls() {
     if (bulkPromoBtn) {
         bulkPromoBtn.addEventListener('click', async () => {
             const ids = Array.from(manageSelected);
-            if (ids.length === 0) { alert('Select at least one product.'); return; }
+            if (ids.length === 0) { alert(t('selectAtLeastOneProduct', 'Select at least one product.')); return; }
             const promo = await promptPromoConfig();
             if (!promo) return;
             await applyBatchPromo(ids, promo);
@@ -567,7 +681,7 @@ function initManageControls() {
     if (bulkPromoBtnTop) {
         bulkPromoBtnTop.addEventListener('click', async () => {
             const ids = Array.from(manageSelected);
-            if (ids.length === 0) { alert('Select at least one product.'); return; }
+            if (ids.length === 0) { alert(t('selectAtLeastOneProduct', 'Select at least one product.')); return; }
             const promo = await promptPromoConfig();
             if (!promo) return;
             await applyBatchPromo(ids, promo);
@@ -581,8 +695,8 @@ function initManageControls() {
     if (bulkDeleteBtn) {
         bulkDeleteBtn.addEventListener('click', async () => {
             const ids = Array.from(manageSelected);
-            if (ids.length === 0) { alert('Select at least one product.'); return; }
-            if (!confirm(`Delete ${ids.length} selected product(s)? This cannot be undone.`)) return;
+            if (ids.length === 0) { alert(t('selectAtLeastOneProduct', 'Select at least one product.')); return; }
+            if (!confirm(t('deleteSelectedConfirm', `Delete ${ids.length} selected product(s)? This cannot be undone.`).replace('{count}', String(ids.length)))) return;
             try {
                 const token = sessionStorage.getItem('adminToken');
                 const res = await fetch(`${API_URL}/products/batch`, {
@@ -599,14 +713,14 @@ function initManageControls() {
                     throw new Error(errorData.error || `Server error: ${res.status}`);
                 }
                 const result = await res.json();
-                alert(`${result.count} product(s) deleted successfully`);
+                alert(t('deletedProductsSuccess', `${result.count} product(s) deleted successfully`).replace('{count}', String(result.count)));
                 await loadProducts();
                 manageSelected.clear();
                 if (selectAll) selectAll.checked = false;
                 updateManageSelectionUI();
             } catch (e) {
                 console.error('Delete failed:', e);
-                alert(`Failed to delete products: ${e.message}`);
+                alert(t('failedToDeleteProducts', `Failed to delete products: ${e.message}`).replace('{error}', e.message));
             }
         });
     }
@@ -615,8 +729,8 @@ function initManageControls() {
     if (bulkDeleteBtnTop) {
         bulkDeleteBtnTop.addEventListener('click', async () => {
             const ids = Array.from(manageSelected);
-            if (ids.length === 0) { alert('Select at least one product.'); return; }
-            if (!confirm(`Delete ${ids.length} selected product(s)? This cannot be undone.`)) return;
+            if (ids.length === 0) { alert(t('selectAtLeastOneProduct', 'Select at least one product.')); return; }
+            if (!confirm(t('deleteSelectedConfirm', `Delete ${ids.length} selected product(s)? This cannot be undone.`).replace('{count}', String(ids.length)))) return;
             try {
                 const token = sessionStorage.getItem('adminToken');
                 const res = await fetch(`${API_URL}/products/batch`, {
@@ -633,14 +747,14 @@ function initManageControls() {
                     throw new Error(errorData.error || `Server error: ${res.status}`);
                 }
                 const result = await res.json();
-                alert(`${result.count} product(s) deleted successfully`);
+                alert(t('deletedProductsSuccess', `${result.count} product(s) deleted successfully`).replace('{count}', String(result.count)));
                 await loadProducts();
                 manageSelected.clear();
                 if (selectAll) selectAll.checked = false;
                 updateManageSelectionUI();
             } catch (e) {
                 console.error('Delete failed:', e);
-                alert(`Failed to delete products: ${e.message}`);
+                alert(t('failedToDeleteProducts', `Failed to delete products: ${e.message}`).replace('{error}', e.message));
             }
         });
     }
@@ -648,7 +762,7 @@ function initManageControls() {
     if (categoryPromoBtn) {
         categoryPromoBtn.addEventListener('click', async () => {
             const category = categorySelect.value;
-            if (!category) { alert('Select a category.'); return; }
+            if (!category) { alert(t('selectCategory', 'Select a category.')); return; }
             const promo = await promptPromoConfig();
             if (!promo) return;
             await applyCategoryPromo(category, promo);
@@ -672,7 +786,7 @@ function initProductSearchUI() {
     // Populate category dropdown
     const categories = new Set();
     allProducts.forEach(p => categories.add(p.category));
-    bulkCategorySelect.innerHTML = '<option value="">Select category...</option>' + Array.from(categories).map(c => `<option value="${c}">${c}</option>`).join('');
+    bulkCategorySelect.innerHTML = `<option value="">${t('selectCategoryPlaceholder', 'Select category...')}</option>` + Array.from(categories).map(c => `<option value="${c}">${c}</option>`).join('');
 
     // Debounced search
     let t;
@@ -819,7 +933,7 @@ async function applyBatchPromo(ids, promoConfig) {
         });
         if (!res.ok) throw new Error('Batch promo failed');
         await loadProductsForSearch();
-        alert('Promo applied to selected products');
+        alert(t('promoAppliedSelected', 'Promo applied to selected products'));
     } catch (e) { console.error(e); alert('Failed to apply promo'); }
 }
 
@@ -1575,8 +1689,8 @@ function resetForm() {
     document.getElementById('product-id').value = '';
     document.getElementById('image-preview').classList.remove('active');
     document.getElementById('image-preview').innerHTML = '';
-    document.getElementById('form-title').textContent = 'Add New Product';
-    document.getElementById('submit-text').textContent = 'Add Product';
+    document.getElementById('form-title').textContent = t('addNewProduct', 'Add New Product');
+    document.getElementById('submit-text').textContent = t('addProduct', 'Add Product');
     document.getElementById('cancel-btn').style.display = 'none';
     
     // Reset promo fields
@@ -1623,7 +1737,7 @@ function renderProducts() {
     if (filteredProducts.length === 0) {
         tbody.innerHTML = '';
         noProducts.style.display = 'block';
-        if (pageInfo) pageInfo.textContent = 'Page 0 of 0';
+        if (pageInfo) pageInfo.textContent = t('pageInfoEmpty', 'Page 0 of 0');
         return;
     }
     
@@ -1649,25 +1763,25 @@ function renderProducts() {
 
             return `
                 <tr>
-                    <td style="width:40px;" data-label="Select">
+                    <td style="width:40px;" data-label="${t('select', 'Select')}">
                         <input type="checkbox" ${manageSelected.has(product.id) ? 'checked' : ''} onclick="toggleManageSelect(${product.id}, this.checked)">
                     </td>
                     <td data-label="ID">${product.id}</td>
-                    <td data-label="EN Name">${enName}</td>
-                    <td data-label="BG Name">${bgName}</td>
-                    <td data-label="Category"><span class="product-category">${category}</span></td>
-                    <td data-label="Price"><span class="product-price">${priceDisplay}</span></td>
+                    <td data-label="${t('enName', 'EN Name')}">${enName}</td>
+                    <td data-label="${t('bgName', 'BG Name')}">${bgName}</td>
+                    <td data-label="${t('category', 'Category')}"><span class="product-category">${category}</span></td>
+                    <td data-label="${t('price', 'Price')}"><span class="product-price">${priceDisplay}</span></td>
                     <td data-label="Promo">${hasPromo ? `<span class="product-price" style="background:#e74c3c; color:#fff; padding:4px 8px; border-radius:6px; font-weight:700;">${promoDisplay}</span>` : '-'}</td>
-                    <td data-label="Image">
+                    <td data-label="${t('image', 'Image')}">
                         ${imageUrl ? `<img src="${imageUrl}" alt="${enName}" class="product-img-thumb" onerror="this.src='https://via.placeholder.com/80x80?text=No+Image'">` : `<img src="https://via.placeholder.com/80x80?text=No+Image" alt="${enName}" class="product-img-thumb">`}
                     </td>
-                    <td data-label="Actions">
+                    <td data-label="${t('actions', 'Actions')}">
                         <div class="product-actions">
                             <button onclick="editProduct(${product.id})" class="btn btn-primary btn-small">
-                                <i class="fas fa-edit"></i> Edit
+                                <i class="fas fa-edit"></i> ${t('edit', 'Edit')}
                             </button>
                             <button onclick="deleteProduct(${product.id})" class="btn btn-danger btn-small">
-                                <i class="fas fa-trash"></i> Delete
+                                <i class="fas fa-trash"></i> ${t('delete', 'Delete')}
                             </button>
                         </div>
                     </td>
@@ -1677,7 +1791,10 @@ function renderProducts() {
     
     // Update page info
     if (pageInfo) {
-        pageInfo.textContent = `Page ${manageCurrentPage} of ${totalPages} (${filteredProducts.length} products)`;
+        pageInfo.textContent = t('pageInfoProducts', `Page ${manageCurrentPage} of ${totalPages} (${filteredProducts.length} products)`)
+            .replace('{current}', String(manageCurrentPage))
+            .replace('{total}', String(totalPages))
+            .replace('{count}', String(filteredProducts.length));
     }
 }
 
@@ -4446,7 +4563,7 @@ function populateComboCategoryFilter() {
     if (!select) return;
     
     const categories = [...new Set(allComboProducts.map(p => p.category))];
-    select.innerHTML = '<option value="">All Categories</option>' + 
+    select.innerHTML = `<option value="">${t('allCategories', 'All Categories')}</option>` + 
         categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
 }
 
@@ -4499,8 +4616,8 @@ function renderComboProductSelector() {
     const products = comboFilteredProducts.length > 0 ? comboFilteredProducts : allComboProducts;
     
     if (products.length === 0) {
-        container.innerHTML = '<p style="color: #999; text-align: center;">No products found.</p>';
-        if (pageInfo) pageInfo.textContent = 'Page 0 of 0';
+        container.innerHTML = `<p style="color: #999; text-align: center;">${t('noProductsFound', 'No products found')}</p>`;
+        if (pageInfo) pageInfo.textContent = t('pageInfoEmpty', 'Page 0 of 0');
         return;
     }
     
@@ -4548,7 +4665,10 @@ function renderComboProductSelector() {
     
     // Update page info
     if (pageInfo) {
-        pageInfo.textContent = `Page ${comboCurrentPage} of ${totalPages} (${products.length} products)`;
+        pageInfo.textContent = t('pageInfoProducts', `Page ${comboCurrentPage} of ${totalPages} (${products.length} products)`)
+            .replace('{current}', String(comboCurrentPage))
+            .replace('{total}', String(totalPages))
+            .replace('{count}', String(products.length));
     }
 }
 

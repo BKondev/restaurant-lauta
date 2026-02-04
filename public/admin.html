@@ -888,7 +888,7 @@
                         <i class="fas fa-save"></i> <span id="submit-text">Add Product</span>
                     </button>
                     <button type="button" onclick="cancelEdit()" class="btn btn-secondary" id="cancel-btn" style="display: none;">
-                        <i class="fas fa-times"></i> Cancel
+                        <i class="fas fa-times"></i> <span data-translate="cancel">Cancel</span>
                     </button>
                 </div>
             </form>
@@ -896,12 +896,12 @@
 
         <!-- Products List Section -->
         <div class="admin-section">
-            <h2><i class="fas fa-list"></i> Manage Products</h2>
+            <h2><i class="fas fa-list"></i> <span data-translate="manageProductsHeading">Manage Products</span></h2>
             
             <div class="filter-bar">
-                <input type="text" id="admin-search" placeholder="Search by EN name, BG name, or ID..." onkeyup="filterProducts()">
+                <input type="text" id="admin-search" data-translate-placeholder="manageProductsSearchPlaceholder" placeholder="Search by EN name, BG name, or ID..." onkeyup="filterProducts()">
                 <select id="category-filter" onchange="filterProducts()">
-                    <option value="all">All Categories</option>
+                    <option value="all" data-translate="allCategories">All Categories</option>
                 </select>
             </div>
 
@@ -909,10 +909,10 @@
             <div class="form-group" style="display:flex; gap:12px; align-items:center; margin-bottom:15px; flex-wrap:wrap;">
                 <span id="manage-selection-count-top" style="padding:8px 12px; background:#f0f0f0; border-radius:6px; font-weight:600; color:#555;">0 selected</span>
                 <button id="manage-create-bundle-btn-top" class="admin-link" style="background-color:#27ae60; border:none;" disabled>
-                    <i class="fas fa-gift"></i> Create Bundle
+                    <i class="fas fa-gift"></i> <span data-translate="createBundle">Create Bundle</span>
                 </button>
-                <button id="manage-bulk-promo-btn-top" class="admin-link" style="background-color:#e74c3c; border:none;" disabled>Apply Promo to Selected</button>
-                <button id="manage-bulk-delete-btn-top" class="admin-link" style="background-color:#b23b3b; border:none;" disabled>Delete Selected</button>
+                <button id="manage-bulk-promo-btn-top" class="admin-link" style="background-color:#e74c3c; border:none;" disabled><span data-translate="applyPromoToSelected">Apply Promo to Selected</span></button>
+                <button id="manage-bulk-delete-btn-top" class="admin-link" style="background-color:#b23b3b; border:none;" disabled><span data-translate="deleteSelected">Delete Selected</span></button>
             </div>
 
             <div class="products-table-container">
@@ -921,13 +921,13 @@
                         <tr>
                             <th style="width:40px;"><input type="checkbox" id="manage-select-all"></th>
                             <th>ID</th>
-                            <th>EN Name</th>
-                            <th>BG Name</th>
-                            <th>Category</th>
-                            <th>Price</th>
-                            <th>Promo</th>
-                            <th>Image</th>
-                            <th>Actions</th>
+                            <th data-translate="enName">EN Name</th>
+                            <th data-translate="bgName">BG Name</th>
+                            <th data-translate="category">Category</th>
+                            <th data-translate="price">Price</th>
+                            <th data-translate="promo">Promo</th>
+                            <th data-translate="image">Image</th>
+                            <th data-translate="actions">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="products-table-body">
@@ -938,11 +938,11 @@
                 <!-- Pagination Controls -->
                 <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 8px;">
                     <button onclick="previousManagePage()" class="btn btn-secondary" style="padding: 8px 20px;">
-                        <i class="fas fa-chevron-left"></i> Previous
+                        <i class="fas fa-chevron-left"></i> <span data-translate="previous">Previous</span>
                     </button>
                     <span id="manage-page-info" style="color: #666; font-weight: 600;">Page 1 of 1</span>
                     <button onclick="nextManagePage()" class="btn btn-secondary" style="padding: 8px 20px;">
-                        Next <i class="fas fa-chevron-right"></i>
+                        <span data-translate="next">Next</span> <i class="fas fa-chevron-right"></i>
                     </button>
                 </div>
 
@@ -950,19 +950,19 @@
                 <div class="form-group" style="display:flex; gap:12px; align-items:center; margin-top:10px; flex-wrap:wrap;">
                     <span id="manage-selection-count" style="padding:8px 12px; background:#f0f0f0; border-radius:6px; font-weight:600; color:#555;">0 selected</span>
                     <button id="manage-create-bundle-btn" class="admin-link" style="background-color:#27ae60; border:none;" disabled>
-                        <i class="fas fa-gift"></i> Create Bundle
+                        <i class="fas fa-gift"></i> <span data-translate="createBundle">Create Bundle</span>
                     </button>
-                    <button id="manage-bulk-promo-btn" class="admin-link" style="background-color:#e74c3c; border:none;" disabled>Apply Promo to Selected</button>
-                    <button id="manage-bulk-delete-btn" class="admin-link" style="background-color:#b23b3b; border:none;" disabled>Delete Selected</button>
+                    <button id="manage-bulk-promo-btn" class="admin-link" style="background-color:#e74c3c; border:none;" disabled><span data-translate="applyPromoToSelected">Apply Promo to Selected</span></button>
+                    <button id="manage-bulk-delete-btn" class="admin-link" style="background-color:#b23b3b; border:none;" disabled><span data-translate="deleteSelected">Delete Selected</span></button>
                     <select id="manage-category-select" style="padding:10px; border:2px solid #e0e0e0; border-radius:8px;"></select>
-                    <button id="manage-category-promo-btn" class="admin-link" style="background-color:#c0392b; border:none;">Apply Promo to Category</button>
+                    <button id="manage-category-promo-btn" class="admin-link" style="background-color:#c0392b; border:none;"><span data-translate="applyPromoToCategory">Apply Promo to Category</span></button>
                 </div>
             </div>
 
             <div id="no-products" class="empty-state" style="display: none;">
                 <i class="fas fa-box-open"></i>
-                <p>No products found</p>
-                <small>Add your first product using the form above</small>
+                <p data-translate="noProductsFound">No products found</p>
+                <small data-translate="addFirstProductHint">Add your first product using the form above</small>
             </div>
         </div>
         
@@ -1082,11 +1082,11 @@
     <!-- Delete Confirmation Modal -->
     <div id="delete-modal" class="modal">
         <div class="modal-content modal-small">
-            <h3>Confirm Delete</h3>
-            <p>Are you sure you want to delete this product?</p>
+            <h3 data-translate="confirmDeleteTitle">Confirm Delete</h3>
+            <p data-translate="confirmDeleteProductText">Are you sure you want to delete this product?</p>
             <div class="modal-actions">
-                <button onclick="confirmDelete()" class="btn btn-danger">Delete</button>
-                <button onclick="closeDeleteModal()" class="btn btn-secondary">Cancel</button>
+                <button onclick="confirmDelete()" class="btn btn-danger"><span data-translate="delete">Delete</span></button>
+                <button onclick="closeDeleteModal()" class="btn btn-secondary"><span data-translate="cancel">Cancel</span></button>
             </div>
         </div>
     </div>
@@ -1094,7 +1094,7 @@
     <!-- Bundle Creation Modal -->
     <div id="bundle-modal" class="modal">
         <div class="modal-content" style="max-width: 700px; max-height: 90vh; display: flex; flex-direction: column;">
-            <h3 style="padding: 20px; margin: 0; border-bottom: 1px solid #eee;"><i class="fas fa-gift"></i> Create Bundle from Selected Products</h3>
+            <h3 style="padding: 20px; margin: 0; border-bottom: 1px solid #eee;"><i class="fas fa-gift"></i> <span data-translate="createBundleFromSelected">Create Bundle from Selected Products</span></h3>
             
             <div style="flex: 1; overflow-y: auto; padding: 20px;">
                 <div id="bundle-products-list" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
@@ -1103,41 +1103,41 @@
                 
                 <div style="padding: 0;">
                     <div class="form-group" style="margin-bottom: 20px;">
-                        <label for="bundle-name-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Bundle Name (English):</label>
+                        <label for="bundle-name-input" style="display: block; margin-bottom: 5px; font-weight: 600;" data-translate="bundleNameEn">Bundle Name (English):</label>
                         <input type="text" id="bundle-name-input" placeholder="e.g., Pizza & Salad Combo" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-                        <small style="display: block; margin-top: 5px; color: #666;">Leave empty to auto-generate from product names</small>
+                        <small style="display: block; margin-top: 5px; color: #666;" data-translate="leaveEmptyAutoGenerate">Leave empty to auto-generate from product names</small>
                     </div>
                     
                     <div class="form-group" style="margin-bottom: 20px;">
-                        <label for="bundle-name-bg-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Bundle Name (Bulgarian):</label>
+                        <label for="bundle-name-bg-input" style="display: block; margin-bottom: 5px; font-weight: 600;" data-translate="bundleNameBg">Bundle Name (Bulgarian):</label>
                         <input type="text" id="bundle-name-bg-input" placeholder="например, Пица и Салата Комбо" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
                     </div>
                     
                     <div class="form-group" style="margin-bottom: 20px;">
-                        <label for="bundle-price-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Bundle Price (€):</label>
+                        <label for="bundle-price-input" style="display: block; margin-bottom: 5px; font-weight: 600;" data-translate="bundlePrice">Bundle Price (€):</label>
                         <input type="number" id="bundle-price-input" step="0.01" min="0" required placeholder="0.00" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
                         <small id="bundle-original-price" style="display: block; margin-top: 5px; color: #666;"></small>
                     </div>
                     
                     <div class="form-group" style="margin-bottom: 20px;">
-                        <label for="bundle-label-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Special Label (Optional):</label>
+                        <label for="bundle-label-input" style="display: block; margin-bottom: 5px; font-weight: 600;" data-translate="bundleSpecialLabel">Special Label (Optional):</label>
                         <input type="text" id="bundle-label-input" placeholder="e.g., SPECIAL, HOT DEAL, BEST VALUE" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-                        <small style="display: block; margin-top: 5px; color: #666;">Will appear as a badge on the product card (like promo labels)</small>
+                        <small style="display: block; margin-top: 5px; color: #666;" data-translate="willAppearAsBadge">Will appear as a badge on the product card (like promo labels)</small>
                     </div>
                     
                     <div class="form-group" style="margin-bottom: 20px;">
-                        <label for="bundle-image-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Image URL (Optional):</label>
+                        <label for="bundle-image-input" style="display: block; margin-bottom: 5px; font-weight: 600;" data-translate="bundleImageUrl">Image URL (Optional):</label>
                         <input type="text" id="bundle-image-input" placeholder="https://example.com/bundle-image.jpg" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-                        <small style="display: block; margin-top: 5px; color: #666;">Leave empty to use first product's image</small>
+                        <small style="display: block; margin-top: 5px; color: #666;" data-translate="leaveEmptyUseFirstImage">Leave empty to use first product's image</small>
                     </div>
                 </div>
             </div>
             
             <div class="modal-actions" style="padding: 20px; border-top: 1px solid #eee; display: flex; gap: 10px; justify-content: flex-end;">
                 <button onclick="confirmBundleCreation()" class="btn btn-success">
-                    <i class="fas fa-check"></i> Create Bundle
+                    <i class="fas fa-check"></i> <span data-translate="createBundle">Create Bundle</span>
                 </button>
-                <button onclick="closeBundleModal()" class="btn btn-secondary">Cancel</button>
+                <button onclick="closeBundleModal()" class="btn btn-secondary"><span data-translate="cancel">Cancel</span></button>
             </div>
         </div>
     </div>
@@ -1146,78 +1146,78 @@
     <div id="order-edit-modal" class="modal">
         <div class="modal-content" style="max-width: 900px; max-height: 90vh; display: flex; flex-direction: column;">
             <h3 style="padding: 20px; margin: 0; border-bottom: 1px solid #eee;">
-                <i class="fas fa-pen"></i> Edit Order <span id="order-edit-title" style="color:#666;"></span>
+                <i class="fas fa-pen"></i> <span data-translate="editOrder">Edit Order</span> <span id="order-edit-title" style="color:#666;"></span>
             </h3>
 
             <div style="flex: 1; overflow-y: auto; padding: 20px;">
                 <div class="form-row">
                     <div class="form-group" style="min-width: 200px;">
-                        <label for="order-edit-status">Status</label>
+                        <label for="order-edit-status" data-translate="status">Status</label>
                         <select id="order-edit-status">
-                            <option value="pending">Pending (received)</option>
-                            <option value="approved">Approved</option>
-                            <option value="delivering">Delivering</option>
-                            <option value="ready_for_pickup">Ready for pickup</option>
-                            <option value="completed">Completed</option>
-                            <option value="cancelled">Cancelled</option>
+                            <option value="pending" data-translate="statusPending">Pending (received)</option>
+                            <option value="approved" data-translate="statusApproved">Approved</option>
+                            <option value="delivering" data-translate="statusDelivering">Delivering</option>
+                            <option value="ready_for_pickup" data-translate="statusReady">Ready for pickup</option>
+                            <option value="completed" data-translate="statusCompleted">Completed</option>
+                            <option value="cancelled" data-translate="statusCancelled">Cancelled</option>
                         </select>
                     </div>
 
                     <div class="form-group" style="min-width: 200px;">
-                        <label for="order-edit-method">Delivery Method</label>
+                        <label for="order-edit-method" data-translate="method">Method</label>
                         <select id="order-edit-method">
-                            <option value="delivery">Delivery</option>
-                            <option value="pickup">Pickup</option>
+                            <option value="delivery" data-translate="delivery">Delivery</option>
+                            <option value="pickup" data-translate="pickup">Pickup</option>
                         </select>
                     </div>
 
                     <div class="form-group" style="min-width: 200px;">
-                        <label for="order-edit-delivery-fee">Delivery Fee</label>
+                        <label for="order-edit-delivery-fee" data-translate="deliveryFeeLabel">Delivery Fee</label>
                         <input id="order-edit-delivery-fee" type="number" min="0" step="0.01" placeholder="0.00" />
                     </div>
 
                     <div class="form-group" style="min-width: 200px;">
-                        <label for="order-edit-discount">Discount (%)</label>
+                        <label for="order-edit-discount" data-translate="discountPercentLabel">Discount (%)</label>
                         <input id="order-edit-discount" type="number" min="0" max="100" step="1" placeholder="0" />
                     </div>
                 </div>
 
-                <h4 style="margin-top: 10px;"><i class="fas fa-user"></i> Customer</h4>
+                <h4 style="margin-top: 10px;"><i class="fas fa-user"></i> <span data-translate="customer">Customer</span></h4>
                 <div class="form-row">
                     <div class="form-group" style="min-width: 220px;">
-                        <label for="order-edit-customer-name">Name</label>
+                        <label for="order-edit-customer-name" data-translate="name">Name</label>
                         <input id="order-edit-customer-name" type="text" />
                     </div>
                     <div class="form-group" style="min-width: 220px;">
-                        <label for="order-edit-customer-phone">Phone</label>
+                        <label for="order-edit-customer-phone" data-translate="phone">Phone</label>
                         <input id="order-edit-customer-phone" type="text" />
                     </div>
                     <div class="form-group" style="min-width: 240px;">
-                        <label for="order-edit-customer-email">Email</label>
+                        <label for="order-edit-customer-email" data-translate="email">Email</label>
                         <input id="order-edit-customer-email" type="email" />
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group" style="min-width: 220px;">
-                        <label for="order-edit-customer-city">City</label>
+                        <label for="order-edit-customer-city" data-translate="city">City</label>
                         <input id="order-edit-customer-city" type="text" />
                     </div>
                     <div class="form-group" style="flex: 2; min-width: 320px;">
-                        <label for="order-edit-customer-address">Address</label>
+                        <label for="order-edit-customer-address" data-translate="address">Address</label>
                         <input id="order-edit-customer-address" type="text" />
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label for="order-edit-customer-notes">Notes</label>
+                    <label for="order-edit-customer-notes" data-translate="notes">Notes</label>
                     <textarea id="order-edit-customer-notes" rows="2"></textarea>
                 </div>
 
-                <h4 style="margin-top: 15px;"><i class="fas fa-shopping-cart"></i> Items</h4>
+                <h4 style="margin-top: 15px;"><i class="fas fa-shopping-cart"></i> <span data-translate="items">Items</span></h4>
                 <div id="order-edit-items" style="display:flex; flex-direction:column; gap:10px;"></div>
                 <button onclick="orderEditAddItemRow()" class="btn btn-secondary" style="margin-top: 10px;">
-                    <i class="fas fa-plus"></i> Add Item
+                    <i class="fas fa-plus"></i> <span data-translate="addItem">Add Item</span>
                 </button>
 
                 <div id="order-edit-totals" style="margin-top: 15px; padding: 12px 14px; background: #f8f9fa; border: 1px solid #eee; border-radius: 8px; color: #333;"></div>
