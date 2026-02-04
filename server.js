@@ -550,7 +550,7 @@ function getDefaultSiteSettings() {
         search: { mode: 'names_and_descriptions' },
         map: { enabled: false, lat: null, lng: null, zoom: 16, label: '' },
         footer: {
-            contacts: { phone: '', email: '', address: '' },
+            contacts: { phone: '', email: '', address: '', addressMapsUrl: '' },
             aboutText: '',
             socials: []
         },
@@ -597,7 +597,8 @@ function normalizeSiteSettings(input) {
         contacts: {
             phone: normalizeText(contacts.phone, 100),
             email: normalizeText(contacts.email, 120),
-            address: normalizeText(contacts.address, 240)
+            address: normalizeText(contacts.address, 240),
+            addressMapsUrl: normalizeText(contacts.addressMapsUrl, 500)
         },
         aboutText: normalizeText(src.footer?.aboutText, 600),
         socials: Array.isArray(src.footer?.socials)

@@ -74,8 +74,26 @@
                     .replace(/"/g, '&quot;')
                     .replace(/'/g, '&#39;');
 
+                const rawAddress = (contacts.address || '').toString().trim();
+                const explicitMapsUrlRaw = (contacts.addressMapsUrl || '').toString().trim();
+                const explicitMapsUrl = explicitMapsUrlRaw && !/^https?:\/\//i.test(explicitMapsUrlRaw) && /^www\./i.test(explicitMapsUrlRaw)
+                    ? `https://${explicitMapsUrlRaw}`
+                    : explicitMapsUrlRaw;
+                const mapCfg = s?.map || {};
+                const lat = typeof mapCfg.lat === 'number' ? mapCfg.lat : parseFloat(mapCfg.lat);
+                const lng = typeof mapCfg.lng === 'number' ? mapCfg.lng : parseFloat(mapCfg.lng);
+                const derivedMapsUrl = Number.isFinite(lat) && Number.isFinite(lng)
+                    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`
+                    : (rawAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rawAddress)}` : '');
+                const addressMapsUrl = explicitMapsUrl || derivedMapsUrl;
+                const addressHtml = rawAddress
+                    ? (addressMapsUrl
+                        ? `<a href="${esc(addressMapsUrl)}" target="_blank" rel="noopener noreferrer">${esc(rawAddress)}</a>`
+                        : esc(rawAddress))
+                    : '';
+
                 const contactLines = [
-                    contacts.address ? `<li><strong>Address:</strong> ${esc(contacts.address)}</li>` : '',
+                    rawAddress ? `<li><strong>Address:</strong> ${addressHtml}</li>` : '',
                     (wh && wh.openingTime && wh.closingTime) ? `<li><strong>Working hours:</strong> ${esc(String(wh.openingTime).trim())} - ${esc(String(wh.closingTime).trim())}</li>` : '',
                     contacts.phone ? `<li><strong>Phone:</strong> ${esc(contacts.phone)}</li>` : '',
                     contacts.email ? `<li><strong>Email:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${esc(contacts.email)}</a></li>` : ''

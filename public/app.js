@@ -223,6 +223,7 @@ function renderSiteFooter() {
     if (!footerEl) return;
 
     const contacts = siteSettings?.footer?.contacts || {};
+    const mapCfg = siteSettings?.map || {};
     const aboutText = (siteSettings?.footer?.aboutText || '').toString().trim();
     const socials = Array.isArray(siteSettings?.footer?.socials) ? siteSettings.footer.socials : [];
 
@@ -234,8 +235,25 @@ function renderSiteFooter() {
     const closingTime = (siteWorkingHours?.closingTime || '').toString().trim();
     const hoursText = (openingTime && closingTime) ? `${openingTime} - ${closingTime}` : '';
 
+    const rawAddress = (contacts.address || '').toString().trim();
+    const explicitMapsUrlRaw = (contacts.addressMapsUrl || '').toString().trim();
+    const explicitMapsUrl = explicitMapsUrlRaw && !/^https?:\/\//i.test(explicitMapsUrlRaw) && /^www\./i.test(explicitMapsUrlRaw)
+        ? `https://${explicitMapsUrlRaw}`
+        : explicitMapsUrlRaw;
+    const lat = typeof mapCfg.lat === 'number' ? mapCfg.lat : parseFloat(mapCfg.lat);
+    const lng = typeof mapCfg.lng === 'number' ? mapCfg.lng : parseFloat(mapCfg.lng);
+    const derivedMapsUrl = Number.isFinite(lat) && Number.isFinite(lng)
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`
+        : (rawAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rawAddress)}` : '');
+    const addressMapsUrl = explicitMapsUrl || derivedMapsUrl;
+    const addressHtml = rawAddress
+        ? (addressMapsUrl
+            ? `<a href="${escapeHtml(addressMapsUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(rawAddress)}</a>`
+            : escapeHtml(rawAddress))
+        : '';
+
     const contactLines = [
-        contacts.address ? `<li><strong>${escapeHtml(labels.address)}:</strong> ${escapeHtml(contacts.address)}</li>` : '',
+        rawAddress ? `<li><strong>${escapeHtml(labels.address)}:</strong> ${addressHtml}</li>` : '',
         hoursText ? `<li><strong>${escapeHtml(labels.hours)}:</strong> ${escapeHtml(hoursText)}</li>` : '',
         contacts.phone ? `<li><strong>${escapeHtml(labels.phone)}:</strong> ${escapeHtml(contacts.phone)}</li>` : '',
         contacts.email ? `<li><strong>${escapeHtml(labels.email)}:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${escapeHtml(contacts.email)}</a></li>` : ''

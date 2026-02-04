@@ -77,6 +77,9 @@ const translations = {
         footer: 'Footer',
         footerAboutText: 'About text',
         footerAddressPlaceholder: 'Street, city',
+        footerAddressMapsUrl: 'Address (Google Maps link)',
+        footerAddressMapsUrlPlaceholder: 'https://www.google.com/maps?...',
+        footerAddressMapsUrlHelp: 'Optional. If empty, we generate a Google Maps search link from the address.',
         footerAboutPlaceholder: 'Short about text...',
         socialLinks: 'Social links',
         siteSocialLabel1: 'Label 1',
@@ -455,6 +458,9 @@ const translations = {
         footer: 'Футър',
         footerAboutText: 'Текст „За нас“',
         footerAddressPlaceholder: 'Улица, град',
+        footerAddressMapsUrl: 'Адрес (Google Maps линк)',
+        footerAddressMapsUrlPlaceholder: 'https://www.google.com/maps?...',
+        footerAddressMapsUrlHelp: 'По избор. Ако е празно, ще генерираме Google Maps линк от адреса.',
         footerAboutPlaceholder: 'Кратък текст „За нас“...',
         socialLinks: 'Социални връзки',
         siteSocialLabel1: 'Етикет 1',
@@ -1493,11 +1499,13 @@ async function loadSiteSettings() {
         const phoneEl = document.getElementById('site-footer-phone');
         const emailEl = document.getElementById('site-footer-email');
         const addressEl = document.getElementById('site-footer-address');
+        const addressMapsUrlEl = document.getElementById('site-footer-address-maps-url');
         const aboutEl = document.getElementById('site-footer-about');
 
         if (phoneEl) phoneEl.value = data?.footer?.contacts?.phone || '';
         if (emailEl) emailEl.value = data?.footer?.contacts?.email || '';
         if (addressEl) addressEl.value = data?.footer?.contacts?.address || '';
+        if (addressMapsUrlEl) addressMapsUrlEl.value = data?.footer?.contacts?.addressMapsUrl || '';
         if (aboutEl) aboutEl.value = data?.footer?.aboutText || '';
 
         const mapEnabledEl = document.getElementById('site-map-enabled');
@@ -1547,6 +1555,7 @@ async function updateSiteSettings() {
         const phone = (document.getElementById('site-footer-phone')?.value || '').toString();
         const email = (document.getElementById('site-footer-email')?.value || '').toString();
         const address = (document.getElementById('site-footer-address')?.value || '').toString();
+        const addressMapsUrl = (document.getElementById('site-footer-address-maps-url')?.value || '').toString();
         const aboutText = (document.getElementById('site-footer-about')?.value || '').toString();
 
         const mapEnabled = !!document.getElementById('site-map-enabled')?.checked;
@@ -1597,7 +1606,7 @@ async function updateSiteSettings() {
                 zoom: mapZoom
             },
             footer: {
-                contacts: { phone, email, address },
+                contacts: { phone, email, address, addressMapsUrl },
                 aboutText,
                 socials
             },
