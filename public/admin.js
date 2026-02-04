@@ -775,6 +775,8 @@ async function loadRestaurantName() {
                 const boricaModeEl = document.getElementById('borica-mode');
                 const boricaTerminalEl = document.getElementById('borica-terminal-id');
                 const boricaMerchantEl = document.getElementById('borica-merchant-id');
+                const boricaMerchNameEl = document.getElementById('borica-merch-name');
+                const boricaMerchUrlEl = document.getElementById('borica-merch-url');
                 const boricaBackrefEl = document.getElementById('borica-backref-url');
                 const boricaGwTestEl = document.getElementById('borica-gateway-test');
                 const boricaGwProdEl = document.getElementById('borica-gateway-prod');
@@ -789,6 +791,8 @@ async function loadRestaurantName() {
                 }
                 if (boricaTerminalEl) boricaTerminalEl.value = borica.terminalId || '';
                 if (boricaMerchantEl) boricaMerchantEl.value = borica.merchantId || '';
+                if (boricaMerchNameEl) boricaMerchNameEl.value = borica.merchName || '';
+                if (boricaMerchUrlEl) boricaMerchUrlEl.value = borica.merchUrl || '';
                 if (boricaBackrefEl) boricaBackrefEl.value = borica.backrefUrl || '';
                 if (boricaGwTestEl) boricaGwTestEl.value = borica.gatewayBaseUrlTest || '';
                 if (boricaGwProdEl) boricaGwProdEl.value = borica.gatewayBaseUrlProd || '';
@@ -966,6 +970,8 @@ async function updateRestaurantSettings() {
     const boricaDebugMode = boricaMode !== 'prod';
     const boricaTerminalId = (document.getElementById('borica-terminal-id')?.value || '').toString().trim();
     const boricaMerchantId = (document.getElementById('borica-merchant-id')?.value || '').toString().trim();
+    const boricaMerchName = (document.getElementById('borica-merch-name')?.value || '').toString().trim();
+    const boricaMerchUrl = (document.getElementById('borica-merch-url')?.value || '').toString().trim();
     const boricaBackrefUrl = (document.getElementById('borica-backref-url')?.value || '').toString().trim();
     const boricaGatewayTest = (document.getElementById('borica-gateway-test')?.value || '').toString().trim();
     const boricaGatewayProd = (document.getElementById('borica-gateway-prod')?.value || '').toString().trim();
@@ -1021,6 +1027,8 @@ async function updateRestaurantSettings() {
                         debugMode: boricaDebugMode,
                         terminalId: boricaTerminalId,
                         merchantId: boricaMerchantId,
+                        merchName: boricaMerchName,
+                        merchUrl: boricaMerchUrl,
                         backrefUrl: boricaBackrefUrl,
                         gatewayBaseUrlTest: boricaGatewayTest,
                         gatewayBaseUrlProd: boricaGatewayProd,
@@ -1041,6 +1049,101 @@ async function updateRestaurantSettings() {
     } catch (error) {
         console.error('Error updating restaurant settings:', error);
         alert('Error updating restaurant settings');
+    }
+}
+
+// -------------------- SMTP / Email diagnostics (admin) --------------------
+
+function formatEmailDiagnostics(diag) {
+    if (!diag) return 'No diagnostics available.';
+
+    const enabled = !!diag.enabled;
+    const missing = Array.isArray(diag.missing) ? diag.missing : [];
+    const smtp = diag.smtp || {};
+
+    const lines = [];
+    lines.push(`Enabled: ${enabled ? 'YES' : 'NO'}`);
+    if (!enabled && missing.length) {
+        lines.push(`Missing: ${missing.join(', ')}`);
+    }
+
+    if (smtp.host) lines.push(`Host: ${smtp.host}`);
+    if (smtp.port != null) lines.push(`Port: ${smtp.port}`);
+    if (smtp.secure != null) lines.push(`Secure: ${smtp.secure ? 'true' : 'false'}`);
+    if (smtp.from) lines.push(`From: ${smtp.from}`);
+    if (smtp.replyTo) lines.push(`Reply-To: ${smtp.replyTo}`);
+
+    if (smtp.credsSource) lines.push(`Credentials: ${smtp.credsSource}`);
+    if (smtp.credsFile) lines.push(`Creds file: ${smtp.credsFile} (exists=${smtp.credsFileExists ? 'true' : 'false'})`);
+    lines.push(`User present: ${smtp.userPresent ? 'true' : 'false'}`);
+    lines.push(`Pass present: ${smtp.passPresent ? 'true' : 'false'}`);
+
+    return lines.join('\n');
+}
+
+async function refreshEmailStatus() {
+    const box = document.getElementById('smtp-status-box');
+    if (box) box.textContent = 'Loading SMTP status...';
+
+    try {
+        const token = getAdminToken();
+        const res = await fetch(`${API_URL}/email/status`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        const payload = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+            if (box) box.textContent = payload?.error || 'Failed to load email status';
+            return;
+        }
+
+        if (box) {
+            box.style.whiteSpace = 'pre-wrap';
+            box.textContent = formatEmailDiagnostics(payload);
+        }
+    } catch (e) {
+        console.error('refreshEmailStatus failed:', e);
+        if (box) box.textContent = 'Failed to load email status';
+    }
+}
+
+async function sendSmtpTestEmail() {
+    const to = (document.getElementById('smtp-test-to')?.value || '').toString().trim();
+    const box = document.getElementById('smtp-status-box');
+    if (box) box.textContent = 'Sending test email...';
+
+    try {
+        const token = getAdminToken();
+        const res = await fetch(`${API_URL}/email/test`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ to })
+        });
+
+        const payload = await res.json().catch(() => ({}));
+
+        if (!res.ok || !payload?.success) {
+            const diagText = payload?.diagnostics ? formatEmailDiagnostics(payload.diagnostics) : '';
+            const errText = payload?.error || 'SMTP test failed';
+            if (box) {
+                box.style.whiteSpace = 'pre-wrap';
+                box.textContent = [errText, payload?.stage ? `Stage: ${payload.stage}` : '', payload?.code ? `Code: ${payload.code}` : '', payload?.response ? `Response: ${payload.response}` : '', diagText].filter(Boolean).join('\n');
+            }
+            return;
+        }
+
+        if (box) {
+            box.style.whiteSpace = 'pre-wrap';
+            box.textContent = `Test email sent successfully.\nMessageId: ${payload?.send?.messageId || 'n/a'}\n\n${formatEmailDiagnostics(payload.diagnostics)}`;
+        }
+    } catch (e) {
+        console.error('sendSmtpTestEmail failed:', e);
+        if (box) box.textContent = 'SMTP test failed';
     }
 }
 
@@ -3192,9 +3295,28 @@ function safeToFixed(n, digits = 2) {
 
 function getOrdersHistoryFilters() {
     const search = (document.getElementById('orders-history-search')?.value || '').toString().trim().toLowerCase();
-    const status = (document.getElementById('orders-history-status')?.value || '').toString().trim();
+    // This tab is now meant primarily for approved orders.
+    // Default to approved if user didn't explicitly pick another status.
+    const statusEl = document.getElementById('orders-history-status');
+    const statusRaw = (statusEl?.value || '').toString().trim();
+    const status = statusRaw || 'approved';
     const method = (document.getElementById('orders-history-method')?.value || '').toString().trim();
     return { search, status, method };
+}
+
+function parseDateInputValue(value) {
+    const v = (value || '').toString().trim();
+    if (!v) return null;
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return null;
+    return d;
+}
+
+function endOfDay(d) {
+    if (!d) return null;
+    const x = new Date(d);
+    x.setHours(23, 59, 59, 999);
+    return x;
 }
 
 function orderMatchesSearch(order, search) {
@@ -3259,6 +3381,11 @@ function renderOrdersHistory() {
 
     const { search, status, method } = getOrdersHistoryFilters();
 
+    const fromEl = document.getElementById('approved-orders-from');
+    const toEl = document.getElementById('approved-orders-to');
+    const fromDate = parseDateInputValue(fromEl?.value);
+    const toDate = endOfDay(parseDateInputValue(toEl?.value));
+
     const filtered = (orders || [])
         .filter(o => orderMatchesSearch(o, search))
         .filter(o => {
@@ -3270,6 +3397,15 @@ function renderOrdersHistory() {
             if (!method) return true;
             const m = (o.deliveryMethod || o.deliveryType || '').toString();
             return m === method;
+        })
+        .filter(o => {
+            if (!fromDate && !toDate) return true;
+            const ts = o.timestamp || o.createdAt;
+            const d = new Date(ts);
+            if (Number.isNaN(d.getTime())) return false;
+            if (fromDate && d < fromDate) return false;
+            if (toDate && d > toDate) return false;
+            return true;
         })
         .sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
 
@@ -3292,6 +3428,24 @@ function renderOrdersHistory() {
         const statusLabel = getOrderStatusLabel(order.status);
         const totalShown = (order.ownerDiscount && order.ownerDiscount > 0 && order.finalTotal != null) ? order.finalTotal : order.total;
         const actions = getNextActionsForOrder(order);
+
+        const itemsHtml = (order.items || []).map(item => {
+            const price = Number(item.promoPrice != null ? item.promoPrice : item.price) || 0;
+            const qty = Number(item.quantity) || 0;
+            const lineTotal = price * qty;
+            return `
+                <div class="order-item" style="display:flex; justify-content: space-between; gap:10px; padding: 6px 0; border-bottom: 1px dashed #eee;">
+                    <span class="order-item-name" style="flex: 1; min-width:0;">
+                        <div>${item.name}</div>
+                        ${item.note ? `<div style="margin-top:4px; font-size: 12px; color:#555;"><strong>Бележка:</strong> ${item.note}</div>` : ''}
+                    </span>
+                    <div class="order-item-details" style="display:flex; gap:10px; white-space:nowrap; align-items: baseline;">
+                        <span>x${qty}</span>
+                        <span>${safeToFixed(lineTotal)} €</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
 
         const actionsHtml = actions.map(a => `
             <button onclick="updateOrderStatus('${order.id}', '${a.status}')" class="btn btn-${a.kind}" style="padding: 6px 10px;">
@@ -3324,6 +3478,18 @@ function renderOrdersHistory() {
                             <div class="order-info-row"><span class="order-info-label">City:</span><span class="order-info-value">${order.customerInfo?.city || ''}</span></div>
                             <div class="order-info-row"><span class="order-info-label">Address:</span><span class="order-info-value">${order.customerInfo?.address || ''}</span></div>
                         ` : ''}
+                        ${order.customerInfo?.notes ? `<div class="order-info-row"><span class="order-info-label">Notes:</span><span class="order-info-value">${order.customerInfo.notes}</span></div>` : ''}
+                    </div>
+
+                    <div class="order-section" style="margin-bottom: 10px;">
+                        <details ${((order.items || []).some(i => i?.note) ? 'open' : '')} style="border: none;">
+                            <summary style="cursor:pointer; font-weight: 700; color:#333; list-style:none;">
+                                Products (${(order.items || []).length || 0})
+                            </summary>
+                            <div class="order-items" style="margin-top: 8px;">
+                                ${itemsHtml || '<div style="color:#999;">No items</div>'}
+                            </div>
+                        </details>
                     </div>
 
                     <div class="order-section">
@@ -3363,7 +3529,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (status) status.addEventListener('change', renderOrdersHistory);
     if (method) method.addEventListener('change', renderOrdersHistory);
+
+    const from = document.getElementById('approved-orders-from');
+    const to = document.getElementById('approved-orders-to');
+    if (from) from.addEventListener('change', renderOrdersHistory);
+    if (to) to.addEventListener('change', renderOrdersHistory);
 });
+
+async function printApprovedOrdersRange() {
+    try {
+        const fromEl = document.getElementById('approved-orders-from');
+        const toEl = document.getElementById('approved-orders-to');
+        const from = (fromEl?.value || '').toString().trim();
+        const to = (toEl?.value || '').toString().trim();
+
+        if (!from || !to) {
+            alert('Please select From and To dates');
+            return;
+        }
+
+        const token = sessionStorage.getItem('adminToken');
+        const res = await fetch(`${API_URL}/printer/print-approved?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || !payload?.success) {
+            alert(payload?.error || 'Failed to print approved orders');
+            return;
+        }
+
+        alert(`Print started: ${payload.printed || 0} printed, ${payload.failed || 0} failed`);
+    } catch (e) {
+        console.error('printApprovedOrdersRange failed:', e);
+        alert('Failed to print approved orders');
+    }
+}
 
 // -------------------- Order editing --------------------
 let currentEditingOrderId = null;
@@ -3626,7 +3830,10 @@ function renderPendingOrders() {
 
         const itemsList = (order.items || []).map(item => `
             <div class="order-item" style="display:flex; justify-content: space-between; gap:10px;">
-                <span class="order-item-name" style="flex: 1; min-width:0;">${item.name}</span>
+                <span class="order-item-name" style="flex: 1; min-width:0;">
+                    <div>${item.name}</div>
+                    ${item.note ? `<div style="margin-top:4px; font-size: 12px; color:#555;"><strong>Бележка:</strong> ${item.note}</div>` : ''}
+                </span>
                 <div class="order-item-details" style="display:flex; gap:10px; white-space:nowrap;">
                     <span>x${item.quantity}</span>
                     <span>${(item.price * item.quantity).toFixed(2)} €</span>

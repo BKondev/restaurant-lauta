@@ -50,12 +50,12 @@ function toNumber(value, fallback = 0) {
     return Number.isFinite(n) ? n : fallback;
 }
 
-function convertToEur(amount, currency, eurToBgnRate) {
+function convertToBgn(amount, currency, eurToBgnRate) {
     const amt = toNumber(amount, 0);
     const cur = (currency || 'EUR').toString().trim().toUpperCase();
-    if (cur === 'BGN') {
+    if (cur === 'EUR') {
         const rate = toNumber(eurToBgnRate, 0);
-        if (rate > 0) return amt / rate;
+        if (rate > 0) return amt * rate;
     }
     return amt;
 }
@@ -84,7 +84,9 @@ async function sendToDeliveryService(order, options = {}) {
             options?.restaurantCurrencySettings?.eurToBgnRate ??
             1.9558;
 
-        const priceEur = convertToEur(
+        // Delivery service expects delivery price in BGN.
+        // Bojole directory price_default is 8.02 BGN, so we must send 8.02 (not ~4.10 EUR).
+        const priceBgn = convertToBgn(
             restaurantCfg.priceDefault,
             restaurantCfg.priceDefaultCurrency,
             eurToBgnRate
@@ -100,7 +102,7 @@ async function sendToDeliveryService(order, options = {}) {
             phone: order.customerInfo?.phone || null,
             notes: order.customerInfo?.notes || null,
             // Delivery service price (matches delivery restaurants directory default)
-            price: Number(priceEur || 0).toFixed(2),
+            price: Number(priceBgn || 0).toFixed(2),
             submitted_at: Math.floor(Date.now() / 1000), // Unix timestamp
             status: 'queued' // Начален статус
         };

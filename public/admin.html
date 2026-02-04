@@ -74,7 +74,7 @@
             </button>
             <button class="admin-tab-btn" onclick="switchTab('orders-history')">
                 <i class="fas fa-history"></i>
-                <span class="tab-text">Orders History</span>
+                <span class="tab-text">Approved Orders</span>
             </button>
             
             <div class="admin-actions">
@@ -130,6 +130,33 @@
 
             <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
 
+            <h3 style="margin: 0 0 10px;"><i class="fas fa-paper-plane"></i> SMTP / Email Diagnostics</h3>
+            <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+                <div class="form-row" style="align-items: flex-end;">
+                    <div class="form-group" style="flex: 2; min-width: 240px;">
+                        <label for="smtp-test-to">Test email recipient</label>
+                        <input type="email" id="smtp-test-to" placeholder="your@email.com" />
+                        <small>Uses backend SMTP config. No passwords are shown.</small>
+                    </div>
+                    <div class="form-group" style="flex: 0; min-width: 160px;">
+                        <button onclick="refreshEmailStatus()" class="btn btn-secondary" style="width: 100%;">
+                            <i class="fas fa-sync"></i> Status
+                        </button>
+                    </div>
+                    <div class="form-group" style="flex: 0; min-width: 160px;">
+                        <button onclick="sendSmtpTestEmail()" class="btn btn-info" style="width: 100%;">
+                            <i class="fas fa-paper-plane"></i> Send Test
+                        </button>
+                    </div>
+                </div>
+
+                <div id="smtp-status-box" style="padding: 10px; background: #f8f9fa; border: 1px solid #eee; border-radius: 10px; color:#333;">
+                    <div style="color:#666;">Click <strong>Status</strong> to view SMTP configuration health.</div>
+                </div>
+            </div>
+
+            <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
+
             <h3 style="margin: 0 0 10px;"><i class="fas fa-envelope"></i> Customer Email Template (Order Placed)</h3>
             <div class="form-group">
                 <label for="email-template-order-placed-subject">Subject:</label>
@@ -171,8 +198,21 @@
             </div>
 
             <div class="form-group">
-                <label for="borica-merchant-id">BORICA Merchant ID (optional):</label>
+                <label for="borica-merchant-id">BORICA Merchant ID:</label>
                 <input type="text" id="borica-merchant-id" placeholder="Merchant ID">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="borica-merch-name">BORICA MERCH_NAME (optional):</label>
+                    <input type="text" id="borica-merch-name" placeholder="bojole.bg">
+                    <small>Defaults to current domain if empty.</small>
+                </div>
+                <div class="form-group">
+                    <label for="borica-merch-url">BORICA MERCH_URL (optional):</label>
+                    <input type="url" id="borica-merch-url" placeholder="https://bojole.bg">
+                    <small>Defaults to current site URL if empty.</small>
+                </div>
             </div>
 
             <div class="form-group">
@@ -187,11 +227,11 @@
             <div class="form-row">
                 <div class="form-group">
                     <label for="borica-gateway-test">Custom Test Gateway URL (optional):</label>
-                    <input type="url" id="borica-gateway-test" placeholder="https://gatet.borica.bg/boreps/">
+                    <input type="url" id="borica-gateway-test" placeholder="https://3dsgate-dev.borica.bg/cgi-bin/cgi_link">
                 </div>
                 <div class="form-group">
                     <label for="borica-gateway-prod">Custom Production Gateway URL (optional):</label>
-                    <input type="url" id="borica-gateway-prod" placeholder="https://gate.borica.bg/boreps/">
+                    <input type="url" id="borica-gateway-prod" placeholder="https://3dsgate.borica.bg/cgi-bin/cgi_link">
                 </div>
             </div>
 
@@ -964,7 +1004,7 @@
         <!-- Orders History Tab -->
         <div class="admin-tab-content" id="tab-orders-history">
         <div class="admin-section">
-            <h2><i class="fas fa-history"></i> Orders History</h2>
+            <h2><i class="fas fa-history"></i> Approved Orders</h2>
 
             <div class="form-row" style="margin-bottom: 10px; align-items: flex-end;">
                 <div class="form-group" style="flex: 2; min-width: 240px;">
@@ -994,9 +1034,25 @@
                     </select>
                 </div>
 
+                <div class="form-group" style="flex: 1; min-width: 170px;">
+                    <label for="approved-orders-from">From</label>
+                    <input id="approved-orders-from" type="date" />
+                </div>
+
+                <div class="form-group" style="flex: 1; min-width: 170px;">
+                    <label for="approved-orders-to">To</label>
+                    <input id="approved-orders-to" type="date" />
+                </div>
+
                 <div class="form-group" style="flex: 0; min-width: 160px;">
                     <button onclick="renderOrdersHistory()" class="btn btn-primary" style="width: 100%;">
                         <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+
+                <div class="form-group" style="flex: 0; min-width: 160px;">
+                    <button onclick="printApprovedOrdersRange()" class="btn btn-info" style="width: 100%;">
+                        <i class="fas fa-print"></i> Print
                     </button>
                 </div>
             </div>

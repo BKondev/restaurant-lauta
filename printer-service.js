@@ -198,6 +198,13 @@ function generateReceiptText(order) {
         
         receipt += `${item.quantity}x ${itemName}\n`;
         receipt += `   ${price} лв x ${item.quantity} = ${total} лв\n`;
+
+        if (item.note) {
+            const note = String(item.note).trim();
+            if (note) {
+                receipt += `   Бележка: ${note}\n`;
+            }
+        }
     });
     
     receipt += '================================\n';
