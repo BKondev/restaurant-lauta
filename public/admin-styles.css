@@ -14,6 +14,38 @@ body {
     display: none;
 }
 
+/* Language Switcher (Desktop Sidebar) */
+.admin-tabs-nav .admin-lang-switcher {
+    display: flex;
+    gap: 6px;
+    padding: 10px 15px 12px;
+    align-items: center;
+}
+
+.admin-tabs-nav .admin-lang-switcher .lang-btn {
+    padding: 8px 12px;
+    border: 1px solid #e6e6e6;
+    background: #fff;
+    color: #555;
+    cursor: pointer;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 800;
+    transition: all 0.2s ease;
+    min-width: 44px;
+}
+
+.admin-tabs-nav .admin-lang-switcher .lang-btn:hover {
+    border-color: #ccc;
+    transform: translateY(-1px);
+}
+
+.admin-tabs-nav .admin-lang-switcher .lang-btn.active {
+    border-color: #667eea;
+    color: #667eea;
+    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.18);
+}
+
 .admin-header .admin-logo {
     display: flex;
     align-items: center;
