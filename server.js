@@ -7,6 +7,13 @@ const crypto = require('crypto');
 const { sendToDeliveryService } = require('./delivery-integration');
 const { printOrder } = require('./printer-service');
 
+// Optional: load environment variables from .env (useful for production without PM2 env wiring)
+try {
+    require('dotenv').config();
+} catch (e) {
+    // dotenv is optional
+}
+
 let nodemailer = null;
 try {
     nodemailer = require('nodemailer');
