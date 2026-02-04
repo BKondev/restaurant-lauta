@@ -875,9 +875,17 @@ async function updateSiteSettings() {
         const mapLngRaw = (document.getElementById('site-map-lng')?.value || '').toString();
         const mapZoomRaw = (document.getElementById('site-map-zoom')?.value || '').toString();
 
-        const mapLat = mapLatRaw.trim() === '' ? null : Number(mapLatRaw);
-        const mapLng = mapLngRaw.trim() === '' ? null : Number(mapLngRaw);
-        const mapZoom = mapZoomRaw.trim() === '' ? null : Number(mapZoomRaw);
+        const parseFlexibleNumber = (raw) => {
+            const s = (raw || '').toString().trim();
+            if (!s) return null;
+            const normalized = s.replace(',', '.');
+            const n = Number(normalized);
+            return Number.isFinite(n) ? n : null;
+        };
+
+        const mapLat = parseFlexibleNumber(mapLatRaw);
+        const mapLng = parseFlexibleNumber(mapLngRaw);
+        const mapZoom = parseFlexibleNumber(mapZoomRaw);
 
         if (mapEnabled) {
             if (!Number.isFinite(mapLat) || !Number.isFinite(mapLng)) {
@@ -3561,21 +3569,25 @@ async function saveOrderEdits() {
 
 // Render pending orders at the top
 function renderPendingOrders() {
-    const pendingOrders = orders
-        .filter(order => order.status === 'pending')
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const pendingOrders = (orders || [])
+        .filter(order => order && (order.status === 'pending' || order.status === 'pending_payment'))
+        .sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
 
     const section = document.getElementById('pending-orders-section');
     const badge = document.getElementById('pending-count-badge');
+    const tabBadge = document.getElementById('pending-count-badge-tab');
     const list = document.getElementById('pending-orders-list');
 
+    if (tabBadge) tabBadge.textContent = String(pendingOrders.length || 0);
+
     if (pendingOrders.length === 0) {
-        section.style.display = 'none';
+        if (section) section.style.display = 'none';
+        if (badge) badge.textContent = '0';
         return;
     }
 
-    section.style.display = 'block';
-    badge.textContent = pendingOrders.length;
+    if (section) section.style.display = 'block';
+    if (badge) badge.textContent = String(pendingOrders.length);
 
     function formatStatusLabel(status, deliveryMethod) {
         const s = (status || '').toString();
@@ -3590,7 +3602,7 @@ function renderPendingOrders() {
     }
 
     list.innerHTML = pendingOrders.map(order => {
-        const orderDate = new Date(order.timestamp);
+        const orderDate = new Date(order.timestamp || order.createdAt);
         const formattedDate = orderDate.toLocaleDateString('bg-BG', {
             day: '2-digit',
             month: '2-digit',
@@ -3601,134 +3613,83 @@ function renderPendingOrders() {
             minute: '2-digit'
         });
 
-        const deliveryIcon = order.deliveryMethod === 'delivery' 
+        const method = (order.deliveryMethod || order.deliveryType || '').toString();
+        const deliveryIcon = method === 'delivery' 
             ? '<i class="fas fa-truck"></i> Доставка' 
             : '<i class="fas fa-shopping-bag"></i> Взимане';
 
-        const statusLabel = formatStatusLabel(order.status, order.deliveryMethod);
+        const statusLabel = formatStatusLabel(order.status, method);
+        const isAwaitingPayment = order.status === 'pending_payment';
+        const paymentBadge = isAwaitingPayment
+            ? `<span class="order-status pending_payment" style="background:#fff3cd; color:#8a6d3b; border:1px solid #ffeeba;">Awaiting payment</span>`
+            : '';
 
-        const itemsList = order.items.map(item => `
-            <div class="order-item">
-                <span class="order-item-name">${item.name}</span>
-                <div class="order-item-details">
+        const itemsList = (order.items || []).map(item => `
+            <div class="order-item" style="display:flex; justify-content: space-between; gap:10px;">
+                <span class="order-item-name" style="flex: 1; min-width:0;">${item.name}</span>
+                <div class="order-item-details" style="display:flex; gap:10px; white-space:nowrap;">
                     <span>x${item.quantity}</span>
                     <span>${(item.price * item.quantity).toFixed(2)} €</span>
                 </div>
             </div>
         `).join('');
 
+        const summaryLine = `${formattedDate} ${formattedTime} • ${order.customerInfo?.name || ''} • ${(order.total || 0).toFixed(2)} €`;
+
         return `
-            <div class="order-card">
-                <div class="order-header">
-                    <div>
-                        <div class="order-id">Поръчка #${order.id}</div>
-                        <div class="order-time">${formattedDate} в ${formattedTime}</div>
+            <div class="order-card" style="margin-bottom: 14px;">
+                <details style="border: none;" open>
+                    <summary style="list-style:none; cursor:pointer;">
+                        <div class="order-header">
+                            <div>
+                                <div class="order-id">Поръчка #${order.id}</div>
+                                <div class="order-time">${summaryLine}</div>
+                            </div>
+                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content:flex-end;">
+                                <span class="delivery-badge ${method}">${deliveryIcon}</span>
+                                <span class="order-status ${order.status}">${statusLabel}</span>
+                                ${paymentBadge}
+                            </div>
+                        </div>
+                    </summary>
+
+                    <div class="order-body">
+                        <div class="order-section" style="margin-bottom: 10px;">
+                            <h4><i class="fas fa-user"></i> Информация за Клиента</h4>
+                            <div class="order-info-row"><span class="order-info-label">Име:</span><span class="order-info-value">${order.customerInfo?.name || ''}</span></div>
+                            <div class="order-info-row"><span class="order-info-label">Телефон:</span><span class="order-info-value"><a href="tel:${order.customerInfo?.phone || ''}" style="color: #e74c3c; text-decoration: none; font-weight: 600;">${order.customerInfo?.phone || ''}</a></span></div>
+                            <div class="order-info-row"><span class="order-info-label">Имейл:</span><span class="order-info-value"><a href="mailto:${order.customerInfo?.email || ''}" style="color: #3498db; text-decoration: none;">${order.customerInfo?.email || ''}</a></span></div>
+                            ${method === 'delivery' ? `<div class="order-info-row"><span class="order-info-label">Адрес:</span><span class="order-info-value">${order.customerInfo?.address || ''}</span></div>` : ''}
+                            ${order.customerInfo?.notes ? `<div class="order-info-row"><span class="order-info-label">Бележки:</span><span class="order-info-value">${order.customerInfo.notes}</span></div>` : ''}
+                        </div>
+
+                        <div class="order-section">
+                            <h4><i class="fas fa-shopping-cart"></i> Поръчани Продукти</h4>
+                            <div class="order-items">${itemsList}</div>
+                            ${order.promoCode ? `<div class="order-info-row" style="margin-top: 10px; color: #27ae60;"><span class="order-info-label">Промо код:</span><span class="order-info-value">${order.promoCode} (-${order.discount}%)</span></div>` : ''}
+                            ${(order.deliveryFee && order.deliveryFee > 0) ? `<div class="order-info-row" style="margin-top: 10px;"><span class="order-info-label">Такса доставка:</span><span class="order-info-value">${Number(order.deliveryFee || 0).toFixed(2)} €</span></div>` : ''}
+                            ${method === 'delivery' && (!order.deliveryFee || order.deliveryFee === 0) ? `<div class="order-info-row" style="margin-top: 10px; color: #27ae60;"><span class="order-info-label">Безплатна доставка!</span><span class="order-info-value">0.00 €</span></div>` : ''}
+                            ${order.ownerDiscount && order.ownerDiscount > 0 ? `<div class="order-info-row" style="margin-top: 10px; color: #e67e22;"><span class="order-info-label">Отстъпка от собственик:</span><span class="order-info-value">-${Number(order.ownerDiscountAmount || 0).toFixed(2)} € (${order.ownerDiscount}%)</span></div>` : ''}
+                            <div class="order-total"><span class="order-total-label">Обща Сума:</span><span class="order-total-value">${Number(order.total || 0).toFixed(2)} €</span></div>
+                            ${order.ownerDiscount && order.ownerDiscount > 0 ? `<div class="order-total" style="margin-top: 5px; color: #27ae60;"><span class="order-total-label">Финална Сума:</span><span class="order-total-value">${Number(order.finalTotal || 0).toFixed(2)} €</span></div>` : ''}
+                        </div>
                     </div>
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <span class="delivery-badge ${order.deliveryMethod}">${deliveryIcon}</span>
-                        <span class="order-status ${order.status}">${statusLabel}</span>
+
+                    <div class="order-actions">
+                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            ${order.status === 'pending' ? `
+                            <div style="display: flex; gap: 5px; align-items: center;">
+                                <label for="discount-${order.id}" style="font-size: 14px; white-space: nowrap;">Отстъпка (%):</label>
+                                <input type="number" id="discount-${order.id}" min="0" max="100" step="1" value="0" style="width: 70px; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            <button onclick="updateOrderStatus('${order.id}', 'approved')" class="btn btn-success"><i class="fas fa-check"></i> Одобри Поръчка</button>
+                            <button onclick="updateOrderStatus('${order.id}', 'cancelled')" class="btn btn-danger"><i class="fas fa-times"></i> Откажи Поръчка</button>
+                            ` : ''}
+                            <button onclick="openOrderEditModal('${order.id}')" class="btn btn-secondary"><i class="fas fa-pen"></i> Edit</button>
+                            <button onclick="deleteOrder('${order.id}')" class="btn btn-secondary"><i class="fas fa-trash"></i> Изтрий</button>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="order-body">
-                    <div class="order-section">
-                        <h4><i class="fas fa-user"></i> Информация за Клиента</h4>
-                        <div class="order-info-row">
-                            <span class="order-info-label">Име:</span>
-                            <span class="order-info-value">${order.customerInfo.name}</span>
-                        </div>
-                        <div class="order-info-row">
-                            <span class="order-info-label">Телефон:</span>
-                            <span class="order-info-value">
-                                <a href="tel:${order.customerInfo.phone}" style="color: #e74c3c; text-decoration: none; font-weight: 600;">
-                                    ${order.customerInfo.phone}
-                                </a>
-                            </span>
-                        </div>
-                        <div class="order-info-row">
-                            <span class="order-info-label">Имейл:</span>
-                            <span class="order-info-value">
-                                <a href="mailto:${order.customerInfo.email}" style="color: #3498db; text-decoration: none;">
-                                    ${order.customerInfo.email}
-                                </a>
-                            </span>
-                        </div>
-                        ${order.deliveryMethod === 'delivery' ? `
-                        <div class="order-info-row">
-                            <span class="order-info-label">Адрес:</span>
-                            <span class="order-info-value">${order.customerInfo.address}</span>
-                        </div>
-                        ` : ''}
-                        ${order.customerInfo.notes ? `
-                        <div class="order-info-row">
-                            <span class="order-info-label">Бележки:</span>
-                            <span class="order-info-value">${order.customerInfo.notes}</span>
-                        </div>
-                        ` : ''}
-                    </div>
-                    
-                    <div class="order-section">
-                        <h4><i class="fas fa-shopping-cart"></i> Поръчани Продукти</h4>
-                        <div class="order-items">
-                            ${itemsList}
-                        </div>
-                        ${order.promoCode ? `
-                        <div class="order-info-row" style="margin-top: 10px; color: #27ae60;">
-                            <span class="order-info-label">Промо код:</span>
-                            <span class="order-info-value">${order.promoCode} (-${order.discount}%)</span>
-                        </div>
-                        ` : ''}
-                        ${order.deliveryFee && order.deliveryFee > 0 ? `
-                        <div class="order-info-row" style="margin-top: 10px;">
-                            <span class="order-info-label">Такса доставка:</span>
-                            <span class="order-info-value">${order.deliveryFee.toFixed(2)} €</span>
-                        </div>
-                        ` : ''}
-                        ${order.deliveryMethod === 'delivery' && (!order.deliveryFee || order.deliveryFee === 0) ? `
-                        <div class="order-info-row" style="margin-top: 10px; color: #27ae60;">
-                            <span class="order-info-label">Безплатна доставка!</span>
-                            <span class="order-info-value">0.00 €</span>
-                        </div>
-                        ` : ''}
-                        ${order.ownerDiscount && order.ownerDiscount > 0 ? `
-                        <div class="order-info-row" style="margin-top: 10px; color: #e67e22;">
-                            <span class="order-info-label">Отстъпка от собственик:</span>
-                            <span class="order-info-value">-${order.ownerDiscountAmount.toFixed(2)} € (${order.ownerDiscount}%)</span>
-                        </div>
-                        ` : ''}
-                        <div class="order-total">
-                            <span class="order-total-label">Обща Сума:</span>
-                            <span class="order-total-value">${order.total.toFixed(2)} €</span>
-                        </div>
-                        ${order.ownerDiscount && order.ownerDiscount > 0 ? `
-                        <div class="order-total" style="margin-top: 5px; color: #27ae60;">
-                            <span class="order-total-label">Финална Сума:</span>
-                            <span class="order-total-value">${order.finalTotal.toFixed(2)} €</span>
-                        </div>
-                        ` : ''}
-                    </div>
-                </div>
-                
-                <div class="order-actions">
-                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                        ${order.status === 'pending' ? `
-                        <div style="display: flex; gap: 5px; align-items: center;">
-                            <label for="discount-${order.id}" style="font-size: 14px; white-space: nowrap;">Отстъпка (%):</label>
-                            <input type="number" id="discount-${order.id}" min="0" max="100" step="1" value="0" 
-                                   style="width: 70px; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
-                        </div>
-                        <button onclick="updateOrderStatus('${order.id}', 'approved')" class="btn btn-success">
-                            <i class="fas fa-check"></i> Одобри Поръчка
-                        </button>
-                        <button onclick="updateOrderStatus('${order.id}', 'cancelled')" class="btn btn-danger">
-                            <i class="fas fa-times"></i> Откажи Поръчка
-                        </button>
-                        ` : ''}
-                        <button onclick="deleteOrder('${order.id}')" class="btn btn-secondary">
-                            <i class="fas fa-trash"></i> Изтрий
-                        </button>
-                    </div>
-                </div>
+                </details>
             </div>
         `;
     }).join('');

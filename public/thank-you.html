@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thank you</title>
+  <link rel="stylesheet" href="styles.css?v=20260204a">
+  <style>
+    body { background: #f5f5f5; }
+    .thankyou-wrap { max-width: 820px; margin: 26px auto; padding: 0 16px; }
+    .thankyou-card { background: #fff; border-radius: 16px; padding: 22px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+    .thankyou-title { margin: 0 0 10px; font-size: 22px; }
+    .thankyou-title.ok { color: #27ae60; }
+    .thankyou-title.bad { color: #e74c3c; }
+    .thankyou-meta { margin-top: 10px; color: #555; }
+    .thankyou-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .thankyou-actions a { display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; text-decoration: none; font-weight: 700; }
+    .btn-primary { background: #e74c3c; color: #fff; }
+    .btn-secondary { background: #ecf0f1; color: #2c3e50; }
+    code { background: #f0f0f0; padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div class="container" style="display:flex; align-items:center; justify-content:space-between;">
+      <div class="logo"><h1 style="margin:0;">Bojole</h1></div>
+      <div></div>
+    </div>
+  </div>
+
+  <div class="thankyou-wrap">
+    <div class="thankyou-card">
+      <h1 id="ty-title" class="thankyou-title">Thank you!</h1>
+      <div id="ty-text">Your payment is being processed.</div>
+      <div class="thankyou-meta">
+        <div>Order: <code id="ty-order">—</code></div>
+        <div>Code: <code id="ty-code">—</code></div>
+      </div>
+      <div class="thankyou-actions">
+        <a id="ty-menu" class="btn-primary" href="/">Back to menu</a>
+        <a id="ty-track" class="btn-secondary" href="#">Track order</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      function getBasePath() {
+        return window.location.pathname.includes('/resturant-website') ? '/resturant-website' : '';
+      }
+
+      const base = getBasePath();
+      const params = new URLSearchParams(window.location.search);
+      const order = (params.get('order') || '').trim();
+      const status = (params.get('status') || '').trim().toLowerCase();
+      const code = (params.get('code') || '').trim();
+
+      document.getElementById('ty-menu').setAttribute('href', base + '/');
+
+      if (order) {
+        document.getElementById('ty-order').textContent = order;
+        document.getElementById('ty-track').setAttribute('href', base + '/track-order.html?id=' + encodeURIComponent(order));
+      } else {
+        document.getElementById('ty-track').style.display = 'none';
+      }
+
+      document.getElementById('ty-code').textContent = code || '—';
+
+      const title = document.getElementById('ty-title');
+      const text = document.getElementById('ty-text');
+
+      if (status === 'success') {
+        title.textContent = 'Thank you! Payment successful';
+        title.classList.add('ok');
+        text.textContent = 'Your order has been placed successfully.';
+        try {
+          localStorage.removeItem('cart');
+          localStorage.removeItem('checkoutState_v1');
+        } catch (e) {}
+      } else if (status === 'failed') {
+        title.textContent = 'Payment failed';
+        title.classList.add('bad');
+        text.textContent = 'Your payment was not completed. You can try again from checkout.';
+      } else {
+        title.textContent = 'Thank you!';
+      }
+    })();
+  </script>
+</body>
+</html>

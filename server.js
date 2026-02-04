@@ -286,16 +286,16 @@ function boricaBuildRegisterTransactionMessage({
     return `${messageType}${timestamp}${amountField}${terminalField}${orderIdField}${descField}${langField}${protocolField}`;
 }
 
-function boricaSignMessageToEBoricaBase64(message, privateKeyPem) {
+function boricaSignMessageToEBoricaBase64(message, privateKeyPem, algorithm = 'RSA-SHA1') {
     const dataBuffer = Buffer.from(message, 'utf8');
-    const sign = crypto.createSign('RSA-SHA1');
+    const sign = crypto.createSign(algorithm);
     sign.update(dataBuffer);
     sign.end();
     const signature = sign.sign(privateKeyPem);
     return Buffer.concat([dataBuffer, signature]).toString('base64');
 }
 
-function boricaVerifyAndParseEBorica(eBoricaBase64, publicCertPem) {
+function boricaVerifyAndParseEBorica(eBoricaBase64, publicCertPem, algorithms = ['RSA-SHA1', 'RSA-SHA256']) {
     const signedBuffer = Buffer.from(String(eBoricaBase64 || ''), 'base64');
     if (!signedBuffer || signedBuffer.length < 60) {
         return { ok: false, error: 'Invalid eBorica payload' };
@@ -319,10 +319,22 @@ function boricaVerifyAndParseEBorica(eBoricaBase64, publicCertPem) {
     const dataBuffer = signedBuffer.slice(0, signedBuffer.length - sigLen);
     const signatureBuffer = signedBuffer.slice(signedBuffer.length - sigLen);
 
-    const verify = crypto.createVerify('RSA-SHA1');
-    verify.update(dataBuffer);
-    verify.end();
-    const ok = verify.verify(publicCertPem, signatureBuffer);
+    let ok = false;
+    let usedAlg = '';
+    for (const alg of (Array.isArray(algorithms) ? algorithms : ['RSA-SHA1'])) {
+        try {
+            const verify = crypto.createVerify(alg);
+            verify.update(dataBuffer);
+            verify.end();
+            if (verify.verify(publicCertPem, signatureBuffer)) {
+                ok = true;
+                usedAlg = alg;
+                break;
+            }
+        } catch (e) {
+            // try next
+        }
+    }
 
     const text = dataBuffer.toString('utf8');
     const transactionCode = text.substring(0, 2);
@@ -346,7 +358,8 @@ function boricaVerifyAndParseEBorica(eBoricaBase64, publicCertPem) {
             terminalId,
             providerOrderId,
             responseCode,
-            protocolVersion
+                        protocolVersion,
+                        signatureAlg: usedAlg
         }
     };
 }
@@ -402,17 +415,20 @@ function normalizeSiteSettings(input) {
     const mode = (modeRaw === 'names_only' || modeRaw === 'names_and_descriptions') ? modeRaw : base.search.mode;
 
     const mapSrc = src.map && typeof src.map === 'object' ? src.map : {};
-    const mapEnabled = !!mapSrc.enabled;
+    const mapEnabledRequested = !!mapSrc.enabled;
     const mapLat = toFiniteNumberOrNull(mapSrc.lat);
     const mapLng = toFiniteNumberOrNull(mapSrc.lng);
     const mapZoomRaw = toFiniteNumberOrNull(mapSrc.zoom);
     const mapZoom = mapZoomRaw === null ? base.map.zoom : clamp(Math.round(mapZoomRaw), 1, 19);
     const mapLabel = normalizeText(mapSrc.label, 140);
 
+    const hasCoords = mapLat !== null && mapLng !== null;
+
     const map = {
-        enabled: mapEnabled && mapLat !== null && mapLng !== null,
-        lat: (mapEnabled && mapLat !== null && mapLng !== null) ? clamp(mapLat, -90, 90) : null,
-        lng: (mapEnabled && mapLat !== null && mapLng !== null) ? clamp(mapLng, -180, 180) : null,
+        enabled: mapEnabledRequested && hasCoords,
+        // Preserve coordinates even when disabled so admins don't lose them.
+        lat: mapLat !== null ? clamp(mapLat, -90, 90) : null,
+        lng: mapLng !== null ? clamp(mapLng, -180, 180) : null,
         zoom: mapZoom,
         label: mapLabel
     };
@@ -720,10 +736,68 @@ app.get(API_PREFIX + '/payments/config', (req, res) => {
     }
 });
 
+// BORICA initiation page (POST to gateway; avoids GET limitations)
+app.get(API_PREFIX + '/payments/borica/start', (req, res) => {
+        try {
+                const orderId = (req.query.orderId || '').toString().trim();
+                if (!orderId) return res.status(400).send('Missing orderId');
+
+                const db = readDatabase();
+                const order = (db.orders || []).find(o => o?.id === orderId);
+                if (!order) return res.status(404).send('Order not found');
+
+                const restaurant = (db.restaurants || []).find(r => r?.id === order.restaurantId);
+                if (!restaurant || !restaurant.borica?.terminalId || !restaurant.borica?.privateKeyPem) {
+                        return res.status(400).send('BORICA not configured');
+                }
+
+                const borica = restaurant.borica;
+                const eBorica = (order.payment && order.payment.eBorica)
+                        ? String(order.payment.eBorica)
+                        : null;
+
+                if (!eBorica) {
+                        return res.status(400).send('Missing eBorica payload');
+                }
+
+                const gateway = boricaGetGatewayBaseUrl(borica);
+                const action = `${gateway}registerTransaction`;
+
+                const html = `<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Redirecting to payment...</title>
+    </head>
+    <body>
+        <form id="boricaForm" method="POST" action="${action}">
+            <input type="hidden" name="eBorica" value="${String(eBorica).replace(/"/g, '&quot;')}" />
+        </form>
+        <script>
+            (function(){
+                try { document.getElementById('boricaForm').submit(); } catch (e) {}
+            })();
+        </script>
+        <noscript>
+            <p>JavaScript is required to continue. Please click:</p>
+            <button type="submit" form="boricaForm">Continue to payment</button>
+        </noscript>
+    </body>
+</html>`;
+
+                res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                return res.status(200).send(html);
+        } catch (e) {
+                console.error('BORICA start error:', e);
+                return res.status(500).send('Payment initialization error');
+        }
+});
+
 // BORICA return endpoint (configured in BORICA portal)
-app.get(API_PREFIX + '/payments/borica/return', (req, res) => {
+function handleBoricaReturn(req, res) {
     try {
-        const eBorica = req.query.eBorica || req.query.eborica;
+        const eBorica = (req.query.eBorica || req.query.eborica || req.body?.eBorica || req.body?.eborica);
         if (!eBorica) {
             return res.status(400).send('Missing eBorica');
         }
@@ -795,47 +869,16 @@ app.get(API_PREFIX + '/payments/borica/return', (req, res) => {
 
         writeDatabase(db);
 
-        const html = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Payment ${success ? 'Successful' : 'Failed'}</title>
-    <style>
-      body{font-family:Arial, sans-serif; background:#f5f5f5; margin:0; padding:40px;}
-      .card{max-width:720px; margin:0 auto; background:#fff; border-radius:16px; padding:24px; box-shadow:0 4px 14px rgba(0,0,0,.08);}
-      h1{margin:0 0 10px;}
-      .ok{color:#27ae60;} .bad{color:#e74c3c;}
-      a{display:inline-block; margin-top:14px; color:#2c3e50;}
-      code{background:#f0f0f0; padding:2px 6px; border-radius:6px;}
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h1 class="${success ? 'ok' : 'bad'}">${success ? 'Payment successful' : 'Payment failed'}</h1>
-      <div>Order: <code>${order.id}</code></div>
-      <div>BORICA response: <code>${responseCode || ''}</code></div>
-      <a href="${BASE_PATH || ''}/">Back to menu</a>
-    </div>
-        <script>
-            (function(){
-                try {
-                    if (${success ? 'true' : 'false'}) {
-                        localStorage.removeItem('cart');
-                    }
-                } catch (e) {}
-            })();
-        </script>
-  </body>
-</html>`;
-
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(html);
+                const redirectTarget = `${BASE_PATH || ''}/thank-you?order=${encodeURIComponent(order.id)}&status=${success ? 'success' : 'failed'}&code=${encodeURIComponent(responseCode || '')}`;
+                return res.redirect(302, redirectTarget);
     } catch (error) {
         console.error('BORICA return error:', error);
         res.status(500).send('Payment processing error');
     }
-});
+}
+
+app.get(API_PREFIX + '/payments/borica/return', handleBoricaReturn);
+app.post(API_PREFIX + '/payments/borica/return', express.urlencoded({ extended: false }), handleBoricaReturn);
 
 // Middleware to check authentication for protected routes (web admin)
 function requireAuth(req, res, next) {
@@ -2310,14 +2353,15 @@ app.post(API_PREFIX + '/orders', (req, res) => {
                 protocolVersion: '1.1'
             });
             const eBorica = boricaSignMessageToEBoricaBase64(message, borica.privateKeyPem);
-            const redirectUrl = `${boricaGetGatewayBaseUrl(borica)}registerTransaction?eBorica=${encodeURIComponent(eBorica)}`;
+            const redirectUrl = `${API_PREFIX}/payments/borica/start?orderId=${encodeURIComponent(newOrder.id)}`;
 
             newOrder.payment = {
                 method: 'card',
                 provider: 'borica',
                 status: 'pending',
                 providerOrderId,
-                amountBGN
+                amountBGN,
+                eBorica
             };
             newOrder.status = 'pending_payment';
 
@@ -2698,6 +2742,7 @@ const ADMIN_PATH = path.join(__dirname, 'public', 'admin.html');
 const LOGIN_PATH = path.join(__dirname, 'public', 'login.html');
 const PRIVACY_PATH = path.join(__dirname, 'public', 'privacy.html');
 const TERMS_PATH = path.join(__dirname, 'public', 'terms.html');
+const THANK_YOU_PATH = path.join(__dirname, 'public', 'thank-you.html');
 
 if (BASE_PATH) {
     // Normalize: allow access without trailing slash
@@ -2718,6 +2763,10 @@ app.get(BASE_PATH + '/login', (req, res) => {
 
 app.get(BASE_PATH + '/checkout', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'checkout.html'));
+});
+
+app.get(BASE_PATH + '/thank-you', (req, res) => {
+    res.sendFile(THANK_YOU_PATH);
 });
 
 app.get(BASE_PATH + '/privacy', (req, res) => {
