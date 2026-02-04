@@ -1,15 +1,71 @@
 const axios = require('axios');
 
 const DELIVERY_API_URL = 'https://karakashkov.com/delivery/api.php?path=/orders';
-const RESTAURANT_ID = '10'; // BOJOLE Restaurant ID (може да се промени от настройките)
-const RESTAURANT_ZONE = '1'; // Зона на ресторанта
+
+// Defaults (fallbacks) if we can't resolve a match.
+const RESTAURANT_ID = '45';
+const RESTAURANT_ZONE = '5';
+const RESTAURANT_NAME_DEFAULT = 'Божоле';
+
+// Delivery service restaurants database (excerpt): Bojole => id 45, zone 5, price_default 8.02
+const DELIVERY_RESTAURANT_DIRECTORY = {
+    bojole: {
+        id: '45',
+        name: 'Божоле',
+        zone: '5',
+        // Directory price_default is in BGN
+        priceDefault: 8.02,
+        priceDefaultCurrency: 'BGN'
+    }
+};
+
+function normalizeRestaurantName(name) {
+    return (name || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ');
+}
+
+function resolveDeliveryRestaurantConfig(order) {
+    const name = normalizeRestaurantName(order?.restaurantName);
+
+    // Match both latin and cyrillic spellings.
+    if (name.includes('bojole') || name.includes('bojo') || name.includes('божоле') || name.includes('божол')) {
+        return DELIVERY_RESTAURANT_DIRECTORY.bojole;
+    }
+
+    return {
+        id: RESTAURANT_ID,
+        name: RESTAURANT_NAME_DEFAULT,
+        zone: RESTAURANT_ZONE,
+        // Our system's deliveryFee is expected to already be in EUR
+        priceDefault: Number(order?.deliveryFee || 0) || 0,
+        priceDefaultCurrency: 'EUR'
+    };
+}
+
+function toNumber(value, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function convertToEur(amount, currency, eurToBgnRate) {
+    const amt = toNumber(amount, 0);
+    const cur = (currency || 'EUR').toString().trim().toUpperCase();
+    if (cur === 'BGN') {
+        const rate = toNumber(eurToBgnRate, 0);
+        if (rate > 0) return amt / rate;
+    }
+    return amt;
+}
 
 /**
  * Изпращане на поръчка за доставка към delivery API
  * @param {Object} order - Поръчката от нашата система
  * @returns {Promise<Object>} - Резултат от API-то
  */
-async function sendToDeliveryService(order) {
+async function sendToDeliveryService(order, options = {}) {
     try {
         // Проверка дали е поръчка с доставка
         if (order.deliveryMethod !== 'delivery') {
@@ -20,16 +76,31 @@ async function sendToDeliveryService(order) {
         // Генериране на уникален client_id (10 символа)
         const clientId = generateClientId();
 
+        const restaurantCfg = resolveDeliveryRestaurantConfig(order);
+
+        const eurToBgnRate =
+            options?.eurToBgnRate ??
+            options?.currencySettings?.eurToBgnRate ??
+            options?.restaurantCurrencySettings?.eurToBgnRate ??
+            1.9558;
+
+        const priceEur = convertToEur(
+            restaurantCfg.priceDefault,
+            restaurantCfg.priceDefaultCurrency,
+            eurToBgnRate
+        );
+
         // Подготовка на данните за delivery API
         const deliveryData = {
             client_id: clientId,
-            restaurant_id: RESTAURANT_ID,
-            restaurant_name: 'BOJOLE',
-            restaurant_zone: RESTAURANT_ZONE,
+            restaurant_id: restaurantCfg.id,
+            restaurant_name: restaurantCfg.name || order.restaurantName || RESTAURANT_NAME_DEFAULT,
+            restaurant_zone: restaurantCfg.zone,
             address: `${order.customerInfo?.address || ''}, ${order.customerInfo?.city || ''}`.trim(),
             phone: order.customerInfo?.phone || null,
             notes: order.customerInfo?.notes || null,
-            price: parseFloat(order.total).toFixed(1), // Доставка цена (може да е delivery fee)
+            // Delivery service price (matches delivery restaurants directory default)
+            price: Number(priceEur || 0).toFixed(2),
             submitted_at: Math.floor(Date.now() / 1000), // Unix timestamp
             status: 'queued' // Начален статус
         };

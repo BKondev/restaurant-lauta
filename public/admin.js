@@ -651,8 +651,8 @@ function renderSearchResults() {
                         <td>${escapeHtml(p.name || '')}</td>
                         <td>${escapeHtml(p.translations?.bg?.name || '')}</td>
                         <td>${escapeHtml(p.category || '')}</td>
-                        <td>${Number(p.price).toFixed(2)} лв</td>
-                        <td>${p.promo?.enabled ? `<span class="badge" style="background:#e74c3c;color:#fff;">${Number(p.promo.price).toFixed(2)} лв</span>` : '-'}
+                        <td>${Number(p.price).toFixed(2)} €</td>
+                        <td>${p.promo?.enabled ? `<span class="badge" style="background:#e74c3c;color:#fff;">${Number(p.promo.price).toFixed(2)} €</span>` : '-'}
                         </td>
                     </tr>
                 `).join('')}
@@ -1394,8 +1394,8 @@ function renderProducts() {
             const bgName = product.translations?.bg?.name || '';
             const category = product.category || '';
             const hasPromo = !!(product.promo && product.promo.enabled && typeof product.promo.price === 'number');
-            const promoDisplay = hasPromo ? `${product.promo.price.toFixed(2)} лв` : '-';
-            const priceDisplay = `${(product.price ?? 0).toFixed(2)} лв`;
+            const promoDisplay = hasPromo ? `${product.promo.price.toFixed(2)} €` : '-';
+            const priceDisplay = `${(product.price ?? 0).toFixed(2)} €`;
 
             return `
                 <tr>
@@ -3321,7 +3321,7 @@ function renderOrdersHistory() {
                     <div class="order-section">
                         <div class="order-total" style="margin-top: 0;">
                             <span class="order-total-label">Total:</span>
-                            <span class="order-total-value">${safeToFixed(totalShown)} лв</span>
+                            <span class="order-total-value">${safeToFixed(totalShown)} €</span>
                         </div>
                     </div>
                 </div>
@@ -3475,10 +3475,10 @@ function orderEditRecomputeTotals() {
     const box = document.getElementById('order-edit-totals');
     if (box) {
         box.innerHTML = `
-            <div style="display:flex; justify-content: space-between;"><span>Subtotal</span><strong>${safeToFixed(subtotal)} лв</strong></div>
-            <div style="display:flex; justify-content: space-between;"><span>Discount</span><strong>-${safeToFixed(discountAmount)} лв</strong></div>
-            <div style="display:flex; justify-content: space-between;"><span>Delivery fee</span><strong>${safeToFixed(fee)} лв</strong></div>
-            <div style="display:flex; justify-content: space-between; margin-top: 6px; border-top: 1px dashed #ddd; padding-top: 6px;"><span>Total</span><strong>${safeToFixed(total)} лв</strong></div>
+            <div style="display:flex; justify-content: space-between;"><span>Subtotal</span><strong>${safeToFixed(subtotal)} €</strong></div>
+            <div style="display:flex; justify-content: space-between;"><span>Discount</span><strong>-${safeToFixed(discountAmount)} €</strong></div>
+            <div style="display:flex; justify-content: space-between;"><span>Delivery fee</span><strong>${safeToFixed(fee)} €</strong></div>
+            <div style="display:flex; justify-content: space-between; margin-top: 6px; border-top: 1px dashed #ddd; padding-top: 6px;"><span>Total</span><strong>${safeToFixed(total)} €</strong></div>
         `;
     }
 }
@@ -3612,7 +3612,7 @@ function renderPendingOrders() {
                 <span class="order-item-name">${item.name}</span>
                 <div class="order-item-details">
                     <span>x${item.quantity}</span>
-                    <span>${(item.price * item.quantity).toFixed(2)} лв</span>
+                    <span>${(item.price * item.quantity).toFixed(2)} €</span>
                 </div>
             </div>
         `).join('');
@@ -3681,29 +3681,29 @@ function renderPendingOrders() {
                         ${order.deliveryFee && order.deliveryFee > 0 ? `
                         <div class="order-info-row" style="margin-top: 10px;">
                             <span class="order-info-label">Такса доставка:</span>
-                            <span class="order-info-value">${order.deliveryFee.toFixed(2)} лв</span>
+                            <span class="order-info-value">${order.deliveryFee.toFixed(2)} €</span>
                         </div>
                         ` : ''}
                         ${order.deliveryMethod === 'delivery' && (!order.deliveryFee || order.deliveryFee === 0) ? `
                         <div class="order-info-row" style="margin-top: 10px; color: #27ae60;">
                             <span class="order-info-label">Безплатна доставка!</span>
-                            <span class="order-info-value">0.00 лв</span>
+                            <span class="order-info-value">0.00 €</span>
                         </div>
                         ` : ''}
                         ${order.ownerDiscount && order.ownerDiscount > 0 ? `
                         <div class="order-info-row" style="margin-top: 10px; color: #e67e22;">
                             <span class="order-info-label">Отстъпка от собственик:</span>
-                            <span class="order-info-value">-${order.ownerDiscountAmount.toFixed(2)} лв (${order.ownerDiscount}%)</span>
+                            <span class="order-info-value">-${order.ownerDiscountAmount.toFixed(2)} € (${order.ownerDiscount}%)</span>
                         </div>
                         ` : ''}
                         <div class="order-total">
                             <span class="order-total-label">Обща Сума:</span>
-                            <span class="order-total-value">${order.total.toFixed(2)} лв</span>
+                            <span class="order-total-value">${order.total.toFixed(2)} €</span>
                         </div>
                         ${order.ownerDiscount && order.ownerDiscount > 0 ? `
                         <div class="order-total" style="margin-top: 5px; color: #27ae60;">
                             <span class="order-total-label">Финална Сума:</span>
-                            <span class="order-total-value">${order.finalTotal.toFixed(2)} лв</span>
+                            <span class="order-total-value">${order.finalTotal.toFixed(2)} €</span>
                         </div>
                         ` : ''}
                     </div>
@@ -3852,7 +3852,7 @@ function requestNotificationPermission() {
 function showBrowserNotification(order) {
     if ('Notification' in window && Notification.permission === 'granted') {
         const notification = new Notification('Нова Поръчка!', {
-            body: `Поръчка #${order.id} от ${order.customerInfo.name}\nОбща сума: ${order.total.toFixed(2)} лв`,
+            body: `Поръчка #${order.id} от ${order.customerInfo.name}\nОбща сума: ${order.total.toFixed(2)} €`,
             icon: '/favicon.ico',
             tag: `order-${order.id}`
         });
@@ -4129,7 +4129,7 @@ function renderComboProductSelector() {
                          style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; flex-shrink: 0;">
                     <div style="flex: 1; min-width: 0;">
                         <div style="font-weight: 500; font-size: 14px; color: #333; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${product.name}</div>
-                        <div style="font-size: 13px; color: #4CAF50; font-weight: 600;">${product.price.toFixed(2)} лв</div>
+                        <div style="font-size: 13px; color: #4CAF50; font-weight: 600;">${product.price.toFixed(2)} €</div>
                     </div>
                 </label>
             `).join('')}
@@ -4280,7 +4280,7 @@ function renderCombosTable(combos) {
             <td><span style="padding: 4px 8px; background: #3498db; color: white; border-radius: 4px; font-size: 12px;">
                 ${combo.comboType === 'bundle' ? 'Bundle' : 'Combo'}
             </span></td>
-            <td>${combo.price.toFixed(2)} лв</td>
+            <td>${combo.price.toFixed(2)} €</td>
             <td>
                 <button onclick="deleteProduct(${combo.id})" class="btn btn-danger btn-sm">
                     <i class="fas fa-trash"></i> Delete
@@ -4311,7 +4311,7 @@ function openBundleModal() {
                 <img src="${p.image}" alt="${p.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
                 <div style="flex: 1;">
                     <strong>${p.name}</strong>
-                    <div style="color: #666; font-size: 14px;">${p.price.toFixed(2)} лв</div>
+                    <div style="color: #666; font-size: 14px;">${p.price.toFixed(2)} €</div>
                 </div>
             </div>
         `).join('')}
@@ -4325,7 +4325,7 @@ function openBundleModal() {
     
     // Calculate total original price
     const totalPrice = selectedProducts.reduce((sum, p) => sum + p.price, 0);
-    document.getElementById('bundle-original-price').textContent = `Original total: ${totalPrice.toFixed(2)} лв`;
+    document.getElementById('bundle-original-price').textContent = `Original total: ${totalPrice.toFixed(2)} €`;
     document.getElementById('bundle-price-input').value = (totalPrice * 0.85).toFixed(2); // Suggest 15% discount
     
     // Clear other fields

@@ -583,8 +583,8 @@ app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
             const looksLikeHttpsUrl = (u) => /^https?:\/\//i.test((u || '').toString().trim());
 
             if (enabled) {
-                if (!/^[0-9]{8}$/.test(terminalId)) {
-                    return res.status(400).json({ error: 'BORICA Terminal ID must be exactly 8 digits' });
+                if (!/^[A-Za-z0-9]{1,8}$/.test(terminalId)) {
+                    return res.status(400).json({ error: 'BORICA Terminal ID must be 1-8 characters (letters/digits)' });
                 }
                 if (backrefUrl && !looksLikeHttpsUrl(backrefUrl)) {
                     return res.status(400).json({ error: 'BORICA Backref URL must start with http:// or https://' });
@@ -2081,7 +2081,7 @@ app.put(API_PREFIX + '/orders/mobile/:id', requireApiKey, async (req, res) => {
                 });
 
                 try {
-                    const deliveryResult = await sendToDeliveryService(order);
+                    const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate: data?.currencySettings?.eurToBgnRate });
                     if (deliveryResult.success) {
                         order.deliveryServiceId = deliveryResult.deliveryId;
                         console.log('Order sent to delivery service:', deliveryResult.deliveryId);
@@ -2496,7 +2496,7 @@ app.put(API_PREFIX + '/orders/:id', requireAuth, async (req, res) => {
                     });
 
                 // Изпращане към delivery service
-                const deliveryResult = await sendToDeliveryService(order);
+                const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate: data?.currencySettings?.eurToBgnRate });
                 
                 if (deliveryResult.success) {
                     console.log('Order sent to delivery service:', deliveryResult.deliveryId);

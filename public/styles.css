@@ -7,7 +7,7 @@
     --highlight-color: #e74c3c;
     --price-color: #e74c3c;
     --top-bar-height: 70px;
-    --sticky-gap: 8px;
+    --sticky-gap: 0px;
 }
 
 * {

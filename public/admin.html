@@ -166,8 +166,8 @@
             </div>
 
             <div class="form-group">
-                <label for="borica-terminal-id">BORICA Terminal ID (8 digits):</label>
-                <input type="text" id="borica-terminal-id" placeholder="00000000" maxlength="8" inputmode="numeric">
+                <label for="borica-terminal-id">BORICA Terminal ID:</label>
+                <input type="text" id="borica-terminal-id" placeholder="AB12CD34" maxlength="8" autocapitalize="characters" autocomplete="off">
             </div>
 
             <div class="form-group">
@@ -530,14 +530,14 @@
                         </label>
                     </div>
                     <div class="form-group" id="free-delivery-amount-group" style="display: none;">
-                        <label for="free-delivery-amount">Minimum Order Amount (лв):</label>
+                        <label for="free-delivery-amount">Minimum Order Amount (€):</label>
                         <input type="number" id="free-delivery-amount" min="0" step="0.01" placeholder="e.g., 50.00">
                         <small>Orders above this amount get free delivery</small>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="delivery-fee">Standard Delivery Fee (лв):</label>
+                        <label for="delivery-fee">Standard Delivery Fee (€):</label>
                         <input type="number" id="delivery-fee" min="0" step="0.01" placeholder="e.g., 5.00" value="5.00">
                         <small>Fee charged for delivery orders</small>
                     </div>
@@ -653,7 +653,7 @@
 
             <div class="form-row">
                 <div class="form-group">
-                    <label for="combo-price">Price (лв):</label>
+                    <label for="combo-price">Price (€):</label>
                     <input type="number" id="combo-price" min="0" step="0.01" placeholder="e.g., 49.99">
                 </div>
 
@@ -1045,7 +1045,7 @@
                     </div>
                     
                     <div class="form-group" style="margin-bottom: 20px;">
-                        <label for="bundle-price-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Bundle Price (лв):</label>
+                        <label for="bundle-price-input" style="display: block; margin-bottom: 5px; font-weight: 600;">Bundle Price (€):</label>
                         <input type="number" id="bundle-price-input" step="0.01" min="0" required placeholder="0.00" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
                         <small id="bundle-original-price" style="display: block; margin-top: 5px; color: #666;"></small>
                     </div>
