@@ -29,6 +29,7 @@ let currencySettings = {};
 
 let siteSettings = null;
 let siteSearchMode = 'names_and_descriptions';
+let siteWorkingHours = null;
 
 let modalProductId = null;
 let modalQuantity = 1;
@@ -190,6 +191,16 @@ async function loadData() {
         } catch (e) {
             // ignore
         }
+
+        // Load working hours for footer display
+        try {
+            const whRes = await fetch(`${API_URL}/settings/working-hours`);
+            if (whRes.ok) {
+                siteWorkingHours = await whRes.json();
+            }
+        } catch (e) {
+            // ignore
+        }
         
         // Initialize language
         initLanguage();
@@ -215,44 +226,79 @@ function renderSiteFooter() {
     const aboutText = (siteSettings?.footer?.aboutText || '').toString().trim();
     const socials = Array.isArray(siteSettings?.footer?.socials) ? siteSettings.footer.socials : [];
 
+    const labels = currentLanguage === 'bg'
+        ? { contacts: 'Контакти', info: 'Информация', about: 'За нас', address: 'Адрес', hours: 'Работно време', phone: 'Телефон', email: 'Имейл', terms: 'Условия', privacy: 'Политика за поверителност', poweredBy: 'Powered by:' }
+        : { contacts: 'Contacts', info: 'Information', about: 'About us', address: 'Address', hours: 'Working hours', phone: 'Phone', email: 'Email', terms: 'Terms', privacy: 'Privacy policy', poweredBy: 'Powered by:' };
+
+    const openingTime = (siteWorkingHours?.openingTime || '').toString().trim();
+    const closingTime = (siteWorkingHours?.closingTime || '').toString().trim();
+    const hoursText = (openingTime && closingTime) ? `${openingTime} - ${closingTime}` : '';
+
     const contactLines = [
-        contacts.phone ? `<li><strong>Phone:</strong> ${escapeHtml(contacts.phone)}</li>` : '',
-        contacts.email ? `<li><strong>Email:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${escapeHtml(contacts.email)}</a></li>` : '',
-        contacts.address ? `<li><strong>Address:</strong> ${escapeHtml(contacts.address)}</li>` : ''
+        contacts.address ? `<li><strong>${escapeHtml(labels.address)}:</strong> ${escapeHtml(contacts.address)}</li>` : '',
+        hoursText ? `<li><strong>${escapeHtml(labels.hours)}:</strong> ${escapeHtml(hoursText)}</li>` : '',
+        contacts.phone ? `<li><strong>${escapeHtml(labels.phone)}:</strong> ${escapeHtml(contacts.phone)}</li>` : '',
+        contacts.email ? `<li><strong>${escapeHtml(labels.email)}:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${escapeHtml(contacts.email)}</a></li>` : ''
     ].filter(Boolean).join('');
 
-    const socialLinks = socials
-        .filter(s => s && s.url)
-        .map(s => {
-            const label = (s.label || s.url).toString();
-            const icon = (s.iconClass || '').toString().trim();
-            const iconHtml = icon ? `<i class="${escapeHtml(icon)}"></i>` : '<i class="fas fa-link"></i>';
-            return `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${iconHtml}<span>${escapeHtml(label)}</span></a>`;
+    function detectSocialKey(s) {
+        const url = (s?.url || '').toString().toLowerCase();
+        const label = (s?.label || '').toString().toLowerCase();
+        if (url.includes('facebook') || label.includes('facebook')) return 'facebook';
+        if (url.includes('instagram') || label.includes('instagram')) return 'instagram';
+        if (url.includes('google') || url.includes('maps') || label.includes('google')) return 'google';
+        return '';
+    }
+
+    function iconClassForKey(key, fallback) {
+        if (key === 'facebook') return 'fab fa-facebook-f';
+        if (key === 'instagram') return 'fab fa-instagram';
+        if (key === 'google') return 'fab fa-google';
+        return fallback || 'fas fa-link';
+    }
+
+    const socialsByKey = new Map();
+    socials.forEach(s => {
+        if (!s || !s.url) return;
+        const key = detectSocialKey(s);
+        if (!key) return;
+        if (!socialsByKey.has(key)) socialsByKey.set(key, s);
+    });
+
+    const socialOrder = ['facebook', 'instagram', 'google'];
+    const socialLinks = socialOrder
+        .map(key => {
+            const s = socialsByKey.get(key);
+            if (!s || !s.url) return '';
+            const icon = iconClassForKey(key, (s.iconClass || '').toString().trim());
+            const label = key.charAt(0).toUpperCase() + key.slice(1);
+            return `<a class="footer-social-icon" href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(label)}"><i class="${escapeHtml(icon)}"></i></a>`;
         })
+        .filter(Boolean)
         .join('');
 
     footerEl.innerHTML = `
         <div class="footer-inner">
             <div class="footer-grid">
                 <div class="footer-col">
-                    <h3>Contacts</h3>
+                    <h3>${escapeHtml(labels.contacts)}</h3>
                     <ul>${contactLines || '<li>—</li>'}</ul>
                 </div>
                 <div class="footer-col">
-                    <h3>Information</h3>
+                    <h3>${escapeHtml(labels.info)}</h3>
                     <ul>
-                        <li><a href="privacy">Privacy Policy</a></li>
-                        <li><a href="terms">Terms &amp; Conditions</a></li>
+                        <li><a href="terms">${escapeHtml(labels.terms)}</a></li>
+                        <li><a href="privacy">${escapeHtml(labels.privacy)}</a></li>
                     </ul>
                 </div>
                 <div class="footer-col">
-                    <h3>About</h3>
+                    <h3>${escapeHtml(labels.about)}</h3>
                     <p>${aboutText ? escapeHtml(aboutText) : '—'}</p>
                     ${socialLinks ? `<div class="footer-socials">${socialLinks}</div>` : ''}
                 </div>
             </div>
             <div class="footer-bottom">
-                <div>Powered by Crystal Automation &amp; Karakashkov</div>
+                <div>${escapeHtml(labels.poweredBy)} Crystal Automation &amp; Karakashkov</div>
                 <div>&copy; ${new Date().getFullYear()}</div>
             </div>
         </div>

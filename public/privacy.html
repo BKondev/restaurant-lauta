@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Privacy Policy</title>
     <link rel="stylesheet" href="styles.css?v=20260204a" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
@@ -26,6 +27,12 @@
                 const res = await fetch('api/settings/site');
                 if (!res.ok) return;
                 const s = await res.json();
+
+                let wh = null;
+                try {
+                    const whRes = await fetch('api/settings/working-hours');
+                    if (whRes.ok) wh = await whRes.json();
+                } catch (e) {}
 
                 // map (above footer)
                 try {
@@ -68,19 +75,43 @@
                     .replace(/'/g, '&#39;');
 
                 const contactLines = [
+                    contacts.address ? `<li><strong>Address:</strong> ${esc(contacts.address)}</li>` : '',
+                    (wh && wh.openingTime && wh.closingTime) ? `<li><strong>Working hours:</strong> ${esc(String(wh.openingTime).trim())} - ${esc(String(wh.closingTime).trim())}</li>` : '',
                     contacts.phone ? `<li><strong>Phone:</strong> ${esc(contacts.phone)}</li>` : '',
-                    contacts.email ? `<li><strong>Email:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${esc(contacts.email)}</a></li>` : '',
-                    contacts.address ? `<li><strong>Address:</strong> ${esc(contacts.address)}</li>` : ''
+                    contacts.email ? `<li><strong>Email:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${esc(contacts.email)}</a></li>` : ''
                 ].filter(Boolean).join('');
 
-                const socialLinks = socials
-                    .filter(x => x && x.url)
-                    .map(x => {
-                        const label = (x.label || x.url).toString();
-                        const icon = (x.iconClass || '').toString().trim();
-                        const iconHtml = icon ? `<i class="${esc(icon)}"></i>` : '<i class="fas fa-link"></i>';
-                        return `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${iconHtml}<span>${esc(label)}</span></a>`;
+                const detectKey = (x) => {
+                    const url = (x?.url || '').toString().toLowerCase();
+                    const label = (x?.label || '').toString().toLowerCase();
+                    if (url.includes('facebook') || label.includes('facebook')) return 'facebook';
+                    if (url.includes('instagram') || label.includes('instagram')) return 'instagram';
+                    if (url.includes('google') || url.includes('maps') || label.includes('google')) return 'google';
+                    return '';
+                };
+
+                const iconFor = (k) => {
+                    if (k === 'facebook') return 'fab fa-facebook-f';
+                    if (k === 'instagram') return 'fab fa-instagram';
+                    if (k === 'google') return 'fab fa-google';
+                    return 'fas fa-link';
+                };
+
+                const byKey = new Map();
+                socials.forEach(x => {
+                    if (!x || !x.url) return;
+                    const k = detectKey(x);
+                    if (!k) return;
+                    if (!byKey.has(k)) byKey.set(k, x);
+                });
+
+                const socialLinks = ['facebook', 'instagram', 'google']
+                    .map(k => {
+                        const x = byKey.get(k);
+                        if (!x || !x.url) return '';
+                        return `<a class="footer-social-icon" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(k)}"><i class="${esc(iconFor(k))}"></i></a>`;
                     })
+                    .filter(Boolean)
                     .join('');
 
                 footerEl.innerHTML = `
@@ -93,18 +124,18 @@
                             <div class="footer-col">
                                 <h3>Information</h3>
                                 <ul>
-                                    <li><a href="privacy">Privacy Policy</a></li>
-                                    <li><a href="terms">Terms &amp; Conditions</a></li>
+                                    <li><a href="terms">Terms</a></li>
+                                    <li><a href="privacy">Privacy policy</a></li>
                                 </ul>
                             </div>
                             <div class="footer-col">
-                                <h3>About</h3>
+                                <h3>About us</h3>
                                 <p>${aboutText ? esc(aboutText) : '—'}</p>
                                 ${socialLinks ? `<div class="footer-socials">${socialLinks}</div>` : ''}
                             </div>
                         </div>
                         <div class="footer-bottom">
-                            <div>Powered by Crystal Automation &amp; Karakashkov</div>
+                            <div>Powered by: Crystal Automation &amp; Karakashkov</div>
                             <div>&copy; ${new Date().getFullYear()}</div>
                         </div>
                     </div>

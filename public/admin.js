@@ -157,7 +157,7 @@ const translations = {
         productsTab: 'Products',
         promoCodesTab: 'Promo Codes',
         combosTab: 'Combos',
-        approvedOrders: 'Approved Orders',
+        approvedOrders: 'Order History',
         menu: 'Menu',
         backToMenu: 'Back to Menu',
 
@@ -169,6 +169,7 @@ const translations = {
         refresh: 'Refresh',
         print: 'Print',
         exportCsv: 'Export CSV',
+        printApprovedOnly: 'Printing is available only for approved orders.',
         all: 'All',
         delivery: 'Delivery',
         pickup: 'Pickup',
@@ -534,7 +535,7 @@ const translations = {
         productsTab: 'Продукти',
         promoCodesTab: 'Промо Кодове',
         combosTab: 'Комбo',
-        approvedOrders: 'Одобрени Поръчки',
+        approvedOrders: 'История на поръчките',
         menu: 'Меню',
         backToMenu: 'Към Менюто',
 
@@ -546,6 +547,7 @@ const translations = {
         refresh: 'Опресни',
         print: 'Принт',
         exportCsv: 'Експорт CSV',
+        printApprovedOnly: 'Принтирането е достъпно само за одобрени поръчки.',
         all: 'Всички',
         delivery: 'Доставка',
         pickup: 'Вземане',
@@ -3983,17 +3985,18 @@ function safeToFixed(n, digits = 2) {
 
 function getOrdersHistoryFilters() {
     const search = (document.getElementById('orders-history-search')?.value || '').toString().trim().toLowerCase();
-    // This tab is now meant primarily for approved orders.
-    // Default to approved if user didn't explicitly pick another status.
+    // Order history: keep it simple (approved/cancelled).
     const statusEl = document.getElementById('orders-history-status');
     const statusRaw = (statusEl?.value || '').toString().trim();
-    const status = statusRaw || 'approved';
+    const status = statusRaw;
     const method = (document.getElementById('orders-history-method')?.value || '').toString().trim();
     return { search, status, method };
 }
 
 function getFilteredOrdersHistory() {
     const { search, status, method } = getOrdersHistoryFilters();
+
+    const historyStatuses = new Set(['approved', 'cancelled']);
 
     const fromEl = document.getElementById('approved-orders-from');
     const toEl = document.getElementById('approved-orders-to');
@@ -4003,8 +4006,9 @@ function getFilteredOrdersHistory() {
     const filtered = (orders || [])
         .filter(o => orderMatchesSearch(o, search))
         .filter(o => {
-            if (!status) return true;
             const normalized = (o.status || '').toString() === 'confirmed' ? 'approved' : (o.status || '').toString();
+            if (!historyStatuses.has(normalized)) return false;
+            if (!status) return true;
             return normalized === status;
         })
         .filter(o => {
@@ -4120,6 +4124,7 @@ function renderOrdersHistory() {
         const created = formatOrderDateTime(order.timestamp || order.createdAt);
         const methodLabel = (order.deliveryMethod || order.deliveryType) === 'delivery' ? t('delivery', 'Delivery') : t('pickup', 'Pickup');
         const statusLabel = getOrderStatusLabel(order.status);
+        const statusClass = ((order.status || '').toString() === 'confirmed' ? 'approved' : (order.status || '').toString());
         const totalShown = (order.ownerDiscount && order.ownerDiscount > 0 && order.finalTotal != null) ? order.finalTotal : order.total;
         const actions = getNextActionsForOrder(order);
 
@@ -4148,7 +4153,7 @@ function renderOrdersHistory() {
         `).join('');
 
         return `
-            <div class="order-card" style="margin-bottom: 14px;">
+            <div class="order-card status-${statusClass}" style="margin-bottom: 14px;">
                 <div class="order-header">
                     <div>
                         <div class="order-id">#${order.id}</div>
@@ -4159,7 +4164,7 @@ function renderOrdersHistory() {
                             ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? '<i class="fas fa-truck"></i>' : '<i class="fas fa-shopping-bag"></i>'}
                             ${methodLabel}
                         </span>
-                        <span class="order-status ${order.status}">${statusLabel}</span>
+                        <span class="order-status ${statusClass}">${statusLabel}</span>
                     </div>
                 </div>
 
@@ -4329,6 +4334,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function printApprovedOrdersRange() {
     try {
+        const status = (document.getElementById('orders-history-status')?.value || '').toString().trim();
+        if (status && status !== 'approved') {
+            alert(t('printApprovedOnly', 'Printing is available only for approved orders.'));
+            return;
+        }
         const fromEl = document.getElementById('approved-orders-from');
         const toEl = document.getElementById('approved-orders-to');
         const from = (fromEl?.value || '').toString().trim();
@@ -4588,6 +4598,7 @@ function renderPendingOrders() {
         const s = (status || '').toString();
         const normalized = s === 'confirmed' ? 'approved' : s;
         if (normalized === 'pending') return 'received';
+        if (normalized === 'pending_payment') return 'received';
         if (normalized === 'approved') return 'approved';
         if (normalized === 'delivering') return 'delivering';
         if (normalized === 'ready_for_pickup') return 'waiting';
@@ -4615,8 +4626,9 @@ function renderPendingOrders() {
 
         const statusLabel = formatStatusLabel(order.status, method);
         const isAwaitingPayment = order.status === 'pending_payment';
+        const statusClass = isAwaitingPayment ? 'pending' : order.status;
         const paymentBadge = isAwaitingPayment
-            ? `<span class="order-status pending_payment" style="background:#fff3cd; color:#8a6d3b; border:1px solid #ffeeba;">Awaiting payment</span>`
+            ? `<span class="order-status pending_payment">Awaiting payment</span>`
             : '';
 
         const itemsList = (order.items || []).map(item => `
@@ -4645,7 +4657,7 @@ function renderPendingOrders() {
                             </div>
                             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content:flex-end;">
                                 <span class="delivery-badge ${method}">${deliveryIcon}</span>
-                                <span class="order-status ${order.status}">${statusLabel}</span>
+                                <span class="order-status ${statusClass}">${statusLabel}</span>
                                 ${paymentBadge}
                             </div>
                         </div>
