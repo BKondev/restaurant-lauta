@@ -55,7 +55,67 @@ const translations = {
         recommendedSizes: 'Recommended banner sizes:',
         desktop: 'Desktop',
         mobile: 'Mobile',
-        useHighQuality: 'Use high quality images (JPG/PNG) for best results'
+        useHighQuality: 'Use high quality images (JPG/PNG) for best results',
+
+        restaurantTab: 'Restaurant',
+        deliveryTab: 'Delivery',
+        productsTab: 'Products',
+        promoCodesTab: 'Promo Codes',
+        combosTab: 'Combos',
+        approvedOrders: 'Approved Orders',
+        menu: 'Menu',
+        backToMenu: 'Back to Menu',
+
+        search: 'Search',
+        status: 'Status',
+        method: 'Method',
+        from: 'From',
+        to: 'To',
+        refresh: 'Refresh',
+        print: 'Print',
+        exportCsv: 'Export CSV',
+        all: 'All',
+        delivery: 'Delivery',
+        pickup: 'Pickup',
+
+        ordersHistorySearchPlaceholder: 'Order ID / name / phone / email',
+        statusPending: 'Pending (received)',
+        statusApproved: 'Approved',
+        statusDelivering: 'Delivering',
+        statusReady: 'Ready for pickup',
+        statusCompleted: 'Completed',
+        statusCancelled: 'Cancelled',
+
+        showingOrders: 'Showing {count} order(s)',
+        noOrdersMatch: 'No orders match the filters.',
+
+        customer: 'Customer',
+        phone: 'Phone',
+        email: 'Email',
+        city: 'City',
+        address: 'Address',
+        notes: 'Notes',
+        products: 'Products',
+        total: 'Total',
+
+        csvOrderId: 'Order ID',
+        csvCreatedAt: 'Created At',
+        csvStatus: 'Status',
+        csvMethod: 'Method',
+        csvCustomerName: 'Customer Name',
+        csvCustomerPhone: 'Customer Phone',
+        csvCustomerEmail: 'Customer Email',
+        csvCity: 'City',
+        csvAddress: 'Address',
+        csvCustomerNotes: 'Customer Notes',
+        csvItems: 'Items',
+        csvItemsNotes: 'Item Notes',
+        csvSubtotal: 'Subtotal',
+        csvDeliveryFee: 'Delivery Fee',
+        csvDiscount: 'Discount',
+        csvTotal: 'Total',
+        csvOwnerDiscount: 'Owner Discount',
+        csvFinalTotal: 'Final Total'
     },
     bg: {
         adminPanel: 'Админ Панел',
@@ -104,9 +164,76 @@ const translations = {
         recommendedSizes: 'Препоръчителни размери на банери:',
         desktop: 'Десктоп',
         mobile: 'Мобилна',
-        useHighQuality: 'Използвайте високо качество изображения (JPG/PNG) за най-добър резултат'
+        useHighQuality: 'Използвайте високо качество изображения (JPG/PNG) за най-добър резултат',
+
+        restaurantTab: 'Ресторант',
+        deliveryTab: 'Доставка',
+        productsTab: 'Продукти',
+        promoCodesTab: 'Промо Кодове',
+        combosTab: 'Комбo',
+        approvedOrders: 'Одобрени Поръчки',
+        menu: 'Меню',
+        backToMenu: 'Към Менюто',
+
+        search: 'Търси',
+        status: 'Статус',
+        method: 'Метод',
+        from: 'От',
+        to: 'До',
+        refresh: 'Опресни',
+        print: 'Принт',
+        exportCsv: 'Експорт CSV',
+        all: 'Всички',
+        delivery: 'Доставка',
+        pickup: 'Вземане',
+
+        ordersHistorySearchPlaceholder: 'ID / име / телефон / имейл',
+        statusPending: 'Чакаща (получена)',
+        statusApproved: 'Одобрена',
+        statusDelivering: 'В доставка',
+        statusReady: 'Готова за вземане',
+        statusCompleted: 'Завършена',
+        statusCancelled: 'Отказана',
+
+        showingOrders: 'Показва {count} поръчки',
+        noOrdersMatch: 'Няма поръчки по тези филтри.',
+
+        customer: 'Клиент',
+        phone: 'Телефон',
+        email: 'Имейл',
+        city: 'Град',
+        address: 'Адрес',
+        notes: 'Бележки',
+        products: 'Продукти',
+        total: 'Общо',
+
+        csvOrderId: 'ID',
+        csvCreatedAt: 'Дата',
+        csvStatus: 'Статус',
+        csvMethod: 'Метод',
+        csvCustomerName: 'Клиент',
+        csvCustomerPhone: 'Телефон',
+        csvCustomerEmail: 'Имейл',
+        csvCity: 'Град',
+        csvAddress: 'Адрес',
+        csvCustomerNotes: 'Бележки (клиент)',
+        csvItems: 'Артикули',
+        csvItemsNotes: 'Бележки (артикули)',
+        csvSubtotal: 'Сума',
+        csvDeliveryFee: 'Доставка',
+        csvDiscount: 'Отстъпка',
+        csvTotal: 'Общо',
+        csvOwnerDiscount: 'Отстъпка (собственик)',
+        csvFinalTotal: 'Крайна сума'
     }
 };
+
+function t(key, fallback = '') {
+    const table = translations?.[currentLanguage] || translations?.en || {};
+    const value = table?.[key];
+    if (typeof value === 'string' && value.length) return value;
+    return fallback;
+}
 
 function switchLanguage(lang) {
     currentLanguage = lang;
@@ -3282,12 +3409,12 @@ async function loadOrders() {
 function getOrderStatusLabel(status) {
     const s = (status || '').toString();
     const normalized = s === 'confirmed' ? 'approved' : s;
-    if (normalized === 'pending') return 'received';
-    if (normalized === 'approved') return 'approved';
-    if (normalized === 'delivering') return 'delivering';
-    if (normalized === 'ready_for_pickup') return 'ready for pickup';
-    if (normalized === 'completed') return 'done';
-    if (normalized === 'cancelled') return 'cancelled';
+    if (normalized === 'pending') return (currentLanguage === 'bg' ? 'получена' : 'received');
+    if (normalized === 'approved') return (currentLanguage === 'bg' ? 'одобрена' : 'approved');
+    if (normalized === 'delivering') return (currentLanguage === 'bg' ? 'в доставка' : 'delivering');
+    if (normalized === 'ready_for_pickup') return (currentLanguage === 'bg' ? 'готова' : 'ready');
+    if (normalized === 'completed') return (currentLanguage === 'bg' ? 'завършена' : 'done');
+    if (normalized === 'cancelled') return (currentLanguage === 'bg' ? 'отказана' : 'cancelled');
     return normalized;
 }
 
@@ -3314,6 +3441,40 @@ function getOrdersHistoryFilters() {
     const status = statusRaw || 'approved';
     const method = (document.getElementById('orders-history-method')?.value || '').toString().trim();
     return { search, status, method };
+}
+
+function getFilteredOrdersHistory() {
+    const { search, status, method } = getOrdersHistoryFilters();
+
+    const fromEl = document.getElementById('approved-orders-from');
+    const toEl = document.getElementById('approved-orders-to');
+    const fromDate = parseDateInputValue(fromEl?.value);
+    const toDate = endOfDay(parseDateInputValue(toEl?.value));
+
+    const filtered = (orders || [])
+        .filter(o => orderMatchesSearch(o, search))
+        .filter(o => {
+            if (!status) return true;
+            const normalized = (o.status || '').toString() === 'confirmed' ? 'approved' : (o.status || '').toString();
+            return normalized === status;
+        })
+        .filter(o => {
+            if (!method) return true;
+            const m = (o.deliveryMethod || o.deliveryType || '').toString();
+            return m === method;
+        })
+        .filter(o => {
+            if (!fromDate && !toDate) return true;
+            const ts = o.timestamp || o.createdAt;
+            const d = new Date(ts);
+            if (Number.isNaN(d.getTime())) return false;
+            if (fromDate && d < fromDate) return false;
+            if (toDate && d > toDate) return false;
+            return true;
+        })
+        .sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
+
+    return filtered;
 }
 
 function parseDateInputValue(value) {
@@ -3391,44 +3552,16 @@ function renderOrdersHistory() {
     const stats = document.getElementById('orders-history-stats');
     if (!container) return;
 
-    const { search, status, method } = getOrdersHistoryFilters();
-
-    const fromEl = document.getElementById('approved-orders-from');
-    const toEl = document.getElementById('approved-orders-to');
-    const fromDate = parseDateInputValue(fromEl?.value);
-    const toDate = endOfDay(parseDateInputValue(toEl?.value));
-
-    const filtered = (orders || [])
-        .filter(o => orderMatchesSearch(o, search))
-        .filter(o => {
-            if (!status) return true;
-            const normalized = (o.status || '').toString() === 'confirmed' ? 'approved' : (o.status || '').toString();
-            return normalized === status;
-        })
-        .filter(o => {
-            if (!method) return true;
-            const m = (o.deliveryMethod || o.deliveryType || '').toString();
-            return m === method;
-        })
-        .filter(o => {
-            if (!fromDate && !toDate) return true;
-            const ts = o.timestamp || o.createdAt;
-            const d = new Date(ts);
-            if (Number.isNaN(d.getTime())) return false;
-            if (fromDate && d < fromDate) return false;
-            if (toDate && d > toDate) return false;
-            return true;
-        })
-        .sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
+    const filtered = getFilteredOrdersHistory();
 
     if (stats) {
-        stats.textContent = `Showing ${filtered.length} order(s)`;
+        stats.textContent = t('showingOrders', `Showing ${filtered.length} order(s)`).replace('{count}', String(filtered.length));
     }
 
     if (filtered.length === 0) {
         container.innerHTML = `
             <div style="padding: 20px; color: #999; text-align: center; background: #fff; border: 1px solid #eee; border-radius: 10px;">
-                No orders match the filters.
+                ${t('noOrdersMatch', 'No orders match the filters.')}
             </div>
         `;
         return;
@@ -3436,7 +3569,7 @@ function renderOrdersHistory() {
 
     container.innerHTML = filtered.map(order => {
         const created = formatOrderDateTime(order.timestamp || order.createdAt);
-        const methodLabel = (order.deliveryMethod || order.deliveryType) === 'delivery' ? 'Delivery' : 'Pickup';
+        const methodLabel = (order.deliveryMethod || order.deliveryType) === 'delivery' ? t('delivery', 'Delivery') : t('pickup', 'Pickup');
         const statusLabel = getOrderStatusLabel(order.status);
         const totalShown = (order.ownerDiscount && order.ownerDiscount > 0 && order.finalTotal != null) ? order.finalTotal : order.total;
         const actions = getNextActionsForOrder(order);
@@ -3483,20 +3616,20 @@ function renderOrdersHistory() {
 
                 <div class="order-body">
                     <div class="order-section" style="margin-bottom: 10px;">
-                        <div class="order-info-row"><span class="order-info-label">Customer:</span><span class="order-info-value">${order.customerInfo?.name || ''}</span></div>
-                        <div class="order-info-row"><span class="order-info-label">Phone:</span><span class="order-info-value">${order.customerInfo?.phone || ''}</span></div>
-                        <div class="order-info-row"><span class="order-info-label">Email:</span><span class="order-info-value">${order.customerInfo?.email || ''}</span></div>
+                        <div class="order-info-row"><span class="order-info-label">${t('customer', 'Customer')}:</span><span class="order-info-value">${order.customerInfo?.name || ''}</span></div>
+                        <div class="order-info-row"><span class="order-info-label">${t('phone', 'Phone')}:</span><span class="order-info-value">${order.customerInfo?.phone || ''}</span></div>
+                        <div class="order-info-row"><span class="order-info-label">${t('email', 'Email')}:</span><span class="order-info-value">${order.customerInfo?.email || ''}</span></div>
                         ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? `
-                            <div class="order-info-row"><span class="order-info-label">City:</span><span class="order-info-value">${order.customerInfo?.city || ''}</span></div>
-                            <div class="order-info-row"><span class="order-info-label">Address:</span><span class="order-info-value">${order.customerInfo?.address || ''}</span></div>
+                            <div class="order-info-row"><span class="order-info-label">${t('city', 'City')}:</span><span class="order-info-value">${order.customerInfo?.city || ''}</span></div>
+                            <div class="order-info-row"><span class="order-info-label">${t('address', 'Address')}:</span><span class="order-info-value">${order.customerInfo?.address || ''}</span></div>
                         ` : ''}
-                        ${order.customerInfo?.notes ? `<div class="order-info-row"><span class="order-info-label">Notes:</span><span class="order-info-value">${order.customerInfo.notes}</span></div>` : ''}
+                        ${order.customerInfo?.notes ? `<div class="order-info-row"><span class="order-info-label">${t('notes', 'Notes')}:</span><span class="order-info-value">${order.customerInfo.notes}</span></div>` : ''}
                     </div>
 
                     <div class="order-section" style="margin-bottom: 10px;">
                         <details ${((order.items || []).some(i => i?.note) ? 'open' : '')} style="border: none;">
                             <summary style="cursor:pointer; font-weight: 700; color:#333; list-style:none;">
-                                Products (${(order.items || []).length || 0})
+                                ${t('products', 'Products')} (${(order.items || []).length || 0})
                             </summary>
                             <div class="order-items" style="margin-top: 8px;">
                                 ${itemsHtml || '<div style="color:#999;">No items</div>'}
@@ -3506,7 +3639,7 @@ function renderOrdersHistory() {
 
                     <div class="order-section">
                         <div class="order-total" style="margin-top: 0;">
-                            <span class="order-total-label">Total:</span>
+                            <span class="order-total-label">${t('total', 'Total')}:</span>
                             <span class="order-total-value">${safeToFixed(totalShown)} €</span>
                         </div>
                     </div>
@@ -3515,17 +3648,114 @@ function renderOrdersHistory() {
                 <div class="order-actions">
                     <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
                         <button onclick="openOrderEditModal('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
-                            <i class="fas fa-pen"></i> Edit
+                            <i class="fas fa-pen"></i> ${t('edit', 'Edit')}
                         </button>
                         ${actionsHtml}
                         <button onclick="deleteOrder('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
-                            <i class="fas fa-trash"></i> Delete
+                            <i class="fas fa-trash"></i> ${t('delete', 'Delete')}
                         </button>
                     </div>
                 </div>
             </div>
         `;
     }).join('');
+}
+
+function escapeCsvValue(value, delimiter = ';') {
+    const s = (value === undefined || value === null) ? '' : String(value);
+    const needsQuotes = s.includes('"') || s.includes('\n') || s.includes('\r') || s.includes(delimiter);
+    const escaped = s.replace(/"/g, '""');
+    return needsQuotes ? `"${escaped}"` : escaped;
+}
+
+function exportOrdersHistoryCsv() {
+    const filtered = getFilteredOrdersHistory();
+    if (!filtered || filtered.length === 0) {
+        alert(t('noOrdersMatch', 'No orders match the filters.'));
+        return;
+    }
+
+    const delimiter = ';';
+    const headers = [
+        t('csvOrderId', 'Order ID'),
+        t('csvCreatedAt', 'Created At'),
+        t('csvStatus', 'Status'),
+        t('csvMethod', 'Method'),
+        t('csvCustomerName', 'Customer Name'),
+        t('csvCustomerPhone', 'Customer Phone'),
+        t('csvCustomerEmail', 'Customer Email'),
+        t('csvCity', 'City'),
+        t('csvAddress', 'Address'),
+        t('csvCustomerNotes', 'Customer Notes'),
+        t('csvItems', 'Items'),
+        t('csvItemsNotes', 'Item Notes'),
+        t('csvSubtotal', 'Subtotal'),
+        t('csvDeliveryFee', 'Delivery Fee'),
+        t('csvDiscount', 'Discount'),
+        t('csvTotal', 'Total'),
+        t('csvOwnerDiscount', 'Owner Discount'),
+        t('csvFinalTotal', 'Final Total')
+    ];
+
+    const rows = filtered.map(order => {
+        const created = formatOrderDateTime(order.timestamp || order.createdAt);
+        const status = getOrderStatusLabel(order.status);
+        const method = (order.deliveryMethod || order.deliveryType) === 'delivery' ? t('delivery', 'Delivery') : t('pickup', 'Pickup');
+
+        const items = (order.items || []).map(item => {
+            const qty = Number(item?.quantity) || 0;
+            const name = (item?.name || '').toString();
+            const unitPrice = Number(item?.promoPrice != null ? item.promoPrice : item.price) || 0;
+            return `${qty}x ${name} (${safeToFixed(unitPrice)}€)`;
+        }).join(' | ');
+
+        const itemNotes = (order.items || [])
+            .filter(i => i?.note)
+            .map(i => `${(i?.name || '').toString()}: ${(i?.note || '').toString()}`)
+            .join(' | ');
+
+        const subtotal = (order.total != null ? Number(order.total) : 0);
+        const deliveryFee = (order.deliveryFee != null ? Number(order.deliveryFee) : 0);
+        const discount = (order.discount != null ? Number(order.discount) : 0);
+        const ownerDiscount = (order.ownerDiscount != null ? Number(order.ownerDiscount) : 0);
+        const finalTotal = (order.finalTotal != null ? Number(order.finalTotal) : null);
+        const totalShown = (ownerDiscount > 0 && finalTotal != null) ? finalTotal : subtotal;
+
+        return [
+            order.id,
+            created,
+            status,
+            method,
+            order.customerInfo?.name || '',
+            order.customerInfo?.phone || '',
+            order.customerInfo?.email || '',
+            order.customerInfo?.city || '',
+            order.customerInfo?.address || '',
+            order.customerInfo?.notes || '',
+            items,
+            itemNotes,
+            safeToFixed(subtotal),
+            safeToFixed(deliveryFee),
+            safeToFixed(discount),
+            safeToFixed(totalShown),
+            safeToFixed(ownerDiscount),
+            finalTotal == null ? '' : safeToFixed(finalTotal)
+        ].map(v => escapeCsvValue(v, delimiter)).join(delimiter);
+    });
+
+    const from = (document.getElementById('approved-orders-from')?.value || '').toString().trim();
+    const to = (document.getElementById('approved-orders-to')?.value || '').toString().trim();
+    const datePart = (from && to) ? `${from}_to_${to}` : new Date().toISOString().split('T')[0];
+    const filename = `orders-export-${datePart}.csv`;
+
+    const csvContent = '\ufeff' + [headers.map(h => escapeCsvValue(h, delimiter)).join(delimiter), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 document.addEventListener('DOMContentLoaded', () => {

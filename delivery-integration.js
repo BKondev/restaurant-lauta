@@ -1,4 +1,6 @@
 const axios = require('axios');
+const path = require('path');
+const fs = require('fs');
 
 const DELIVERY_API_URL = 'https://karakashkov.com/delivery/api.php?path=/orders';
 
@@ -7,17 +9,43 @@ const RESTAURANT_ID = '45';
 const RESTAURANT_ZONE = '5';
 const RESTAURANT_NAME_DEFAULT = 'Божоле';
 
-// Delivery service restaurants database (excerpt): Bojole => id 45, zone 5, price_default 8.02
-const DELIVERY_RESTAURANT_DIRECTORY = {
-    bojole: {
-        id: '45',
-        name: 'Божоле',
-        zone: '5',
-        // Directory price_default is in BGN
-        priceDefault: 8.02,
-        priceDefaultCurrency: 'BGN'
+// Delivery service restaurants directory (auto-loaded from file if present).
+// Expected schema: [{ id, name, zone, price_default, ... }]
+const DELIVERY_RESTAURANTS_FILE = path.join(__dirname, 'data', 'delivery-restaurants.json');
+let DELIVERY_RESTAURANTS = [];
+try {
+    if (fs.existsSync(DELIVERY_RESTAURANTS_FILE)) {
+        // eslint-disable-next-line global-require, import/no-dynamic-require
+        DELIVERY_RESTAURANTS = require(DELIVERY_RESTAURANTS_FILE);
     }
-};
+} catch (e) {
+    console.warn('[DELIVERY] Failed to load delivery restaurants directory:', e?.message || e);
+    DELIVERY_RESTAURANTS = [];
+}
+
+const DELIVERY_RESTAURANT_BY_ID = new Map();
+const DELIVERY_RESTAURANT_BY_NAME = new Map();
+
+for (const entry of Array.isArray(DELIVERY_RESTAURANTS) ? DELIVERY_RESTAURANTS : []) {
+    if (!entry || entry.id === undefined || entry.id === null) continue;
+    const id = String(entry.id);
+    const name = (entry.name || '').toString();
+    const zone = entry.zone !== undefined && entry.zone !== null ? String(entry.zone) : '';
+    const priceDefault = Number(entry.price_default);
+
+    const normalizedName = normalizeRestaurantName(name);
+    const normalized = {
+        id,
+        name,
+        zone,
+        // Directory price_default is in BGN
+        priceDefault: Number.isFinite(priceDefault) ? priceDefault : 0,
+        priceDefaultCurrency: 'BGN'
+    };
+
+    DELIVERY_RESTAURANT_BY_ID.set(id, normalized);
+    if (normalizedName) DELIVERY_RESTAURANT_BY_NAME.set(normalizedName, normalized);
+}
 
 function normalizeRestaurantName(name) {
     return (name || '')
@@ -28,13 +56,40 @@ function normalizeRestaurantName(name) {
 }
 
 function resolveDeliveryRestaurantConfig(order) {
-    const name = normalizeRestaurantName(order?.restaurantName);
+    const rawName = (order?.restaurantName || '').toString();
+    let name = normalizeRestaurantName(rawName);
 
-    // Match both latin and cyrillic spellings.
-    if (name.includes('bojole') || name.includes('bojo') || name.includes('божоле') || name.includes('божол')) {
-        return DELIVERY_RESTAURANT_DIRECTORY.bojole;
+    // If the order already contains an explicit delivery directory id, honor it.
+    const explicitId = order?.deliveryRestaurantId ?? order?.delivery_service_restaurant_id;
+    if (explicitId !== undefined && explicitId !== null && String(explicitId).trim()) {
+        const byId = DELIVERY_RESTAURANT_BY_ID.get(String(explicitId).trim());
+        if (byId) return byId;
     }
 
+    // Known aliases / latin spellings.
+    if (name.includes('bojole') || name.includes('bojo')) {
+        name = 'божоле';
+    }
+
+    // Prefer exact normalized match.
+    const exact = DELIVERY_RESTAURANT_BY_NAME.get(name);
+    if (exact) return exact;
+
+    // Fuzzy match (longest contained match) to handle minor formatting differences.
+    if (name) {
+        let best = null;
+        for (const [dirName, entry] of DELIVERY_RESTAURANT_BY_NAME.entries()) {
+            if (!dirName) continue;
+            if (name.includes(dirName) || dirName.includes(name)) {
+                if (!best || dirName.length > best.dirName.length) {
+                    best = { dirName, entry };
+                }
+            }
+        }
+        if (best?.entry) return best.entry;
+    }
+
+    // Fallback: use configured defaults (and use our own delivery fee in EUR).
     return {
         id: RESTAURANT_ID,
         name: RESTAURANT_NAME_DEFAULT,
