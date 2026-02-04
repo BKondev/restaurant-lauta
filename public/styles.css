@@ -1537,11 +1537,11 @@ body {
         position: sticky;
         top: 0;
         z-index: 1000;
-        padding: 6px 0;
+        padding: 3px 0;
     }
 
     .top-bar .container {
-        min-height: 44px;
+        min-height: 38px;
     }
 
     /* Mobile header layout: logo left, cart right, search toggle centered */
@@ -1565,7 +1565,7 @@ body {
     }
 
     .logo h1 {
-        font-size: 19px;
+        font-size: 17px;
     }
 
     .search-bar-top {
@@ -1589,16 +1589,16 @@ body {
         top: 50%;
         transform: translate(-50%, -50%);
         margin: 0 !important; /* cancel desktop negative margins */
-        padding: 10px 12px !important;
-        min-width: 44px;
-        min-height: 44px;
+        padding: 7px 10px !important;
+        min-width: 38px;
+        min-height: 38px;
     }
     
     /* Hide desktop search input on mobile, show as overlay when active */
     .search-bar-top .search-container {
         display: none;
         position: fixed;
-        top: 56px;
+        top: calc(var(--top-bar-height) + var(--sticky-gap));
         left: 0;
         right: 0;
         bottom: 0;
@@ -1766,13 +1766,13 @@ body {
 
     .lang-dropdown {
         display: block;
-        padding: 5px 8px;
-        font-size: 12px;
+        padding: 4px 6px;
+        font-size: 11px;
         min-width: 50px;
     }
 
     .cart-button {
-        padding: 8px 12px;
+        padding: 6px 10px;
     }
 
     .cart-button i {

@@ -403,7 +403,8 @@ function scrollToProductsTop({ behavior = 'auto' } = {}) {
     const container = document.getElementById('products-container') || document.querySelector('.content');
     if (!container) return;
 
-    const offset = getTopBarHeight() + 24;
+    // Scroll slightly higher so the first products aren't tucked under the header.
+    const offset = getTopBarHeight() + 24 + 40;
     const rect = container.getBoundingClientRect();
     const targetTop = rect.top + window.pageYOffset - offset;
 
