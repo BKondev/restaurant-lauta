@@ -290,6 +290,36 @@ body {
     animation: productPulse 0.6s ease-in-out 3;
 }
 
+.product-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.share-product-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: 2px solid rgba(0,0,0,0.08);
+    background: #fff;
+    color: #2c3e50;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.share-product-btn:hover {
+    transform: translateY(-1px);
+    border-color: var(--highlight-color);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.10);
+}
+
+.share-product-btn:active {
+    transform: translateY(0);
+}
+
 .search-bar-top i {
     position: absolute;
     right: 16px;
@@ -1507,6 +1537,11 @@ body {
         position: sticky;
         top: 0;
         z-index: 1000;
+        padding: 6px 0;
+    }
+
+    .top-bar .container {
+        min-height: 44px;
     }
 
     /* Mobile header layout: logo left, cart right, search toggle centered */
@@ -1530,7 +1565,7 @@ body {
     }
 
     .logo h1 {
-        font-size: 20px;
+        font-size: 19px;
     }
 
     .search-bar-top {

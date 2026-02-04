@@ -200,6 +200,7 @@ async function loadData() {
         extractCategories();
         renderCategories();
         renderProducts();
+        handleInitialProductDeepLink();
     } catch (error) {
         console.error('Error loading data:', error);
         showError('Failed to load menu data. Please make sure the server is running.');
@@ -410,7 +411,7 @@ function scrollToProductsTop({ behavior = 'auto' } = {}) {
 }
 
 function filterByCategory(category, options = {}) {
-    const { scrollToTop = true, scrollBehavior = 'auto' } = options;
+    const { scrollToTop = true, scrollBehavior = 'smooth' } = options;
     currentCategory = category;
     renderCategories();
     renderProducts();
@@ -419,6 +420,63 @@ function filterByCategory(category, options = {}) {
         // Run after render so layout is stable and scroll target is correct.
         requestAnimationFrame(() => scrollToProductsTop({ behavior: scrollBehavior }));
     }
+}
+
+function buildProductShareUrl(productId) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('product', String(productId));
+    url.hash = '';
+    return url.toString();
+}
+
+async function shareProduct(productId) {
+    const product = (products || []).find(p => String(p.id) === String(productId));
+    const name = product
+        ? ((currentLanguage === 'bg' && product.translations?.bg?.name) ? product.translations.bg.name : product.name)
+        : 'Product';
+    const url = buildProductShareUrl(productId);
+
+    try {
+        if (navigator.share) {
+            await navigator.share({ title: name, text: name, url });
+            return;
+        }
+    } catch (e) {
+        // fall back
+    }
+
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(url);
+            alert(currentLanguage === 'bg' ? 'Линкът е копиран!' : 'Link copied!');
+            return;
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    window.prompt(currentLanguage === 'bg' ? 'Копирай линка:' : 'Copy the link:', url);
+}
+
+let didHandleInitialDeepLink = false;
+function handleInitialProductDeepLink() {
+    if (didHandleInitialDeepLink) return;
+    didHandleInitialDeepLink = true;
+
+    let productId = '';
+    try {
+        const url = new URL(window.location.href);
+        productId = (url.searchParams.get('product') || '').toString().trim();
+    } catch (e) {
+        return;
+    }
+
+    if (!productId) return;
+
+    const product = (products || []).find(p => String(p.id) === String(productId));
+    if (!product) return;
+
+    setTimeout(() => jumpToProduct(product), 50);
 }
 
 function getCategoryDisplayName(category) {
@@ -588,9 +646,14 @@ function createProductCard(product) {
                 ${priceHTML}
                 <span class="product-category">${category}</span>
             </div>
-            <button onclick="event.stopPropagation(); addToCart(${product.id})" class="add-to-cart-btn">
-                <i class="fas fa-shopping-cart"></i> ${translations[currentLanguage].addToCart}
-            </button>
+            <div class="product-actions">
+                <button onclick="event.stopPropagation(); addToCart(${product.id})" class="add-to-cart-btn">
+                    <i class="fas fa-shopping-cart"></i> ${translations[currentLanguage].addToCart}
+                </button>
+                <button onclick="event.stopPropagation(); shareProduct(${product.id})" class="share-product-btn" title="${(currentLanguage === 'bg' ? 'Сподели' : 'Share')}">
+                    <i class="fas fa-share-alt"></i>
+                </button>
+            </div>
         </div>
     `;
     

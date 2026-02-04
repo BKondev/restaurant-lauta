@@ -577,10 +577,32 @@ app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
             const backrefUrl = (borica.backrefUrl || '').toString().trim();
             const gatewayBaseUrlTest = (borica.gatewayBaseUrlTest || '').toString().trim();
             const gatewayBaseUrlProd = (borica.gatewayBaseUrlProd || '').toString().trim();
-            const privateKeyPem = (borica.privateKeyPem || '').toString();
-            const publicCertPem = (borica.publicCertPem || '').toString();
+            const privateKeyPemRaw = (borica.privateKeyPem || '').toString();
+            const publicCertPemRaw = (borica.publicCertPem || '').toString();
 
             const looksLikeHttpsUrl = (u) => /^https?:\/\//i.test((u || '').toString().trim());
+
+            const normalizePemBlock = (value, typeLabel) => {
+                const s = (value || '').toString().trim();
+                if (!s) return '';
+
+                const upper = s.toUpperCase();
+                if (upper.includes('BEGIN') && upper.includes(typeLabel)) {
+                    return s.replace(/\r\n/g, '\n').trim();
+                }
+
+                // Base64-only (common when copy/pasting from .cer/.key exports)
+                const compact = s.replace(/\s+/g, '');
+                if (compact.length > 80 && /^[A-Z0-9+/=]+$/i.test(compact)) {
+                    const lines = compact.match(/.{1,64}/g) || [compact];
+                    return `-----BEGIN ${typeLabel}-----\n${lines.join('\n')}\n-----END ${typeLabel}-----`;
+                }
+
+                return s;
+            };
+
+            const privateKeyPem = normalizePemBlock(privateKeyPemRaw, 'PRIVATE KEY');
+            const publicCertPem = normalizePemBlock(publicCertPemRaw, 'CERTIFICATE');
 
             if (enabled) {
                 if (!/^[A-Za-z0-9]{1,8}$/.test(terminalId)) {
@@ -595,10 +617,12 @@ app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
                 if (gatewayBaseUrlProd && !looksLikeHttpsUrl(gatewayBaseUrlProd)) {
                     return res.status(400).json({ error: 'BORICA Production Gateway URL must start with http:// or https://' });
                 }
-                if (!privateKeyPem.includes('BEGIN') || !privateKeyPem.includes('PRIVATE KEY')) {
+                const pkUpper = privateKeyPem.toUpperCase();
+                if (!pkUpper.includes('BEGIN') || !pkUpper.includes('PRIVATE KEY')) {
                     return res.status(400).json({ error: 'BORICA Private Key PEM looks invalid' });
                 }
-                if (!publicCertPem.includes('BEGIN') || !publicCertPem.includes('CERTIFICATE')) {
+                const certUpper = publicCertPem.toUpperCase();
+                if (!certUpper.includes('BEGIN') || !certUpper.includes('CERTIFICATE')) {
                     return res.status(400).json({ error: 'BORICA Public Certificate PEM looks invalid' });
                 }
             }
