@@ -2126,16 +2126,18 @@ body {
 
 .site-footer .footer-col h3 {
     margin: 0 0 10px;
-    font-size: 14px;
-    letter-spacing: 0.06em;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: rgba(226, 232, 240, 0.9);
+    color: rgba(226, 232, 240, 0.95);
 }
 
 .site-footer .footer-col p,
 .site-footer .footer-col li {
     margin: 0 0 8px;
     font-size: 14px;
+    font-weight: 500;
     color: rgba(226, 232, 240, 0.85);
 }
 
