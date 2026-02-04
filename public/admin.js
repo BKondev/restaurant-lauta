@@ -360,6 +360,7 @@ document.addEventListener('DOMContentLoaded', function() {
         startOrdersPolling();
         loadWorkingHours();
         loadSlideshowSettings();
+        maybeEnableEmailDiagnosticsPanel();
         initializeZonesMap();
     })();
 });
@@ -1159,6 +1160,17 @@ function setupForm() {
         e.preventDefault();
         saveProduct();
     });
+}
+
+function maybeEnableEmailDiagnosticsPanel() {
+    try {
+        const params = new URLSearchParams(window.location.search || '');
+        const enabled = params.get('debugEmail') === '1';
+        const panel = document.getElementById('email-diagnostics-panel');
+        if (panel) panel.style.display = enabled ? 'block' : 'none';
+    } catch {
+        // ignore
+    }
 }
 
 // Handle image upload

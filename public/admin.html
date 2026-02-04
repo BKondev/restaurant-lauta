@@ -130,28 +130,30 @@
 
             <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
 
-            <h3 style="margin: 0 0 10px;"><i class="fas fa-paper-plane"></i> SMTP / Email Diagnostics</h3>
-            <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
-                <div class="form-row" style="align-items: flex-end;">
-                    <div class="form-group" style="flex: 2; min-width: 240px;">
-                        <label for="smtp-test-to">Test email recipient</label>
-                        <input type="email" id="smtp-test-to" placeholder="your@email.com" />
-                        <small>Uses backend SMTP config. No passwords are shown.</small>
+            <div id="email-diagnostics-panel" style="display:none;">
+                <h3 style="margin: 0 0 10px;"><i class="fas fa-paper-plane"></i> SMTP / Email Diagnostics</h3>
+                <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+                    <div class="form-row" style="align-items: flex-end;">
+                        <div class="form-group" style="flex: 2; min-width: 240px;">
+                            <label for="smtp-test-to">Test email recipient</label>
+                            <input type="email" id="smtp-test-to" placeholder="your@email.com" />
+                            <small>Uses backend SMTP config. No passwords are shown.</small>
+                        </div>
+                        <div class="form-group" style="flex: 0; min-width: 160px;">
+                            <button onclick="refreshEmailStatus()" class="btn btn-secondary" style="width: 100%;">
+                                <i class="fas fa-sync"></i> Status
+                            </button>
+                        </div>
+                        <div class="form-group" style="flex: 0; min-width: 160px;">
+                            <button onclick="sendSmtpTestEmail()" class="btn btn-info" style="width: 100%;">
+                                <i class="fas fa-paper-plane"></i> Send Test
+                            </button>
+                        </div>
                     </div>
-                    <div class="form-group" style="flex: 0; min-width: 160px;">
-                        <button onclick="refreshEmailStatus()" class="btn btn-secondary" style="width: 100%;">
-                            <i class="fas fa-sync"></i> Status
-                        </button>
-                    </div>
-                    <div class="form-group" style="flex: 0; min-width: 160px;">
-                        <button onclick="sendSmtpTestEmail()" class="btn btn-info" style="width: 100%;">
-                            <i class="fas fa-paper-plane"></i> Send Test
-                        </button>
-                    </div>
-                </div>
 
-                <div id="smtp-status-box" style="padding: 10px; background: #f8f9fa; border: 1px solid #eee; border-radius: 10px; color:#333;">
-                    <div style="color:#666;">Click <strong>Status</strong> to view SMTP configuration health.</div>
+                    <div id="smtp-status-box" style="padding: 10px; background: #f8f9fa; border: 1px solid #eee; border-radius: 10px; color:#333;">
+                        <div style="color:#666;">Click <strong>Status</strong> to view SMTP configuration health.</div>
+                    </div>
                 </div>
             </div>
 
