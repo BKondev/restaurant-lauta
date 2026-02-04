@@ -40,11 +40,23 @@ const translations = {
         saveWorkingHours: 'Save Working Hours',
         deliveryCities: 'Delivery Cities & Prices',
         cityName: 'City Name',
+        deliveryCitiesHelp: 'Manage available cities for delivery and set delivery price for each city.',
+        cityNamePlaceholder: 'e.g., Plovdiv',
         deliveryPrice: 'Delivery Price',
+        deliveryPriceEur: 'Delivery Price (EUR)',
+        deliveryPricePlaceholder: 'e.g., 5.00',
         addCity: 'Add City',
-        enableDelivery: 'Enable Delivery',
+        enableDelivery: 'Enable Delivery (Show all delivery options)',
+        enableDeliveryHelp: 'When disabled, only "Pick up from location" will be available',
         standardDeliveryFee: 'Standard Delivery Fee',
+        standardDeliveryFeeEur: 'Standard Delivery Fee (€)',
+        deliveryFeePlaceholder: 'e.g., 5.00',
+        deliveryFeeHelp: 'Fee charged for delivery orders',
         freeDeliveryAbove: 'Free Delivery Above',
+        enableFreeDeliveryAbove: 'Enable Free Delivery Above Amount',
+        minimumOrderAmountEurSymbol: 'Minimum Order Amount (€)',
+        minOrderAmountPlaceholder: 'e.g., 50.00',
+        freeDeliveryHelp: 'Orders above this amount get free delivery',
         saveDeliverySettings: 'Save Delivery Settings',
         slideshowBanner: 'Promotional Slideshow Banner',
         enableSlideshow: 'Enable Promotional Slideshow (shown only in "All Items" category)',
@@ -56,6 +68,89 @@ const translations = {
         desktop: 'Desktop',
         mobile: 'Mobile',
         useHighQuality: 'Use high quality images (JPG/PNG) for best results',
+
+        siteContent: 'Site Content',
+        searchMode: 'Search mode',
+        namesAndDescriptions: 'Names + Descriptions',
+        namesOnly: 'Names only',
+        searchModeHelp: 'Controls which fields are searchable in the storefront.',
+        footer: 'Footer',
+        footerAboutText: 'About text',
+        footerAddressPlaceholder: 'Street, city',
+        footerAboutPlaceholder: 'Short about text...',
+        socialLinks: 'Social links',
+        siteSocialLabel1: 'Label 1',
+        siteSocialUrl1: 'URL 1',
+        siteSocialIcon1: 'Icon 1 (FA class)',
+        siteSocialLabel2: 'Label 2',
+        siteSocialUrl2: 'URL 2',
+        siteSocialIcon2: 'Icon 2 (FA class)',
+        siteSocialLabel3: 'Label 3',
+        siteSocialUrl3: 'URL 3',
+        siteSocialIcon3: 'Icon 3 (FA class)',
+        map: 'Map',
+        showMapAboveFooter: 'Show map above footer',
+        requiresLatLng: 'Requires latitude and longitude.',
+        pinLabel: 'Pin label (address name)',
+        pinLabelPlaceholder: 'Restaurant address / name',
+        pinLabelHelp: 'Shown next to the pin. If empty, the Footer address is used.',
+        latitude: 'Latitude',
+        longitude: 'Longitude',
+        zoom: 'Zoom',
+        legalPages: 'Legal Pages',
+        privacyPolicyHtml: 'Privacy Policy (HTML)',
+        termsAndConditionsHtml: 'Terms & Conditions (HTML)',
+        privacyPlaceholder: '<h1>Privacy Policy</h1>...',
+        termsPlaceholder: '<h1>Terms</h1>...',
+        privacyHelp: 'This HTML is rendered on the public privacy page.',
+        termsHelp: 'This HTML is rendered on the public terms page.',
+        saveSiteContent: 'Save Site Content',
+
+        visualCustomization: 'Visual Customization',
+        topBarColor: 'Top Bar Color',
+        highlightAccentColor: 'Highlight/Accent Color',
+        backgroundColorLabel: 'Background Color',
+        priceColorLabel: 'Price Color',
+        backgroundImageUrl: 'Background Image URL',
+        backgroundImagePlaceholder: 'https://example.com/background.jpg',
+        backgroundImageHint: 'Leave empty to use background color instead',
+        saveCustomization: 'Save Customization',
+
+        orderSettings: 'Order Settings',
+        minimumOrderAmountEur: 'Minimum Order Amount (EUR)',
+        minOrderHint: 'Set to 0 to disable minimum order requirement',
+        saveOrderSettings: 'Save Order Settings',
+
+        openingTimeHelp: 'Restaurant opening time for pickup orders',
+        closingTimeHelp: 'Restaurant closing time for pickup orders',
+
+        slideshowNoSlides: 'No slides added yet. Click "Add Slide" to get started.',
+        slideshowMaxSlides: 'Maximum 10 slides allowed!',
+        slideshowFailedAdd: 'Failed to add slide',
+        slideshowConfirmRemove: 'Are you sure you want to remove this slide?',
+        slideshowFailedRemove: 'Failed to remove slide',
+        slideshowFailedMove: 'Failed to move slide',
+        slideshowFailedUpload: 'Failed to upload image',
+        slideshowFailedUpdateTitle: 'Failed to update title',
+        slideshowSavedSuccess: 'Slideshow settings saved successfully!',
+        slideshowFailedSave: 'Failed to save slideshow settings',
+        slideshowImageLabel: 'Image',
+        slideshowCurrentLabel: 'Current:',
+        slideshowTitleOptionalPlaceholder: 'Title (optional)',
+
+        siteMapInvalidLatLng: 'Map is enabled but Latitude/Longitude are invalid.',
+        siteSettingsSaveFailed: 'Failed to save site settings',
+        siteSettingsSaved: 'Site content saved successfully!',
+        siteSettingsSaveError: 'Error saving site settings',
+        orderSettingsUpdated: 'Order settings updated successfully!',
+        orderSettingsFailedUpdate: 'Failed to update order settings',
+        orderSettingsErrorUpdate: 'Error updating order settings',
+        workingHoursUpdated: 'Working hours updated successfully!',
+        workingHoursFailedUpdate: 'Failed to update working hours',
+        workingHoursErrorUpdate: 'Error updating working hours',
+        customizationUpdated: 'Customization updated successfully!',
+        customizationFailedUpdate: 'Failed to update customization',
+        customizationErrorUpdate: 'Error updating customization',
 
         restaurantTab: 'Restaurant',
         deliveryTab: 'Delivery',
@@ -132,6 +227,84 @@ const translations = {
 
         manageProductsHeading: 'Manage Products',
         dataManagement: 'Data Management',
+        productsCsvImportExport: 'Products CSV Import/Export',
+        productsCsvHelp: 'Download a CSV template, fill it with product data, and upload it back to bulk import products.',
+        downloadCsvTemplate: 'Download CSV Template',
+        exportProductsToCsv: 'Export Products to CSV',
+        importProductsFromCsv: 'Import Products from CSV',
+        fullDatabaseBackup: 'Full Database Backup',
+        exportAllDataJson: 'Export All Data (JSON)',
+        importAllDataJson: 'Import All Data (JSON)',
+        resetAllData: 'Reset All Data',
+
+        promoCodesManagement: 'Promo Codes Management',
+        promoCode: 'Promo Code',
+        promoCodePlaceholder: 'e.g., SUMMER25',
+        promoUppercaseHelp: 'Code will be converted to uppercase automatically',
+        applyToCategory: 'Apply to Category',
+        promoCategoryHelp: 'Promo code will apply only to items in this category',
+        discountPercentage: 'Discount Percentage',
+        discountPercentPlaceholder: 'e.g., 25',
+        discountPercentHelp: 'Percentage discount (1-100%)',
+        active: 'Active',
+        inactive: 'Inactive',
+        addPromoCode: 'Add Promo Code',
+        activePromoCodes: 'Active Promo Codes',
+        promoTableCode: 'Code',
+        promoTableCategory: 'Category',
+        promoTableDiscount: 'Discount',
+        promoTableStatus: 'Status',
+        noPromoCodesYet: 'No promo codes yet. Create one above!',
+
+        comboBundleOffers: 'Combo & Bundle Offers',
+        comboBundleHelp: 'Create special combo and bundle deals. These will automatically appear in the "Combos & Bundles" category.',
+        comboNameEn: 'Combo Name (English):',
+        comboNameEnPlaceholder: 'e.g., Family Meal Deal',
+        comboNameBg: 'Combo Name (Bulgarian):',
+        comboNameBgPlaceholder: 'например, Семейно Комбо',
+        comboDescEnPlaceholder: "Describe what's included in this combo...",
+        comboDescBgPlaceholder: 'Опишете какво включва комбото...',
+        priceEur: 'Price (€)',
+        priceEurPlaceholder: 'e.g., 49.99',
+        comboTypeCombo: 'Combo (Multiple items together)',
+        comboTypeBundle: 'Bundle (Buy X Get Y)',
+        imageUrl: 'Image URL',
+        comboImagePlaceholder: 'https://example.com/combo-image.jpg',
+        selectProductsIncluded: 'Select Products Included:',
+        loadingProducts: 'Loading products...',
+        createComboBundle: 'Create Combo/Bundle',
+        clearForm: 'Clear Form',
+        activeCombosBundles: 'Active Combos & Bundles',
+        noCombosYet: 'No combos or bundles yet. Create one above!',
+        type: 'Type',
+
+        productNameEnglish: 'Product Name (English):',
+        productNameBulgarian: 'Product Name (Bulgarian):',
+        productNameEnPlaceholder: 'e.g., Margherita Pizza',
+        productNameBgPlaceholder: 'например, Пица Маргарита',
+        optionalUseEnglishName: 'Optional: Leave empty to use English name',
+        productDescEnPlaceholder: 'Describe your product...',
+        productDescBgPlaceholder: 'Опишете продукта...',
+        optionalUseEnglishDescription: 'Optional: Leave empty to use English description',
+        categoryEnglish: 'Category (English):',
+        categoryBulgarian: 'Category (Bulgarian):',
+        categoryEnPlaceholder: 'e.g., Pizza, Salads',
+        categoryBgPlaceholder: 'например, Пица, Салати',
+        categoryTip: 'Tip: Use existing categories or create new ones',
+        optionalUseEnglishCategory: 'Optional: Leave empty to use English category',
+        weightQuantity: 'Weight/Quantity',
+        weightPlaceholder: 'e.g., 500g, 300ml, 1 pc',
+        weightExample: 'Example: 500g, 300ml, 12 pcs, 1L',
+        promotionalPricing: 'Promotional Pricing',
+        enablePromotionalPrice: 'Enable Promotional Price',
+        promoPriceEur: 'Promo Price (€)',
+        promoDuration: 'Promo Duration',
+        promoUntilManual: 'Until Manually Disabled',
+        promoSetDates: 'Set Start & End Date',
+        startDate: 'Start Date',
+        endDate: 'End Date',
+        productImagePlaceholder: 'https://example.com/image.jpg',
+        orUploadImage: 'Or upload an image:',
 
         select: 'Select',
         enName: 'EN Name',
@@ -141,6 +314,47 @@ const translations = {
         sessionExpired: 'Session expired. Please login again.',
         selectAtLeastOneProduct: 'Select at least one product.',
         selectAtLeastTwoProductsBundle: 'Please select at least 2 products to create a bundle.',
+        cityAndAddressRequired: 'City and address are required for delivery orders.',
+        noCitiesYet: 'No cities added yet. Add your first city above.',
+        enterCityName: 'Please enter a city name',
+        cityAlreadyExists: 'City "{name}" already exists',
+        enterValidPrice: 'Please enter a valid price',
+        invalidPrice: 'Invalid price',
+        enterNewCityName: 'Enter new city name:',
+        enterNewDeliveryPrice: 'Enter new delivery price (EUR):',
+        confirmDeleteCity: 'Are you sure you want to delete this city?',
+        confirmDeleteCityNamed: 'Are you sure you want to delete "{name}"?',
+        citiesSavedSuccess: 'Cities saved successfully!',
+        citiesFailedSave: 'Failed to save cities',
+        citiesErrorSave: 'Error saving cities',
+        deliverySettingsSaved: 'Delivery settings saved successfully!',
+        deliverySettingsFailedSave: 'Failed to save delivery settings',
+        deliverySettingsErrorSave: 'Error saving delivery settings',
+
+        promoEnterCode: 'Please enter a promo code',
+        promoEnterDiscountRange: 'Please enter a discount between 1 and 100%',
+        promoUpdatedSuccess: 'Promo code updated successfully!',
+        promoAddedSuccess: 'Promo code added successfully!',
+        promoFailedSave: 'Failed to save promo code',
+        promoErrorSave: 'Error saving promo code',
+        updatePromoCode: 'Update Promo Code',
+        promoDeleteConfirm: 'Are you sure you want to delete this promo code?',
+        promoDeletedSuccess: 'Promo code deleted successfully!',
+        promoFailedDelete: 'Failed to delete promo code',
+        promoErrorDelete: 'Error deleting promo code',
+        off: 'OFF',
+
+        comboInvalidNamePrice: 'Please fill in combo name and valid price!',
+        comboSelectAtLeastOne: 'Please select at least one product for this combo!',
+        comboCreatedSuccess: 'Combo/Bundle created successfully!',
+        comboCreateFailed: 'Failed to create combo/bundle',
+        comboCreateError: 'Error creating combo/bundle',
+        noCombosTable: 'No combos or bundles yet. Create one above!',
+        comboLabel: 'Combo',
+        bundleLabel: 'Bundle',
+        selectedProductsHeading: 'Selected Products:',
+        originalTotal: 'Original total:',
+        provideBundleNamePrice: 'Please provide a bundle name and valid price!',
         deleteSelectedConfirm: 'Delete {count} selected product(s)? This cannot be undone.',
         deletedProductsSuccess: '{count} product(s) deleted successfully',
         failedToDeleteProducts: 'Failed to delete products: {error}',
@@ -203,11 +417,23 @@ const translations = {
         saveWorkingHours: 'Запази Работно Време',
         deliveryCities: 'Градове и Цени за Доставка',
         cityName: 'Име на Град',
+        deliveryCitiesHelp: 'Управлявайте наличните градове за доставка и задайте цена за всеки град.',
+        cityNamePlaceholder: 'напр. Пловдив',
         deliveryPrice: 'Цена за Доставка',
+        deliveryPriceEur: 'Цена за Доставка (EUR)',
+        deliveryPricePlaceholder: 'напр. 5.00',
         addCity: 'Добави Град',
-        enableDelivery: 'Активирай Доставка',
+        enableDelivery: 'Активирай доставка (Показвай всички опции за доставка)',
+        enableDeliveryHelp: 'Когато е изключено, ще е налично само "Вземи от място"',
         standardDeliveryFee: 'Стандартна Такса за Доставка',
+        standardDeliveryFeeEur: 'Стандартна Такса за Доставка (€)',
+        deliveryFeePlaceholder: 'напр. 5.00',
+        deliveryFeeHelp: 'Такса, начислявана за поръчки с доставка',
         freeDeliveryAbove: 'Безплатна Доставка над',
+        enableFreeDeliveryAbove: 'Активирай безплатна доставка над сума',
+        minimumOrderAmountEurSymbol: 'Минимална Сума (€)',
+        minOrderAmountPlaceholder: 'напр. 50.00',
+        freeDeliveryHelp: 'Поръчки над тази сума са с безплатна доставка',
         saveDeliverySettings: 'Запази Настройки за Доставка',
         slideshowBanner: 'Промоционално Слайдшоу Банер',
         enableSlideshow: 'Активирай Промоционално Слайдшоу (показва се само в категория "Всички")',
@@ -219,6 +445,89 @@ const translations = {
         desktop: 'Десктоп',
         mobile: 'Мобилна',
         useHighQuality: 'Използвайте високо качество изображения (JPG/PNG) за най-добър резултат',
+
+        siteContent: 'Съдържание на Сайта',
+        searchMode: 'Режим на търсене',
+        namesAndDescriptions: 'Имена + Описания',
+        namesOnly: 'Само имена',
+        searchModeHelp: 'Определя кои полета са търсими в магазина.',
+        footer: 'Футър',
+        footerAboutText: 'Текст „За нас“',
+        footerAddressPlaceholder: 'Улица, град',
+        footerAboutPlaceholder: 'Кратък текст „За нас“...',
+        socialLinks: 'Социални връзки',
+        siteSocialLabel1: 'Етикет 1',
+        siteSocialUrl1: 'URL 1',
+        siteSocialIcon1: 'Икона 1 (FA клас)',
+        siteSocialLabel2: 'Етикет 2',
+        siteSocialUrl2: 'URL 2',
+        siteSocialIcon2: 'Икона 2 (FA клас)',
+        siteSocialLabel3: 'Етикет 3',
+        siteSocialUrl3: 'URL 3',
+        siteSocialIcon3: 'Икона 3 (FA клас)',
+        map: 'Карта',
+        showMapAboveFooter: 'Покажи карта над футъра',
+        requiresLatLng: 'Изисква ширина и дължина.',
+        pinLabel: 'Етикет на пина (име/адрес)',
+        pinLabelPlaceholder: 'Адрес / име на ресторанта',
+        pinLabelHelp: 'Показва се до пина. Ако е празно, се използва адресът от футъра.',
+        latitude: 'Ширина',
+        longitude: 'Дължина',
+        zoom: 'Мащаб',
+        legalPages: 'Правни Страници',
+        privacyPolicyHtml: 'Политика за Поверителност (HTML)',
+        termsAndConditionsHtml: 'Общи Условия (HTML)',
+        privacyPlaceholder: '<h1>Политика за поверителност</h1>...',
+        termsPlaceholder: '<h1>Условия</h1>...',
+        privacyHelp: 'Този HTML се показва на публичната страница „Поверителност“.',
+        termsHelp: 'Този HTML се показва на публичната страница „Условия“.',
+        saveSiteContent: 'Запази Съдържанието',
+
+        visualCustomization: 'Визуална Персонализация',
+        topBarColor: 'Цвят на горната лента',
+        highlightAccentColor: 'Акцентен цвят',
+        backgroundColorLabel: 'Фонов цвят',
+        priceColorLabel: 'Цвят на цените',
+        backgroundImageUrl: 'URL на фонова снимка',
+        backgroundImagePlaceholder: 'https://example.com/background.jpg',
+        backgroundImageHint: 'Оставете празно, за да се използва фоновият цвят',
+        saveCustomization: 'Запази Персонализацията',
+
+        orderSettings: 'Настройки на Поръчки',
+        minimumOrderAmountEur: 'Минимална сума на поръчка (EUR)',
+        minOrderHint: 'Задайте 0, за да изключите минималната сума',
+        saveOrderSettings: 'Запази Настройките на Поръчки',
+
+        openingTimeHelp: 'Час на отваряне за поръчки с вземане',
+        closingTimeHelp: 'Час на затваряне за поръчки с вземане',
+
+        slideshowNoSlides: 'Няма добавени слайдове. Натиснете "Добави Слайд", за да започнете.',
+        slideshowMaxSlides: 'Максимум 10 слайда!',
+        slideshowFailedAdd: 'Неуспешно добавяне на слайд',
+        slideshowConfirmRemove: 'Сигурни ли сте, че искате да премахнете този слайд?',
+        slideshowFailedRemove: 'Неуспешно премахване на слайд',
+        slideshowFailedMove: 'Неуспешно преместване на слайд',
+        slideshowFailedUpload: 'Неуспешно качване на изображение',
+        slideshowFailedUpdateTitle: 'Неуспешно обновяване на заглавие',
+        slideshowSavedSuccess: 'Настройките на слайдшоуто са запазени!',
+        slideshowFailedSave: 'Неуспешно запазване на настройките на слайдшоу',
+        slideshowImageLabel: 'Изображение',
+        slideshowCurrentLabel: 'Текущо:',
+        slideshowTitleOptionalPlaceholder: 'Заглавие (по избор)',
+
+        siteMapInvalidLatLng: 'Картата е активирана, но ширината/дължината са невалидни.',
+        siteSettingsSaveFailed: 'Неуспешно запазване на настройките на сайта',
+        siteSettingsSaved: 'Съдържанието на сайта е запазено!',
+        siteSettingsSaveError: 'Грешка при запазване на настройките на сайта',
+        orderSettingsUpdated: 'Настройките на поръчките са обновени!',
+        orderSettingsFailedUpdate: 'Неуспешно обновяване на настройките на поръчките',
+        orderSettingsErrorUpdate: 'Грешка при обновяване на настройките на поръчките',
+        workingHoursUpdated: 'Работното време е обновено!',
+        workingHoursFailedUpdate: 'Неуспешно обновяване на работното време',
+        workingHoursErrorUpdate: 'Грешка при обновяване на работното време',
+        customizationUpdated: 'Персонализацията е обновена!',
+        customizationFailedUpdate: 'Неуспешно обновяване на персонализацията',
+        customizationErrorUpdate: 'Грешка при обновяване на персонализацията',
 
         restaurantTab: 'Ресторант',
         deliveryTab: 'Доставка',
@@ -295,6 +604,84 @@ const translations = {
 
         manageProductsHeading: 'Управление на Продукти',
         dataManagement: 'Управление на Данни',
+        productsCsvImportExport: 'CSV импорт/експорт на продукти',
+        productsCsvHelp: 'Изтеглете CSV шаблон, попълнете продуктите и го качете обратно за масов импорт.',
+        downloadCsvTemplate: 'Изтегли CSV шаблон',
+        exportProductsToCsv: 'Експорт на продукти в CSV',
+        importProductsFromCsv: 'Импорт на продукти от CSV',
+        fullDatabaseBackup: 'Пълен бекъп на базата',
+        exportAllDataJson: 'Експорт на всички данни (JSON)',
+        importAllDataJson: 'Импорт на всички данни (JSON)',
+        resetAllData: 'Нулирай всички данни',
+
+        promoCodesManagement: 'Управление на промо кодове',
+        promoCode: 'Промо код',
+        promoCodePlaceholder: 'напр. SUMMER25',
+        promoUppercaseHelp: 'Кодът се конвертира автоматично в главни букви',
+        applyToCategory: 'Приложи към категория',
+        promoCategoryHelp: 'Промо кодът важи само за продукти от тази категория',
+        discountPercentage: 'Процент отстъпка',
+        discountPercentPlaceholder: 'напр. 25',
+        discountPercentHelp: 'Отстъпка в проценти (1–100%)',
+        active: 'Активен',
+        inactive: 'Неактивен',
+        addPromoCode: 'Добави промо код',
+        activePromoCodes: 'Активни промо кодове',
+        promoTableCode: 'Код',
+        promoTableCategory: 'Категория',
+        promoTableDiscount: 'Отстъпка',
+        promoTableStatus: 'Статус',
+        noPromoCodesYet: 'Все още няма промо кодове. Създайте отгоре!',
+
+        comboBundleOffers: 'Комбо и пакети',
+        comboBundleHelp: 'Създайте специални комбо и пакетни оферти. Те ще се появят автоматично в категорията „Комбо и пакети“.',
+        comboNameEn: 'Име на комбо (английски):',
+        comboNameEnPlaceholder: 'напр. Family Meal Deal',
+        comboNameBg: 'Име на комбо (български):',
+        comboNameBgPlaceholder: 'напр. Семейно Комбо',
+        comboDescEnPlaceholder: 'Опишете какво включва това комбо...',
+        comboDescBgPlaceholder: 'Опишете какво включва комбото...',
+        priceEur: 'Цена (€)',
+        priceEurPlaceholder: 'напр. 49.99',
+        comboTypeCombo: 'Комбо (няколко продукта заедно)',
+        comboTypeBundle: 'Пакет (купи X, получи Y)',
+        imageUrl: 'URL на изображение',
+        comboImagePlaceholder: 'https://example.com/combo-image.jpg',
+        selectProductsIncluded: 'Изберете включени продукти:',
+        loadingProducts: 'Зареждане на продукти...',
+        createComboBundle: 'Създай комбо/пакет',
+        clearForm: 'Изчисти формата',
+        activeCombosBundles: 'Активни комбо и пакети',
+        noCombosYet: 'Все още няма комбо или пакети. Създайте отгоре!',
+        type: 'Тип',
+
+        productNameEnglish: 'Име на продукт (английски):',
+        productNameBulgarian: 'Име на продукт (български):',
+        productNameEnPlaceholder: 'напр. Пица Маргарита',
+        productNameBgPlaceholder: 'напр. Пица Маргарита',
+        optionalUseEnglishName: 'По избор: оставете празно, за да се използва английското име',
+        productDescEnPlaceholder: 'Опишете продукта...',
+        productDescBgPlaceholder: 'Опишете продукта...',
+        optionalUseEnglishDescription: 'По избор: оставете празно, за да се използва английското описание',
+        categoryEnglish: 'Категория (английски):',
+        categoryBulgarian: 'Категория (български):',
+        categoryEnPlaceholder: 'напр. Пица, Салати',
+        categoryBgPlaceholder: 'напр. Пица, Салати',
+        categoryTip: 'Съвет: използвайте съществуващи категории или създайте нови',
+        optionalUseEnglishCategory: 'По избор: оставете празно, за да се използва английската категория',
+        weightQuantity: 'Грамаж/Количество',
+        weightPlaceholder: 'напр. 500g, 300ml, 1 бр.',
+        weightExample: 'Пример: 500g, 300ml, 12 бр., 1L',
+        promotionalPricing: 'Промо цена',
+        enablePromotionalPrice: 'Активирай промо цена',
+        promoPriceEur: 'Промо цена (€)',
+        promoDuration: 'Продължителност',
+        promoUntilManual: 'Докато не бъде изключено ръчно',
+        promoSetDates: 'Задай начало и край',
+        startDate: 'Начална дата',
+        endDate: 'Крайна дата',
+        productImagePlaceholder: 'https://example.com/image.jpg',
+        orUploadImage: 'Или качете изображение:',
 
         select: 'Избор',
         enName: 'EN Име',
@@ -304,6 +691,47 @@ const translations = {
         sessionExpired: 'Сесията изтече. Моля, влезте отново.',
         selectAtLeastOneProduct: 'Изберете поне един продукт.',
         selectAtLeastTwoProductsBundle: 'Изберете поне 2 продукта за да създадете комбо.',
+        cityAndAddressRequired: 'Градът и адресът са задължителни при поръчки с доставка.',
+        noCitiesYet: 'Все още няма добавени градове. Добавете първия отгоре.',
+        enterCityName: 'Моля, въведете име на град',
+        cityAlreadyExists: 'Град "{name}" вече съществува',
+        enterValidPrice: 'Моля, въведете валидна цена',
+        invalidPrice: 'Невалидна цена',
+        enterNewCityName: 'Въведете ново име на град:',
+        enterNewDeliveryPrice: 'Въведете нова цена за доставка (EUR):',
+        confirmDeleteCity: 'Сигурни ли сте, че искате да изтриете този град?',
+        confirmDeleteCityNamed: 'Сигурни ли сте, че искате да изтриете "{name}"?',
+        citiesSavedSuccess: 'Градовете са записани успешно!',
+        citiesFailedSave: 'Неуспешно записване на градовете',
+        citiesErrorSave: 'Грешка при записване на градовете',
+        deliverySettingsSaved: 'Настройките за доставка са записани успешно!',
+        deliverySettingsFailedSave: 'Неуспешно записване на настройките за доставка',
+        deliverySettingsErrorSave: 'Грешка при записване на настройките за доставка',
+
+        promoEnterCode: 'Моля, въведете промо код',
+        promoEnterDiscountRange: 'Моля, въведете отстъпка между 1 и 100%',
+        promoUpdatedSuccess: 'Промо кодът е обновен успешно!',
+        promoAddedSuccess: 'Промо кодът е добавен успешно!',
+        promoFailedSave: 'Неуспешно записване на промо кода',
+        promoErrorSave: 'Грешка при записване на промо кода',
+        updatePromoCode: 'Обнови промо код',
+        promoDeleteConfirm: 'Сигурни ли сте, че искате да изтриете този промо код?',
+        promoDeletedSuccess: 'Промо кодът е изтрит успешно!',
+        promoFailedDelete: 'Неуспешно изтриване на промо кода',
+        promoErrorDelete: 'Грешка при изтриване на промо кода',
+        off: 'ОТСТЪПКА',
+
+        comboInvalidNamePrice: 'Моля, попълнете име на комбо и валидна цена!',
+        comboSelectAtLeastOne: 'Моля, изберете поне един продукт за това комбо!',
+        comboCreatedSuccess: 'Комбото/пакетът е създаден успешно!',
+        comboCreateFailed: 'Неуспешно създаване на комбо/пакет',
+        comboCreateError: 'Грешка при създаване на комбо/пакет',
+        noCombosTable: 'Все още няма комбо или пакети. Създайте отгоре!',
+        comboLabel: 'Комбо',
+        bundleLabel: 'Пакет',
+        selectedProductsHeading: 'Избрани продукти:',
+        originalTotal: 'Оригинална сума:',
+        provideBundleNamePrice: 'Моля, въведете име на пакета и валидна цена!',
         deleteSelectedConfirm: 'Да изтрия {count} избрани продукта? Това не може да се върне.',
         deletedProductsSuccess: 'Изтрити {count} продукта успешно',
         failedToDeleteProducts: 'Грешка при изтриване: {error}',
@@ -380,7 +808,11 @@ function switchLanguage(lang) {
     try { renderProducts(); } catch (e) {}
     try { renderOrdersHistory(); } catch (e) {}
     try { renderComboProductSelector(); } catch (e) {}
+    try { renderCities(); } catch (e) {}
+    try { renderPromoCodes(); } catch (e) {}
+    try { loadCombos(); } catch (e) {}
     try { updateManageSelectionUI(); } catch (e) {}
+    try { loadSlideshowSettings(); } catch (e) {}
 }
 
 // Initialize language on page load
@@ -1135,7 +1567,7 @@ async function updateSiteSettings() {
 
         if (mapEnabled) {
             if (!Number.isFinite(mapLat) || !Number.isFinite(mapLng)) {
-                alert('Map is enabled but Latitude/Longitude are invalid.');
+                alert(t('siteMapInvalidLatLng', 'Map is enabled but Latitude/Longitude are invalid.'));
                 return;
             }
         }
@@ -1180,21 +1612,21 @@ async function updateSiteSettings() {
         });
 
         if (res.status === 401) {
-            alert('Session expired. Please login again.');
+            alert(t('sessionExpired', 'Session expired. Please login again.'));
             window.location.href = `${BASE_PATH}/login`;
             return;
         }
 
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
-            alert(err.error || 'Failed to save site settings');
+            alert(err.error || t('siteSettingsSaveFailed', 'Failed to save site settings'));
             return;
         }
 
-        alert('Site content saved successfully!');
+        alert(t('siteSettingsSaved', 'Site content saved successfully!'));
     } catch (e) {
         console.error('Error saving site settings:', e);
-        alert('Error saving site settings');
+        alert(t('siteSettingsSaveError', 'Error saving site settings'));
     }
 }
 
@@ -1863,7 +2295,7 @@ function updateCategoryFilter() {
     const categories = [...new Set(products.map(p => p.category))].sort();
     
     const currentValue = select.value;
-    select.innerHTML = '<option value="all">All Categories</option>';
+    select.innerHTML = `<option value="all">${t('allCategories', 'All Categories')}</option>`;
     
     categories.forEach(category => {
         const option = document.createElement('option');
@@ -1872,7 +2304,7 @@ function updateCategoryFilter() {
         select.appendChild(option);
     });
     
-    if (currentValue && categories.includes(currentValue)) {
+    if (currentValue && (currentValue === 'all' || categories.includes(currentValue))) {
         select.value = currentValue;
     }
 }
@@ -1885,7 +2317,7 @@ function updateManageCategoryDropdown() {
     const categories = [...new Set(products.map(p => p.category))].sort();
     const currentValue = select.value;
     
-    select.innerHTML = '<option value="">Select category...</option>';
+    select.innerHTML = `<option value="">${t('selectCategoryPlaceholder', 'Select category...')}</option>`;
     categories.forEach(category => {
         const option = document.createElement('option');
         option.value = category;
@@ -2355,13 +2787,13 @@ async function updateCustomization() {
         }
         
         if (response.ok) {
-            alert('Customization updated successfully!');
+            alert(t('customizationUpdated', 'Customization updated successfully!'));
         } else {
-            alert('Failed to update customization');
+            alert(t('customizationFailedUpdate', 'Failed to update customization'));
         }
     } catch (error) {
         console.error('Error updating customization:', error);
-        alert('Error updating customization');
+        alert(t('customizationErrorUpdate', 'Error updating customization'));
     }
 }
 
@@ -2391,13 +2823,13 @@ async function updateOrderSettings() {
         });
 
         if (response.ok) {
-            alert('Order settings updated successfully!');
+            alert(t('orderSettingsUpdated', 'Order settings updated successfully!'));
         } else {
-            alert('Failed to update order settings');
+            alert(t('orderSettingsFailedUpdate', 'Failed to update order settings'));
         }
     } catch (error) {
         console.error('Error updating order settings:', error);
-        alert('Error updating order settings');
+        alert(t('orderSettingsErrorUpdate', 'Error updating order settings'));
     }
 }
 
@@ -2433,13 +2865,13 @@ async function updateWorkingHours() {
         });
 
         if (response.ok) {
-            alert('Working hours updated successfully!');
+            alert(t('workingHoursUpdated', 'Working hours updated successfully!'));
         } else {
-            alert('Failed to update working hours');
+            alert(t('workingHoursFailedUpdate', 'Failed to update working hours'));
         }
     } catch (error) {
         console.error('Error updating working hours:', error);
-        alert('Error updating working hours');
+        alert(t('workingHoursErrorUpdate', 'Error updating working hours'));
     }
 }
 
@@ -2476,7 +2908,7 @@ function renderSlidesList(slides) {
     const container = document.getElementById('slides-list');
     
     if (slides.length === 0) {
-        container.innerHTML = '<p style="color: #666;">No slides added yet. Click "Add Slide" to get started.</p>';
+        container.innerHTML = `<p style="color: #666;">${t('slideshowNoSlides', 'No slides added yet. Click "Add Slide" to get started.')}</p>`;
         return;
     }
     
@@ -2494,12 +2926,12 @@ function renderSlidesList(slides) {
             <img src="${slide.image}" style="width: 100px; height: 60px; object-fit: cover; border-radius: 4px;" onerror="this.src='https://via.placeholder.com/100x60?text=No+Image'">
             <div style="flex: 1;">
                 <div style="margin-bottom: 5px;">
-                    <label style="display: block; font-size: 12px; color: #666; margin-bottom: 3px;">Image</label>
+                    <label style="display: block; font-size: 12px; color: #666; margin-bottom: 3px;">${t('slideshowImageLabel', 'Image')}</label>
                     <input type="file" accept="image/*" onchange="updateSlideImage(${index}, this)" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
-                    <div style="font-size: 11px; color: #999; margin-top: 2px;">Current: ${slide.image}</div>
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">${t('slideshowCurrentLabel', 'Current:')} ${slide.image}</div>
                 </div>
             </div>
-            <input type="text" value="${slide.title || ''}" onchange="updateSlideTitle(${index}, this.value)" onblur="updateSlideTitle(${index}, this.value)" placeholder="Title (optional)" style="width: 200px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <input type="text" value="${slide.title || ''}" onchange="updateSlideTitle(${index}, this.value)" onblur="updateSlideTitle(${index}, this.value)" placeholder="${t('slideshowTitleOptionalPlaceholder', 'Title (optional)')}" style="width: 200px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
             <button onclick="removeSlide(${index})" class="btn btn-danger" style="padding: 8px 12px;">
                 <i class="fas fa-trash"></i>
             </button>
@@ -2515,7 +2947,7 @@ function addSlide() {
             
             // Check max 10 slides
             if (slides.length >= 10) {
-                alert('Maximum 10 slides allowed!');
+                alert(t('slideshowMaxSlides', 'Maximum 10 slides allowed!'));
                 throw new Error('Max slides reached');
             }
             
@@ -2550,13 +2982,13 @@ function addSlide() {
         .catch(error => {
             if (error.message !== 'Max slides reached') {
                 console.error('Error adding slide:', error);
-                alert('Failed to add slide');
+                alert(t('slideshowFailedAdd', 'Failed to add slide'));
             }
         });
 }
 
 function removeSlide(index) {
-    if (!confirm('Are you sure you want to remove this slide?')) {
+    if (!confirm(t('slideshowConfirmRemove', 'Are you sure you want to remove this slide?'))) {
         return;
     }
     
@@ -2585,7 +3017,7 @@ function removeSlide(index) {
         })
         .catch(error => {
             console.error('Error removing slide:', error);
-            alert('Failed to remove slide');
+            alert(t('slideshowFailedRemove', 'Failed to remove slide'));
         });
 }
 
@@ -2618,7 +3050,7 @@ function moveSlideUp(index) {
         })
         .catch(error => {
             console.error('Error moving slide:', error);
-            alert('Failed to move slide');
+            alert(t('slideshowFailedMove', 'Failed to move slide'));
         });
 }
 
@@ -2651,7 +3083,7 @@ function moveSlideDown(index) {
         })
         .catch(error => {
             console.error('Error moving slide:', error);
-            alert('Failed to move slide');
+            alert(t('slideshowFailedMove', 'Failed to move slide'));
         });
 }
 
@@ -2712,7 +3144,7 @@ function updateSlideImage(index, fileInput) {
     })
     .catch(error => {
         console.error('Error updating slide image:', error);
-        alert('Failed to upload image');
+        alert(t('slideshowFailedUpload', 'Failed to upload image'));
         fileInput.disabled = false;
     });
 }
@@ -2745,7 +3177,7 @@ function updateSlideTitle(index, title) {
         })
         .catch(error => {
             console.error('Error updating slide title:', error);
-            alert('Failed to update title');
+            alert(t('slideshowFailedUpdateTitle', 'Failed to update title'));
         });
 }
 
@@ -2771,11 +3203,11 @@ function saveSlideshowSettings() {
         })
         .then(response => response.json())
         .then(data => {
-            alert('Slideshow settings saved successfully!');
+            alert(t('slideshowSavedSuccess', 'Slideshow settings saved successfully!'));
         })
         .catch(error => {
             console.error('Error saving slideshow settings:', error);
-            alert('Failed to save slideshow settings');
+            alert(t('slideshowFailedSave', 'Failed to save slideshow settings'));
         });
 }
 
@@ -3036,7 +3468,7 @@ function updatePromoCodeCategoryDropdown() {
     const categories = [...new Set(products.map(p => p.category))].sort();
     
     const currentValue = select.value;
-    select.innerHTML = '<option value="all">All Categories</option>';
+    select.innerHTML = `<option value="all">${t('allCategories', 'All Categories')}</option>`;
     
     categories.forEach(category => {
         const option = document.createElement('option');
@@ -3058,7 +3490,7 @@ function renderPromoCodes() {
         tbody.innerHTML = `
             <tr>
                 <td colspan="5" style="text-align: center; padding: 20px; color: #999;">
-                    No promo codes yet. Create one above!
+                    ${t('noPromoCodesYet', 'No promo codes yet. Create one above!')}
                 </td>
             </tr>
         `;
@@ -3067,29 +3499,29 @@ function renderPromoCodes() {
     
     tbody.innerHTML = promoCodes.map(promo => `
         <tr>
-            <td data-label="Code">
+            <td data-label="${t('promoTableCode', 'Code')}">
                 <strong style="font-family: monospace; color: #667eea;">${promo.code}</strong>
             </td>
-            <td data-label="Category">
-                <span class="product-category">${promo.category === 'all' ? 'All Categories' : promo.category}</span>
+            <td data-label="${t('promoTableCategory', 'Category')}">
+                <span class="product-category">${promo.category === 'all' ? t('allCategories', 'All Categories') : promo.category}</span>
             </td>
-            <td data-label="Discount">
-                <strong style="color: #e74c3c;">${promo.discount}% OFF</strong>
+            <td data-label="${t('promoTableDiscount', 'Discount')}">
+                <strong style="color: #e74c3c;">${promo.discount}% ${t('off', 'OFF')}</strong>
             </td>
-            <td data-label="Status">
+            <td data-label="${t('promoTableStatus', 'Status')}">
                 <span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; 
                        background: ${promo.isActive ? '#d4edda' : '#f8d7da'}; 
                        color: ${promo.isActive ? '#155724' : '#721c24'};">
-                    ${promo.isActive ? 'ACTIVE' : 'INACTIVE'}
+                    ${(promo.isActive ? t('active', 'Active') : t('inactive', 'Inactive')).toUpperCase()}
                 </span>
             </td>
-            <td data-label="Actions">
+            <td data-label="${t('actions', 'Actions')}">
                 <div class="product-actions">
                     <button onclick="editPromoCode(${promo.id})" class="btn btn-primary btn-small">
-                        <i class="fas fa-edit"></i> Edit
+                        <i class="fas fa-edit"></i> ${t('edit', 'Edit')}
                     </button>
                     <button onclick="deletePromoCode(${promo.id})" class="btn btn-danger btn-small">
-                        <i class="fas fa-trash"></i> Delete
+                        <i class="fas fa-trash"></i> ${t('delete', 'Delete')}
                     </button>
                 </div>
             </td>
@@ -3105,12 +3537,12 @@ async function savePromoCode() {
     const isActive = document.getElementById('promo-code-active').value === 'true';
     
     if (!code) {
-        alert('Please enter a promo code');
+        alert(t('promoEnterCode', 'Please enter a promo code'));
         return;
     }
     
     if (!discount || discount < 1 || discount > 100) {
-        alert('Please enter a discount between 1 and 100%');
+        alert(t('promoEnterDiscountRange', 'Please enter a discount between 1 and 100%'));
         return;
     }
     
@@ -3148,16 +3580,16 @@ async function savePromoCode() {
         }
         
         if (response.ok) {
-            alert(editingPromoId ? 'Promo code updated successfully!' : 'Promo code added successfully!');
+            alert(editingPromoId ? t('promoUpdatedSuccess', 'Promo code updated successfully!') : t('promoAddedSuccess', 'Promo code added successfully!'));
             resetPromoForm();
             loadPromoCodes();
         } else {
             const error = await response.json();
-            alert(error.error || 'Failed to save promo code');
+            alert(error.error || t('promoFailedSave', 'Failed to save promo code'));
         }
     } catch (error) {
         console.error('Error saving promo code:', error);
-        alert('Error saving promo code');
+        alert(t('promoErrorSave', 'Error saving promo code'));
     }
 }
 
@@ -3173,7 +3605,7 @@ function editPromoCode(id) {
     document.getElementById('promo-code-discount').value = promo.discount;
     document.getElementById('promo-code-active').value = promo.isActive.toString();
     
-    document.getElementById('promo-submit-text').textContent = 'Update Promo Code';
+    document.getElementById('promo-submit-text').textContent = t('updatePromoCode', 'Update Promo Code');
     document.getElementById('cancel-promo-btn').style.display = 'inline-flex';
     
     // Scroll to form
@@ -3182,7 +3614,7 @@ function editPromoCode(id) {
 
 // Delete promo code
 async function deletePromoCode(id) {
-    if (!confirm('Are you sure you want to delete this promo code?')) {
+    if (!confirm(t('promoDeleteConfirm', 'Are you sure you want to delete this promo code?'))) {
         return;
     }
     
@@ -3196,14 +3628,14 @@ async function deletePromoCode(id) {
         });
         
         if (response.ok) {
-            alert('Promo code deleted successfully!');
+            alert(t('promoDeletedSuccess', 'Promo code deleted successfully!'));
             loadPromoCodes();
         } else {
-            alert('Failed to delete promo code');
+            alert(t('promoFailedDelete', 'Failed to delete promo code'));
         }
     } catch (error) {
         console.error('Error deleting promo code:', error);
-        alert('Error deleting promo code');
+        alert(t('promoErrorDelete', 'Error deleting promo code'));
     }
 }
 
@@ -3214,7 +3646,7 @@ function resetPromoForm() {
     document.getElementById('promo-code-category').value = 'all';
     document.getElementById('promo-code-discount').value = '';
     document.getElementById('promo-code-active').value = 'true';
-    document.getElementById('promo-submit-text').textContent = 'Add Promo Code';
+    document.getElementById('promo-submit-text').textContent = t('addPromoCode', 'Add Promo Code');
     document.getElementById('cancel-promo-btn').style.display = 'none';
 }
 
@@ -4092,7 +4524,7 @@ async function saveOrderEdits() {
 
     if (deliveryMethod === 'delivery') {
         if (!customerInfo.city || !customerInfo.address) {
-            alert('City and address are required for delivery orders.');
+            alert(t('cityAndAddressRequired', 'City and address are required for delivery orders.'));
             return;
         }
     }
@@ -4521,13 +4953,13 @@ async function saveDeliverySettings() {
         });
 
         if (response.ok) {
-            alert('Delivery settings saved successfully!');
+            alert(t('deliverySettingsSaved', 'Delivery settings saved successfully!'));
         } else {
-            alert('Failed to save delivery settings');
+            alert(t('deliverySettingsFailedSave', 'Failed to save delivery settings'));
         }
     } catch (error) {
         console.error('Error saving delivery settings:', error);
-        alert('Error saving delivery settings');
+        alert(t('deliverySettingsErrorSave', 'Error saving delivery settings'));
     }
 }
 
@@ -4709,12 +5141,12 @@ async function saveCombo() {
     const image = document.getElementById('combo-image').value.trim();
     
     if (!name || !price || price <= 0) {
-        alert('Please fill in combo name and valid price!');
+        alert(t('comboInvalidNamePrice', 'Please fill in combo name and valid price!'));
         return;
     }
     
     if (selectedComboProducts.size === 0) {
-        alert('Please select at least one product for this combo!');
+        alert(t('comboSelectAtLeastOne', 'Please select at least one product for this combo!'));
         return;
     }
     
@@ -4744,16 +5176,16 @@ async function saveCombo() {
         });
         
         if (response.ok) {
-            alert('Combo/Bundle created successfully!');
+            alert(t('comboCreatedSuccess', 'Combo/Bundle created successfully!'));
             clearComboForm();
             loadProductsForCombo();
             loadProducts(); // Refresh main products list
         } else {
-            alert('Failed to create combo/bundle');
+            alert(t('comboCreateFailed', 'Failed to create combo/bundle'));
         }
     } catch (error) {
         console.error('Error creating combo:', error);
-        alert('Error creating combo/bundle');
+        alert(t('comboCreateError', 'Error creating combo/bundle'));
     }
 }
 
@@ -4796,7 +5228,7 @@ function renderCombosTable(combos) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="5" style="text-align: center; padding: 20px; color: #999;">
-                    No combos or bundles yet. Create one above!
+                    ${t('noCombosTable', 'No combos or bundles yet. Create one above!')}
                 </td>
             </tr>
         `;
@@ -4808,12 +5240,12 @@ function renderCombosTable(combos) {
             <td><img src="${combo.image}" alt="${combo.name}" class="product-img-thumb"></td>
             <td>${combo.name}</td>
             <td><span style="padding: 4px 8px; background: #3498db; color: white; border-radius: 4px; font-size: 12px;">
-                ${combo.comboType === 'bundle' ? 'Bundle' : 'Combo'}
+                ${combo.comboType === 'bundle' ? t('bundleLabel', 'Bundle') : t('comboLabel', 'Combo')}
             </span></td>
             <td>${combo.price.toFixed(2)} €</td>
             <td>
                 <button onclick="deleteProduct(${combo.id})" class="btn btn-danger btn-sm">
-                    <i class="fas fa-trash"></i> Delete
+                    <i class="fas fa-trash"></i> ${t('delete', 'Delete')}
                 </button>
             </td>
         </tr>
@@ -4826,7 +5258,7 @@ function renderCombosTable(combos) {
 function openBundleModal() {
     const selectedIds = Array.from(manageSelected);
     if (selectedIds.length < 2) {
-        alert('Please select at least 2 products to create a bundle.');
+        alert(t('selectAtLeastTwoProductsBundle', 'Please select at least 2 products to create a bundle.'));
         return;
     }
     
@@ -4835,7 +5267,7 @@ function openBundleModal() {
     // Display selected products
     const productsList = document.getElementById('bundle-products-list');
     productsList.innerHTML = `
-        <h4 style="margin-bottom: 10px;">Selected Products:</h4>
+        <h4 style="margin-bottom: 10px;">${t('selectedProductsHeading', 'Selected Products:')}</h4>
         ${selectedProducts.map(p => `
             <div style="display: flex; align-items: center; gap: 10px; padding: 8px; background: white; border-radius: 4px; margin-bottom: 5px;">
                 <img src="${p.image}" alt="${p.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
@@ -4855,7 +5287,7 @@ function openBundleModal() {
     
     // Calculate total original price
     const totalPrice = selectedProducts.reduce((sum, p) => sum + p.price, 0);
-    document.getElementById('bundle-original-price').textContent = `Original total: ${totalPrice.toFixed(2)} €`;
+    document.getElementById('bundle-original-price').textContent = `${t('originalTotal', 'Original total:')} ${totalPrice.toFixed(2)} €`;
     document.getElementById('bundle-price-input').value = (totalPrice * 0.85).toFixed(2); // Suggest 15% discount
     
     // Clear other fields
@@ -4883,7 +5315,7 @@ async function confirmBundleCreation() {
     const image = document.getElementById('bundle-image-input').value.trim();
     
     if (!name || !price || price <= 0) {
-        alert('Please provide a bundle name and valid price!');
+        alert(t('provideBundleNamePrice', 'Please provide a bundle name and valid price!'));
         return;
     }
     
@@ -4918,18 +5350,18 @@ async function confirmBundleCreation() {
         });
         
         if (response.ok) {
-            alert('Bundle created successfully!');
+            alert(t('comboCreatedSuccess', 'Combo/Bundle created successfully!'));
             closeBundleModal();
             manageSelected.clear();
             document.getElementById('manage-select-all').checked = false;
             await loadProducts();
             loadCombos();
         } else {
-            alert('Failed to create bundle');
+            alert(t('comboCreateFailed', 'Failed to create combo/bundle'));
         }
     } catch (error) {
         console.error('Error creating bundle:', error);
-        alert('Error creating bundle');
+        alert(t('comboCreateError', 'Error creating combo/bundle'));
     }
 }
 
@@ -4962,7 +5394,7 @@ function renderCities() {
     if (!citiesList) return;
     
     if (cities.length === 0) {
-        citiesList.innerHTML = `<p style="color: #666; text-align: center; padding: 20px;">No cities added yet. Add your first city above.</p>`;
+        citiesList.innerHTML = `<p style="color: #666; text-align: center; padding: 20px;">${t('noCitiesYet', 'No cities added yet. Add your first city above.')}</p>`;
         return;
     }
     
@@ -4970,9 +5402,9 @@ function renderCities() {
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
             <thead>
                 <tr style="background: #f5f5f5;">
-                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd;">City Name</th>
-                    <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">Delivery Price (EUR)</th>
-                    <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">Actions</th>
+                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd;">${t('cityName', 'City Name')}</th>
+                    <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">${t('deliveryPriceEur', 'Delivery Price (EUR)')}</th>
+                    <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">${t('actions', 'Actions')}</th>
                 </tr>
             </thead>
             <tbody>
@@ -4982,10 +5414,10 @@ function renderCities() {
                         <td style="padding: 12px; text-align: center;">€${parseFloat(city.price).toFixed(2)}</td>
                         <td style="padding: 12px; text-align: center;">
                             <button onclick="editCity(${index})" class="btn btn-sm" style="padding: 5px 10px; margin-right: 5px;">
-                                <i class="fas fa-edit"></i> Edit
+                                <i class="fas fa-edit"></i> ${t('edit', 'Edit')}
                             </button>
                             <button onclick="deleteCity(${index})" class="btn btn-sm btn-danger" style="padding: 5px 10px;">
-                                <i class="fas fa-trash"></i> Delete
+                                <i class="fas fa-trash"></i> ${t('delete', 'Delete')}
                             </button>
                         </td>
                     </tr>
@@ -5003,18 +5435,18 @@ async function addCity() {
     const price = parseFloat(priceInput.value);
     
     if (!name) {
-        alert('Please enter a city name');
+        alert(t('enterCityName', 'Please enter a city name'));
         return;
     }
     
     if (isNaN(price) || price < 0) {
-        alert('Please enter a valid price');
+        alert(t('enterValidPrice', 'Please enter a valid price'));
         return;
     }
     
     // Check if city already exists
     if (cities.some(c => c.name === name)) {
-        alert(`City "${name}" already exists`);
+        alert(t('cityAlreadyExists', `City "${name}" already exists`).replace('{name}', name));
         return;
     }
     
@@ -5029,15 +5461,15 @@ async function addCity() {
 function editCity(index) {
     const city = cities[index];
     
-    const newName = prompt('Enter new city name:', city.name);
+    const newName = prompt(t('enterNewCityName', 'Enter new city name:'), city.name);
     if (!newName || newName.trim() === '') return;
     
-    const newPrice = prompt('Enter new delivery price (EUR):', city.price);
+    const newPrice = prompt(t('enterNewDeliveryPrice', 'Enter new delivery price (EUR):'), city.price);
     if (newPrice === null) return;
     
     const price = parseFloat(newPrice);
     if (isNaN(price) || price < 0) {
-        alert('Invalid price');
+        alert(t('invalidPrice', 'Invalid price'));
         return;
     }
     
@@ -5048,7 +5480,7 @@ function editCity(index) {
 function deleteCity(index) {
     const city = cities[index];
     
-    if (!confirm(`Are you sure you want to delete "${city.name}"?`)) {
+    if (!confirm(t('confirmDeleteCityNamed', `Are you sure you want to delete "${city.name}"?`).replace('{name}', city.name))) {
         return;
     }
     
@@ -5089,12 +5521,12 @@ async function saveCities() {
         
         if (response.ok) {
             renderCities();
-            alert('Cities saved successfully!');
+            alert(t('citiesSavedSuccess', 'Cities saved successfully!'));
         } else {
-            alert('Failed to save cities');
+            alert(t('citiesFailedSave', 'Failed to save cities'));
         }
     } catch (error) {
         console.error('Error saving cities:', error);
-        alert('Error saving cities');
+        alert(t('citiesErrorSave', 'Error saving cities'));
     }
 }
