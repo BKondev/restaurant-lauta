@@ -1013,6 +1013,110 @@ body {
     background: #f39c12;
 }
 
+/* Orders History: alternate row/column layout (used on mobile) */
+.orders-history-row-layout {
+    display: none;
+}
+
+.orders-history-card-layout {
+    display: block;
+}
+
+.orders-history-row-layout .oh-col {
+    background: #f8f9fa;
+    border: 1px solid #edf0f2;
+    border-radius: 10px;
+    padding: 12px;
+}
+
+.orders-history-row-layout .oh-id {
+    font-weight: 900;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.orders-history-row-layout .oh-time {
+    color: #666;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.orders-history-row-layout .oh-badges {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.orders-history-row-layout .oh-total {
+    margin-top: 10px;
+    color: #2c3e50;
+    font-size: 13px;
+}
+
+.orders-history-row-layout .oh-title {
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+.orders-history-row-layout .oh-line {
+    font-size: 13px;
+    color: #2c3e50;
+    padding: 4px 0;
+    border-bottom: 1px dashed #e5e5e5;
+}
+
+.orders-history-row-layout .oh-line:last-child {
+    border-bottom: none;
+}
+
+.orders-history-row-layout .oh-label {
+    font-weight: 800;
+    color: #666;
+}
+
+.orders-history-row-layout .oh-products-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.orders-history-row-layout .oh-item-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid #e6e6e6;
+    color: #2c3e50;
+    font-weight: 700;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.orders-history-row-layout .oh-empty {
+    color: #999;
+    font-size: 13px;
+}
+
+.orders-history-row-layout .oh-note-hint {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #888;
+}
+
+.orders-history-row-layout .oh-actions-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
 @media (max-width: 768px) {
     .form-row {
         grid-template-columns: 1fr;
@@ -1072,18 +1176,20 @@ body {
 
     #orders-history-list .order-card {
         flex: 0 0 auto;
-        min-width: 720px;
+        min-width: 980px;
         scroll-snap-align: start;
     }
 
-    #orders-history-list .order-body {
-        grid-template-columns: 1fr 1fr;
+    /* Use row/column layout for Order History on mobile */
+    #orders-history-list .orders-history-row-layout {
+        display: grid;
+        grid-template-columns: 220px 280px 1fr 260px;
+        gap: 12px;
+        align-items: start;
     }
 
-    #orders-history-list .order-actions {
-        flex-direction: row;
-        justify-content: flex-end;
-        flex-wrap: wrap;
+    #orders-history-list .orders-history-card-layout {
+        display: none;
     }
 
     /* Pending orders (mobile): keep compact stacked layout */

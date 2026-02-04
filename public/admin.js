@@ -4128,6 +4128,14 @@ function renderOrdersHistory() {
         const totalShown = (order.ownerDiscount && order.ownerDiscount > 0 && order.finalTotal != null) ? order.finalTotal : order.total;
         const actions = getNextActionsForOrder(order);
 
+        const productsChipsHtml = (order.items || []).map(item => {
+            const qty = Number(item?.quantity) || 0;
+            const name = (item?.name || '').toString();
+            const hasNote = Boolean(item?.note);
+            const noteTitle = hasNote ? ` title="${t('notes', 'Notes')}: ${(item?.note || '').toString().replace(/\s+/g, ' ').trim()}"` : '';
+            return `<span class="oh-item-chip"${noteTitle}>${qty}x ${name}${hasNote ? ' *' : ''}</span>`;
+        }).join('');
+
         const itemsHtml = (order.items || []).map(item => {
             const price = Number(item.promoPrice != null ? item.promoPrice : item.price) || 0;
             const qty = Number(item.quantity) || 0;
@@ -4154,60 +4162,110 @@ function renderOrdersHistory() {
 
         return `
             <div class="order-card status-${statusClass}" style="margin-bottom: 14px;">
-                <div class="order-header">
-                    <div>
-                        <div class="order-id">#${order.id}</div>
-                        <div class="order-time">${created}</div>
+                <div class="orders-history-row-layout">
+                    <div class="oh-col oh-meta">
+                        <div class="oh-id">#${order.id}</div>
+                        <div class="oh-time">${created}</div>
+                        <div class="oh-badges">
+                            <span class="delivery-badge ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? 'delivery' : 'pickup'}">
+                                ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? '<i class="fas fa-truck"></i>' : '<i class="fas fa-shopping-bag"></i>'}
+                                ${methodLabel}
+                            </span>
+                            <span class="order-status ${statusClass}">${statusLabel}</span>
+                        </div>
+                        <div class="oh-total">${t('total', 'Total')}: <strong>${safeToFixed(totalShown)} €</strong></div>
                     </div>
-                    <div style="display:flex; gap:10px; align-items:center;">
-                        <span class="delivery-badge ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? 'delivery' : 'pickup'}">
-                            ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? '<i class="fas fa-truck"></i>' : '<i class="fas fa-shopping-bag"></i>'}
-                            ${methodLabel}
-                        </span>
-                        <span class="order-status ${statusClass}">${statusLabel}</span>
-                    </div>
-                </div>
 
-                <div class="order-body">
-                    <div class="order-section" style="margin-bottom: 10px;">
-                        <div class="order-info-row"><span class="order-info-label">${t('customer', 'Customer')}:</span><span class="order-info-value">${order.customerInfo?.name || ''}</span></div>
-                        <div class="order-info-row"><span class="order-info-label">${t('phone', 'Phone')}:</span><span class="order-info-value">${order.customerInfo?.phone || ''}</span></div>
-                        <div class="order-info-row"><span class="order-info-label">${t('email', 'Email')}:</span><span class="order-info-value">${order.customerInfo?.email || ''}</span></div>
+                    <div class="oh-col oh-customer">
+                        <div class="oh-title">${t('customer', 'Customer')}</div>
+                        <div class="oh-line"><span class="oh-label">${t('customer', 'Customer')}:</span> ${order.customerInfo?.name || ''}</div>
+                        <div class="oh-line"><span class="oh-label">${t('phone', 'Phone')}:</span> ${order.customerInfo?.phone || ''}</div>
+                        <div class="oh-line"><span class="oh-label">${t('email', 'Email')}:</span> ${order.customerInfo?.email || ''}</div>
                         ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? `
-                            <div class="order-info-row"><span class="order-info-label">${t('city', 'City')}:</span><span class="order-info-value">${order.customerInfo?.city || ''}</span></div>
-                            <div class="order-info-row"><span class="order-info-label">${t('address', 'Address')}:</span><span class="order-info-value">${order.customerInfo?.address || ''}</span></div>
+                            <div class="oh-line"><span class="oh-label">${t('city', 'City')}:</span> ${order.customerInfo?.city || ''}</div>
+                            <div class="oh-line"><span class="oh-label">${t('address', 'Address')}:</span> ${order.customerInfo?.address || ''}</div>
                         ` : ''}
-                        ${order.customerInfo?.notes ? `<div class="order-info-row"><span class="order-info-label">${t('notes', 'Notes')}:</span><span class="order-info-value">${order.customerInfo.notes}</span></div>` : ''}
+                        ${order.customerInfo?.notes ? `<div class="oh-line"><span class="oh-label">${t('notes', 'Notes')}:</span> ${order.customerInfo.notes}</div>` : ''}
                     </div>
 
-                    <div class="order-section" style="margin-bottom: 10px;">
-                        <details ${((order.items || []).some(i => i?.note) ? 'open' : '')} style="border: none;">
-                            <summary style="cursor:pointer; font-weight: 700; color:#333; list-style:none;">
-                                ${t('products', 'Products')} (${(order.items || []).length || 0})
-                            </summary>
-                            <div class="order-items" style="margin-top: 8px;">
-                                ${itemsHtml || '<div style="color:#999;">No items</div>'}
-                            </div>
-                        </details>
+                    <div class="oh-col oh-products">
+                        <div class="oh-title">${t('products', 'Products')} (${(order.items || []).length || 0})</div>
+                        <div class="oh-products-chips">
+                            ${productsChipsHtml || `<span class="oh-empty">${t('products', 'Products')}: 0</span>`}
+                        </div>
+                        <div class="oh-note-hint">* ${t('notes', 'Notes')}</div>
                     </div>
 
-                    <div class="order-section">
-                        <div class="order-total" style="margin-top: 0;">
-                            <span class="order-total-label">${t('total', 'Total')}:</span>
-                            <span class="order-total-value">${safeToFixed(totalShown)} €</span>
+                    <div class="oh-col oh-actions">
+                        <div class="oh-title">${t('actions', 'Actions')}</div>
+                        <div class="oh-actions-buttons">
+                            <button onclick="openOrderEditModal('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
+                                <i class="fas fa-pen"></i> ${t('edit', 'Edit')}
+                            </button>
+                            ${actionsHtml}
+                            <button onclick="deleteOrder('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
+                                <i class="fas fa-trash"></i> ${t('delete', 'Delete')}
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <div class="order-actions">
-                    <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
-                        <button onclick="openOrderEditModal('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
-                            <i class="fas fa-pen"></i> ${t('edit', 'Edit')}
-                        </button>
-                        ${actionsHtml}
-                        <button onclick="deleteOrder('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
-                            <i class="fas fa-trash"></i> ${t('delete', 'Delete')}
-                        </button>
+                <div class="orders-history-card-layout">
+                    <div class="order-header">
+                        <div>
+                            <div class="order-id">#${order.id}</div>
+                            <div class="order-time">${created}</div>
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <span class="delivery-badge ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? 'delivery' : 'pickup'}">
+                                ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? '<i class="fas fa-truck"></i>' : '<i class="fas fa-shopping-bag"></i>'}
+                                ${methodLabel}
+                            </span>
+                            <span class="order-status ${statusClass}">${statusLabel}</span>
+                        </div>
+                    </div>
+
+                    <div class="order-body">
+                        <div class="order-section" style="margin-bottom: 10px;">
+                            <div class="order-info-row"><span class="order-info-label">${t('customer', 'Customer')}:</span><span class="order-info-value">${order.customerInfo?.name || ''}</span></div>
+                            <div class="order-info-row"><span class="order-info-label">${t('phone', 'Phone')}:</span><span class="order-info-value">${order.customerInfo?.phone || ''}</span></div>
+                            <div class="order-info-row"><span class="order-info-label">${t('email', 'Email')}:</span><span class="order-info-value">${order.customerInfo?.email || ''}</span></div>
+                            ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? `
+                                <div class="order-info-row"><span class="order-info-label">${t('city', 'City')}:</span><span class="order-info-value">${order.customerInfo?.city || ''}</span></div>
+                                <div class="order-info-row"><span class="order-info-label">${t('address', 'Address')}:</span><span class="order-info-value">${order.customerInfo?.address || ''}</span></div>
+                            ` : ''}
+                            ${order.customerInfo?.notes ? `<div class="order-info-row"><span class="order-info-label">${t('notes', 'Notes')}:</span><span class="order-info-value">${order.customerInfo.notes}</span></div>` : ''}
+                        </div>
+
+                        <div class="order-section" style="margin-bottom: 10px;">
+                            <details ${((order.items || []).some(i => i?.note) ? 'open' : '')} style="border: none;">
+                                <summary style="cursor:pointer; font-weight: 700; color:#333; list-style:none;">
+                                    ${t('products', 'Products')} (${(order.items || []).length || 0})
+                                </summary>
+                                <div class="order-items" style="margin-top: 8px;">
+                                    ${itemsHtml || '<div style="color:#999;">No items</div>'}
+                                </div>
+                            </details>
+                        </div>
+
+                        <div class="order-section">
+                            <div class="order-total" style="margin-top: 0;">
+                                <span class="order-total-label">${t('total', 'Total')}:</span>
+                                <span class="order-total-value">${safeToFixed(totalShown)} €</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="order-actions">
+                        <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
+                            <button onclick="openOrderEditModal('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
+                                <i class="fas fa-pen"></i> ${t('edit', 'Edit')}
+                            </button>
+                            ${actionsHtml}
+                            <button onclick="deleteOrder('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
+                                <i class="fas fa-trash"></i> ${t('delete', 'Delete')}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
