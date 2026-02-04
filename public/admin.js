@@ -4162,8 +4162,9 @@ function renderOrdersHistory() {
 
         return `
             <div class="order-card status-${statusClass}" style="margin-bottom: 14px;">
-                <div class="orders-history-row-layout">
-                    <div class="oh-col oh-meta">
+                <div class="orders-history-row-scroll">
+                    <div class="orders-history-row-layout">
+                        <div class="oh-col oh-meta">
                         <div class="oh-id">#${order.id}</div>
                         <div class="oh-time">${created}</div>
                         <div class="oh-badges">
@@ -4174,38 +4175,39 @@ function renderOrdersHistory() {
                             <span class="order-status ${statusClass}">${statusLabel}</span>
                         </div>
                         <div class="oh-total">${t('total', 'Total')}: <strong>${safeToFixed(totalShown)} €</strong></div>
-                    </div>
-
-                    <div class="oh-col oh-customer">
-                        <div class="oh-title">${t('customer', 'Customer')}</div>
-                        <div class="oh-line"><span class="oh-label">${t('customer', 'Customer')}:</span> ${order.customerInfo?.name || ''}</div>
-                        <div class="oh-line"><span class="oh-label">${t('phone', 'Phone')}:</span> ${order.customerInfo?.phone || ''}</div>
-                        <div class="oh-line"><span class="oh-label">${t('email', 'Email')}:</span> ${order.customerInfo?.email || ''}</div>
-                        ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? `
-                            <div class="oh-line"><span class="oh-label">${t('city', 'City')}:</span> ${order.customerInfo?.city || ''}</div>
-                            <div class="oh-line"><span class="oh-label">${t('address', 'Address')}:</span> ${order.customerInfo?.address || ''}</div>
-                        ` : ''}
-                        ${order.customerInfo?.notes ? `<div class="oh-line"><span class="oh-label">${t('notes', 'Notes')}:</span> ${order.customerInfo.notes}</div>` : ''}
-                    </div>
-
-                    <div class="oh-col oh-products">
-                        <div class="oh-title">${t('products', 'Products')} (${(order.items || []).length || 0})</div>
-                        <div class="oh-products-chips">
-                            ${productsChipsHtml || `<span class="oh-empty">${t('products', 'Products')}: 0</span>`}
                         </div>
-                        <div class="oh-note-hint">* ${t('notes', 'Notes')}</div>
-                    </div>
 
-                    <div class="oh-col oh-actions">
-                        <div class="oh-title">${t('actions', 'Actions')}</div>
-                        <div class="oh-actions-buttons">
-                            <button onclick="openOrderEditModal('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
-                                <i class="fas fa-pen"></i> ${t('edit', 'Edit')}
-                            </button>
-                            ${actionsHtml}
-                            <button onclick="deleteOrder('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
-                                <i class="fas fa-trash"></i> ${t('delete', 'Delete')}
-                            </button>
+                        <div class="oh-col oh-customer">
+                            <div class="oh-title">${t('customer', 'Customer')}</div>
+                            <div class="oh-line"><span class="oh-label">${t('customer', 'Customer')}:</span> ${order.customerInfo?.name || ''}</div>
+                            <div class="oh-line"><span class="oh-label">${t('phone', 'Phone')}:</span> ${order.customerInfo?.phone || ''}</div>
+                            <div class="oh-line"><span class="oh-label">${t('email', 'Email')}:</span> ${order.customerInfo?.email || ''}</div>
+                            ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? `
+                                <div class="oh-line"><span class="oh-label">${t('city', 'City')}:</span> ${order.customerInfo?.city || ''}</div>
+                                <div class="oh-line"><span class="oh-label">${t('address', 'Address')}:</span> ${order.customerInfo?.address || ''}</div>
+                            ` : ''}
+                            ${order.customerInfo?.notes ? `<div class="oh-line"><span class="oh-label">${t('notes', 'Notes')}:</span> ${order.customerInfo.notes}</div>` : ''}
+                        </div>
+
+                        <div class="oh-col oh-products">
+                            <div class="oh-title">${t('products', 'Products')} (${(order.items || []).length || 0})</div>
+                            <div class="oh-products-chips">
+                                ${productsChipsHtml || `<span class="oh-empty">${t('products', 'Products')}: 0</span>`}
+                            </div>
+                            <div class="oh-note-hint">* ${t('notes', 'Notes')}</div>
+                        </div>
+
+                        <div class="oh-col oh-actions">
+                            <div class="oh-title">${t('actions', 'Actions')}</div>
+                            <div class="oh-actions-buttons">
+                                <button onclick="openOrderEditModal('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
+                                    <i class="fas fa-pen"></i> ${t('edit', 'Edit')}
+                                </button>
+                                ${actionsHtml}
+                                <button onclick="deleteOrder('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
+                                    <i class="fas fa-trash"></i> ${t('delete', 'Delete')}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

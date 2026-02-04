@@ -1164,20 +1164,19 @@ body {
         -webkit-overflow-scrolling: touch;
     }
     
-    /* Order History (mobile): keep structured layout, scroll horizontally */
+    /* Order History (mobile): orders stacked vertically; each order scrolls horizontally for columns */
     #orders-history-list {
-        display: flex;
-        gap: 12px;
-        overflow-x: auto;
-        padding-bottom: 8px;
-        -webkit-overflow-scrolling: touch;
-        scroll-snap-type: x mandatory;
+        display: block;
     }
 
     #orders-history-list .order-card {
-        flex: 0 0 auto;
-        min-width: 980px;
-        scroll-snap-align: start;
+        width: 100%;
+    }
+
+    #orders-history-list .orders-history-row-scroll {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 6px;
     }
 
     /* Use row/column layout for Order History on mobile */
@@ -1186,6 +1185,7 @@ body {
         grid-template-columns: 220px 280px 1fr 260px;
         gap: 12px;
         align-items: start;
+        min-width: 980px;
     }
 
     #orders-history-list .orders-history-card-layout {
