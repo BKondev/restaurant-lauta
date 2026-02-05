@@ -73,10 +73,6 @@
                 <i class="fas fa-ticket-alt"></i>
                 <span class="tab-text" data-translate="promoCodesTab">Promo Codes</span>
             </button>
-            <button class="admin-tab-btn" onclick="switchTab('combos')">
-                <i class="fas fa-gift"></i>
-                <span class="tab-text" data-translate="combosTab">Combos</span>
-            </button>
             <button class="admin-tab-btn" onclick="switchTab('orders-history')">
                 <i class="fas fa-history"></i>
                 <span class="tab-text" data-translate="approvedOrders">Approved Orders</span>
@@ -1061,7 +1057,7 @@
         <div class="admin-section">
             <h2><i class="fas fa-history"></i> <span data-translate="approvedOrders">Approved Orders</span></h2>
 
-            <div class="form-row" style="margin-bottom: 10px; align-items: flex-end;">
+            <div class="orders-history-filters" style="margin-bottom: 10px;">
                 <div class="form-group" style="flex: 2; min-width: 240px;">
                     <label for="orders-history-search" data-translate="search">Search</label>
                     <input id="orders-history-search" type="text" data-translate-placeholder="ordersHistorySearchPlaceholder" placeholder="Order ID / name / phone / email" />
@@ -1095,19 +1091,19 @@
                     <input id="approved-orders-to" type="date" />
                 </div>
 
-                <div class="form-group" style="flex: 0; min-width: 160px;">
+                <div class="form-group oh-actions" style="flex: 0; min-width: 160px;">
                     <button onclick="renderOrdersHistory()" class="btn btn-primary" style="width: 100%;">
                         <i class="fas fa-sync"></i> <span data-translate="refresh">Refresh</span>
                     </button>
                 </div>
 
-                <div class="form-group" style="flex: 0; min-width: 160px;">
-                    <button onclick="printApprovedOrdersRange()" class="btn btn-info" style="width: 100%;">
-                        <i class="fas fa-print"></i> <span data-translate="print">Print</span>
+                <div class="form-group oh-actions" style="flex: 0; min-width: 160px;">
+                    <button onclick="exportOrdersHistoryPdf()" class="btn btn-info" style="width: 100%;">
+                        <i class="fas fa-file-pdf"></i> <span data-translate="exportPdf">Export PDF</span>
                     </button>
                 </div>
 
-                <div class="form-group" style="flex: 0; min-width: 160px;">
+                <div class="form-group oh-actions" style="flex: 0; min-width: 160px;">
                     <button onclick="exportOrdersHistoryCsv()" class="btn btn-secondary" style="width: 100%;">
                         <i class="fas fa-file-csv"></i> <span data-translate="exportCsv">Export CSV</span>
                     </button>

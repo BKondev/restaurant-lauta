@@ -663,6 +663,32 @@ body {
     gap: 20px;
 }
 
+/* Orders History: filters must sit on a single full-width row and wrap as needed */
+.orders-history-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: flex-end;
+    width: 100%;
+}
+
+.orders-history-filters .form-group {
+    margin-bottom: 0;
+    flex: 1 1 220px;
+    min-width: 220px;
+}
+
+.orders-history-filters .form-group.oh-actions {
+    flex: 0 0 160px;
+    min-width: 160px;
+}
+
+@media (max-width: 900px) {
+    .orders-history-filters .form-group.oh-actions {
+        flex: 1 1 220px;
+    }
+}
+
 .btn {
     padding: 12px 28px;
     border: none;

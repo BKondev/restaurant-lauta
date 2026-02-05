@@ -163,7 +163,7 @@ const translations = {
         restaurantTab: 'Restaurant',
         deliveryTab: 'Delivery',
         productsTab: 'Products',
-        promoCodesTab: 'Promo Codes',
+        promoCodesTab: 'Promos',
         combosTab: 'Combos',
         approvedOrders: 'Order History',
         menu: 'Menu',
@@ -176,6 +176,7 @@ const translations = {
         to: 'To',
         refresh: 'Refresh',
         print: 'Print',
+        exportPdf: 'Export PDF',
         exportCsv: 'Export CSV',
         printApprovedOnly: 'Printing is available only for approved orders.',
         all: 'All',
@@ -238,7 +239,7 @@ const translations = {
         dataManagement: 'Data Management',
         productsCsvImportExport: 'Products CSV Import/Export',
         productsCsvHelp: 'Download a CSV template, fill it with product data, and upload it back to bulk import products.',
-        downloadCsvTemplate: 'Download CSV Template',
+        downloadCsvTemplate: 'Download Template',
         exportProductsToCsv: 'Export Products to CSV',
         importProductsFromCsv: 'Import Products from CSV',
         fullDatabaseBackup: 'Full Database Backup',
@@ -549,8 +550,8 @@ const translations = {
         restaurantTab: 'Ресторант',
         deliveryTab: 'Доставка',
         productsTab: 'Продукти',
-        promoCodesTab: 'Промо Кодове',
-        combosTab: 'Комбo',
+        promoCodesTab: 'Промоции',
+        combosTab: 'Комбо',
         approvedOrders: 'История на поръчките',
         menu: 'Меню',
         backToMenu: 'Към Менюто',
@@ -562,6 +563,7 @@ const translations = {
         to: 'До',
         refresh: 'Опресни',
         print: 'Принт',
+        exportPdf: 'Експорт PDF',
         exportCsv: 'Експорт CSV',
         printApprovedOnly: 'Принтирането е достъпно само за одобрени поръчки.',
         all: 'Всички',
@@ -624,7 +626,7 @@ const translations = {
         dataManagement: 'Управление на Данни',
         productsCsvImportExport: 'CSV импорт/експорт на продукти',
         productsCsvHelp: 'Изтеглете CSV шаблон, попълнете продуктите и го качете обратно за масов импорт.',
-        downloadCsvTemplate: 'Изтегли CSV шаблон',
+        downloadCsvTemplate: 'Изтегли шаблон',
         exportProductsToCsv: 'Експорт на продукти в CSV',
         importProductsFromCsv: 'Импорт на продукти от CSV',
         fullDatabaseBackup: 'Пълен бекъп на базата',
@@ -840,6 +842,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Tab Switching Function
 function switchTab(tabName) {
+    const normalizedTab = (tabName === 'combos') ? 'promo-codes' : tabName;
+
     // Hide all tab contents
     document.querySelectorAll('.admin-tab-content').forEach(tab => {
         tab.classList.remove('active');
@@ -850,17 +854,23 @@ function switchTab(tabName) {
         btn.classList.remove('active');
     });
     
+
     // Show selected tab content
-    const selectedTab = document.getElementById(`tab-${tabName}`);
-    if (selectedTab) {
-        selectedTab.classList.add('active');
+    const selectedTab = document.getElementById(`tab-${normalizedTab}`);
+    if (selectedTab) selectedTab.classList.add('active');
+
+    // Merge: Promo Codes tab also shows Combos content
+    if (normalizedTab === 'promo-codes') {
+        const combosTab = document.getElementById('tab-combos');
+        if (combosTab) combosTab.classList.add('active');
     }
-    
-    // Add active class to clicked button
-    event.target.closest('.admin-tab-btn').classList.add('active');
-    
+
+    // Add active class to the matching button (don't rely on window.event)
+    const tabBtn = document.querySelector(`[onclick="switchTab('${normalizedTab}')"]`);
+    if (tabBtn) tabBtn.classList.add('active');
+
     // Save current tab to localStorage
-    localStorage.setItem('adminCurrentTab', tabName);
+    localStorage.setItem('adminCurrentTab', normalizedTab);
 }
 
 // Toggle Navigation Visibility
@@ -879,20 +889,9 @@ function toggleNav() {
 
 // Restore last active tab on page load
 document.addEventListener('DOMContentLoaded', () => {
-    const savedTab = localStorage.getItem('adminCurrentTab') || 'pending-orders';
-    const tabBtn = document.querySelector(`[onclick="switchTab('${savedTab}')"]`);
-    if (tabBtn) {
-        // Remove active from all
-        document.querySelectorAll('.admin-tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.admin-tab-content').forEach(content => content.classList.remove('active'));
-        
-        // Activate the saved/default tab
-        tabBtn.classList.add('active');
-        const tabContent = document.getElementById(`tab-${savedTab}`);
-        if (tabContent) {
-            tabContent.classList.add('active');
-        }
-    }
+    const savedRaw = localStorage.getItem('adminCurrentTab') || 'pending-orders';
+    const savedTab = savedRaw === 'combos' ? 'promo-codes' : savedRaw;
+    switchTab(savedTab);
 });
 
 // Admin Panel JavaScript
@@ -2515,45 +2514,42 @@ async function resetData() {
 // Download CSV Template
 function downloadCSVTemplate() {
     const headers = [
-        'name_en',
-        'name_bg',
-        'description_en',
-        'description_bg',
-        'category_en',
-        'category_bg',
+        'id',
+        'code',
+        'name',
+        'category',
+        'subcategory',
         'price',
-        'image_url',
-        'promo_enabled',
         'promo_price',
-        'promo_type',
-        'promo_start',
-        'promo_end',
-        'special_label'
+        'promo_percentage',
+        'is_promo',
+        'availability',
+        'img_url',
+        'info'
     ];
-    
+
     const exampleRow = [
+        '',
+        'PIZZA_MARGHERITA',
         'Margherita Pizza',
-        'Пица Маргарита',
-        'Classic pizza with tomato sauce, mozzarella and basil',
-        'Класическа пица с доматен сос, моцарела и босилек',
         'Pizza',
-        'Пица',
+        'Classic',
         '12.99',
-        'https://example.com/pizza.jpg',
-        'yes',
         '9.99',
-        'permanent',
-        '',
-        '',
-        'SPECIAL'
+        '23',
+        'true',
+        'true',
+        'https://example.com/pizza.jpg',
+        'Classic pizza with tomato sauce, mozzarella and basil'
     ];
-    
+
+    const quote = (cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`;
+    const emptyRow = headers.map(() => '').join(',');
     const csvContent = [
         headers.join(','),
-        exampleRow.map(cell => `"${cell}"`).join(','),
-        // Add empty rows for filling
-        headers.map(() => '').join(','),
-        headers.map(() => '').join(',')
+        exampleRow.map(quote).join(','),
+        emptyRow,
+        emptyRow
     ].join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -2564,7 +2560,7 @@ function downloadCSVTemplate() {
     link.click();
     URL.revokeObjectURL(url);
     
-    alert('CSV template downloaded! Fill it with your products and upload it back.');
+    alert('Template downloaded! Fill it with your products and upload it back.');
 }
 
 // Export Products to CSV
@@ -2579,42 +2575,47 @@ async function exportProductsCSV() {
         }
         
         const headers = [
-            'name_en',
-            'name_bg',
-            'description_en',
-            'description_bg',
-            'category_en',
-            'category_bg',
+            'id',
+            'code',
+            'name',
+            'category',
+            'subcategory',
             'price',
-            'image_url',
-            'promo_enabled',
             'promo_price',
-            'promo_type',
-            'promo_start',
-            'promo_end',
-            'special_label'
+            'promo_percentage',
+            'is_promo',
+            'availability',
+            'img_url',
+            'info'
         ];
-        
-        const rows = products.map(p => [
-            p.name || '',
-            p.nameBg || p.translations?.bg?.name || '',
-            p.description || '',
-            p.descriptionBg || p.translations?.bg?.description || '',
-            p.category || '',
-            p.categoryBg || p.translations?.bg?.category || '',
-            p.price || '',
-            p.image || '',
-            p.promo?.isActive ? 'yes' : 'no',
-            p.promo?.price || '',
-            p.promo?.type || '',
-            p.promo?.startDate || '',
-            p.promo?.endDate || '',
-            p.specialLabel || ''
-        ]);
+
+        const rows = products.map(p => {
+            const price = Number(p.price) || 0;
+            const isPromo = !!(p.promo && p.promo.isActive);
+            const promoPrice = isPromo ? (Number(p.promo?.price) || '') : '';
+            const pct = (isPromo && promoPrice !== '' && price > 0)
+                ? Math.round(((price - Number(promoPrice)) / price) * 100)
+                : (p.promoPercentage != null ? Number(p.promoPercentage) : '');
+
+            return [
+                p.id ?? '',
+                p.code ?? '',
+                p.name ?? '',
+                p.category ?? '',
+                p.subcategory ?? '',
+                price ? price : '',
+                promoPrice,
+                (Number.isFinite(pct) ? pct : ''),
+                isPromo ? 'true' : 'false',
+                (p.availability == null ? 'true' : (p.availability ? 'true' : 'false')),
+                p.image ?? '',
+                p.description ?? ''
+            ];
+        });
         
         const csvContent = [
             headers.join(','),
-            ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+            ...rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
         ].join('\n');
         
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -2641,56 +2642,103 @@ async function handleCSVImport(event) {
     reader.onload = async function(e) {
         try {
             const csvText = e.target.result;
-            const lines = csvText.split('\n').filter(line => line.trim());
+            const lines = csvText.split(/\r?\n/).filter(line => line.trim());
             
             if (lines.length < 2) {
                 alert('CSV file is empty or invalid!');
                 return;
             }
-            
-            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+
+            const headerLine = lines[0];
+            const delimiter = (headerLine.split(';').length > headerLine.split(',').length) ? ';' : ',';
+            const headers = parseCSVLine(headerLine, delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
+
+            const idx = Object.fromEntries(headers.map((h, i) => [h, i]));
+            const required = ['code', 'name', 'category', 'price'];
+            const missing = required.filter(k => !(k in idx));
+            if (missing.length) {
+                alert(`Missing required columns: ${missing.join(', ')}`);
+                return;
+            }
+
+            // Load existing products so we can skip duplicates by code
+            const existingRes = await fetch(`${API_URL}/products`);
+            const existingProducts = await existingRes.json().catch(() => []);
+            const existingCodes = new Set((existingProducts || [])
+                .map(p => (p?.code ?? '').toString().trim().toLowerCase())
+                .filter(Boolean));
+
             const products = [];
+            let duplicateCount = 0;
             
             for (let i = 1; i < lines.length; i++) {
-                const values = parseCSVLine(lines[i]);
-                
-                if (values.length === 0 || !values[0]) continue; // Skip empty rows
-                
+                const values = parseCSVLine(lines[i], delimiter);
+                if (!values || values.length === 0) continue;
+
+                const codeRaw = (values[idx.code] ?? '').toString().trim();
+                const codeNorm = codeRaw.toLowerCase();
+                if (!codeRaw) continue;
+                if (existingCodes.has(codeNorm)) {
+                    duplicateCount++;
+                    continue;
+                }
+
+                const idRaw = (idx.id != null ? (values[idx.id] ?? '') : '').toString().trim();
+                const idNum = idRaw ? Number(idRaw) : NaN;
+                const id = Number.isFinite(idNum) ? idNum : undefined;
+
+                const name = (values[idx.name] ?? '').toString().trim();
+                const category = (values[idx.category] ?? '').toString().trim() || 'Other';
+                const subcategory = (idx.subcategory != null ? (values[idx.subcategory] ?? '').toString().trim() : '');
+                const price = Number(values[idx.price]);
+                if (!Number.isFinite(price) || price <= 0) continue;
+
+                const imgUrl = (idx.img_url != null ? (values[idx.img_url] ?? '').toString().trim() : '')
+                    || 'https://via.placeholder.com/300x200?text=No+Image';
+                const info = (idx.info != null ? (values[idx.info] ?? '').toString() : '');
+
+                const promoPriceRaw = (idx.promo_price != null ? (values[idx.promo_price] ?? '').toString().trim() : '');
+                const promoPctRaw = (idx.promo_percentage != null ? (values[idx.promo_percentage] ?? '').toString().trim() : '');
+                const isPromoRaw = (idx.is_promo != null ? (values[idx.is_promo] ?? '').toString().trim() : '');
+                const availabilityRaw = (idx.availability != null ? (values[idx.availability] ?? '').toString().trim() : '');
+
+                const promoPct = promoPctRaw ? Number(promoPctRaw) : NaN;
+                let promoPrice = promoPriceRaw ? Number(promoPriceRaw) : NaN;
+                const isPromo = parseBoolLike(isPromoRaw) || (promoPriceRaw !== '') || (promoPctRaw !== '');
+                if (isPromo && !Number.isFinite(promoPrice) && Number.isFinite(promoPct) && promoPct > 0) {
+                    promoPrice = Math.round((price * (1 - Math.max(0, Math.min(100, promoPct)) / 100)) * 100) / 100;
+                }
+
+                const availability = availabilityRaw ? parseBoolLike(availabilityRaw) : true;
+
                 const product = {
-                    name: values[0] || '',
-                    nameBg: values[1] || values[0],
-                    description: values[2] || '',
-                    descriptionBg: values[3] || values[2],
-                    category: values[4] || 'Other',
-                    categoryBg: values[5] || values[4] || 'Друго',
-                    price: parseFloat(values[6]) || 0,
-                    image: values[7] || 'https://via.placeholder.com/300x200?text=No+Image',
-                    translations: {
-                        bg: {
-                            name: values[1] || values[0],
-                            description: values[3] || values[2],
-                            category: values[5] || values[4] || 'Друго'
-                        }
-                    }
+                    code: codeRaw,
+                    name,
+                    category,
+                    subcategory,
+                    price,
+                    image: imgUrl,
+                    description: info,
+                    availability,
+                    promoPercentage: Number.isFinite(promoPct) ? promoPct : undefined
                 };
-                
-                // Handle promo if enabled
-                if (values[8] && values[8].toLowerCase() === 'yes') {
+
+                if (id != null) {
+                    product.id = id;
+                }
+
+                if (isPromo && Number.isFinite(promoPrice) && promoPrice > 0) {
                     product.promo = {
                         isActive: true,
-                        price: parseFloat(values[9]) || product.price * 0.8,
-                        type: values[10] || 'permanent',
-                        startDate: values[11] || null,
-                        endDate: values[12] || null
+                        price: promoPrice,
+                        type: 'permanent',
+                        startDate: null,
+                        endDate: null
                     };
                 }
-                
-                // Handle special label
-                if (values[13]) {
-                    product.specialLabel = values[13];
-                }
-                
+
                 products.push(product);
+                existingCodes.add(codeNorm);
             }
             
             if (products.length === 0) {
@@ -2698,7 +2746,7 @@ async function handleCSVImport(event) {
                 return;
             }
             
-            if (!confirm(`Found ${products.length} product(s) in CSV. Import them now?`)) {
+            if (!confirm(`Found ${products.length} new product(s) in CSV.\nSkipped duplicates by code: ${duplicateCount}.\nImport them now?`)) {
                 return;
             }
             
@@ -2706,6 +2754,7 @@ async function handleCSVImport(event) {
             const token = sessionStorage.getItem('adminToken');
             let successCount = 0;
             let errorCount = 0;
+            let skippedDuplicates = duplicateCount;
             
             for (const product of products) {
                 try {
@@ -2728,7 +2777,7 @@ async function handleCSVImport(event) {
                 }
             }
             
-            alert(`Import completed!\nSuccessful: ${successCount}\nFailed: ${errorCount}`);
+            alert(`Import completed!\nImported: ${successCount}\nSkipped duplicates: ${skippedDuplicates}\nFailed: ${errorCount}`);
             await loadProducts();
             
         } catch (error) {
@@ -2742,7 +2791,7 @@ async function handleCSVImport(event) {
 }
 
 // Parse CSV line (handles quoted fields with commas)
-function parseCSVLine(line) {
+function parseCSVLine(line, delimiter = ',') {
     const result = [];
     let current = '';
     let inQuotes = false;
@@ -2756,7 +2805,7 @@ function parseCSVLine(line) {
             i++;
         } else if (char === '"') {
             inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
+        } else if (char === delimiter && !inQuotes) {
             result.push(current.trim());
             current = '';
         } else {
@@ -4003,6 +4052,13 @@ async function bulkAssignCategory() {
 
 let orders = [];
 let ordersCheckInterval = null;
+let lastPendingOrderIds = new Set();
+
+function getPendingOrdersSorted(list) {
+    return (list || [])
+        .filter(order => order && (order.status === 'pending' || order.status === 'pending_payment'))
+        .sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
+}
 
 // Load and display orders
 async function loadOrders() {
@@ -4357,6 +4413,227 @@ function escapeCsvValue(value, delimiter = ';') {
     return needsQuotes ? `"${escaped}"` : escaped;
 }
 
+function pad2(n) {
+    const x = Number(n);
+    return (x < 10 ? '0' : '') + String(x);
+}
+
+function formatNapDateTime(ts) {
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return '';
+    // yyyy-mm-dd HH:MM:SS (close to PHP date('Y-m-d H:i:s'))
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+function formatNapRecDateTimeFromScheduledTime(order) {
+    const scheduled = (order?.scheduledTime || '').toString().trim();
+    if (!scheduled) return { rec_date: '', rec_time: '' };
+    const d = new Date(scheduled);
+    if (Number.isNaN(d.getTime())) {
+        // If it's not parseable, keep it in rec_time as raw string
+        return { rec_date: '', rec_time: scheduled };
+    }
+    const rec_date = `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+    const rec_time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    return { rec_date, rec_time };
+}
+
+function parseBoolLike(v) {
+    const s = (v ?? '').toString().trim().toLowerCase();
+    if (!s) return false;
+    return ['1', 'true', 'yes', 'y', 'да', 'ok', 'available', 'in_stock'].includes(s);
+}
+
+function computeOrderTotalsForExport(order) {
+    const items = Array.isArray(order?.items) ? order.items : [];
+
+    const products_original = items.reduce((sum, it) => {
+        const qty = Number(it?.quantity) || 0;
+        const unit = Number(it?.price) || 0;
+        return sum + (qty * unit);
+    }, 0);
+
+    const products_after_individual_promo = items.reduce((sum, it) => {
+        const qty = Number(it?.quantity) || 0;
+        const unit = Number(it?.promoPrice != null ? it.promoPrice : it?.price) || 0;
+        return sum + (qty * unit);
+    }, 0);
+
+    const discountPct = Number(order?.discount) || 0;
+    const discount_total = Math.max(0, products_after_individual_promo * (Math.max(0, Math.min(100, discountPct)) / 100));
+
+    const total_products = Math.max(0, products_after_individual_promo - discount_total);
+    const shipping_fee = Number(order?.deliveryFee) || 0;
+    const grand_total = total_products + shipping_fee;
+
+    return {
+        products_original,
+        products_after_individual_promo,
+        discount_total,
+        total_products,
+        shipping_fee,
+        grand_total
+    };
+}
+
+function buildNapExportRow(order) {
+    const created_at = formatNapDateTime(order.timestamp || order.createdAt);
+
+    const ship_method = (order?.deliveryMethod || order?.deliveryType) === 'delivery' ? 'plovdiv_address' : 'pickup';
+    const delivery_text = ship_method === 'pickup' ? 'Взимане от място' : 'Доставка до адрес';
+
+    const paymentMethod = (order?.payment?.method || 'cash').toString().trim().toLowerCase();
+    const pay_method = paymentMethod === 'card' ? 'bank' : 'cash';
+    const payment_text = pay_method === 'bank' ? 'Плащане онлайн с карта' : 'Наложен платеж';
+    const payment_method_human = pay_method === 'bank' ? 'card_online' : 'cash_on_delivery';
+    const payment_status = pay_method === 'bank'
+        ? ((order?.status === 'pending_payment') ? 'PENDING' : 'PAID')
+        : ((order?.status === 'completed') ? 'PAID' : 'DUE_ON_DELIVERY');
+    const nap_doc_type = pay_method === 'bank' ? 'КАРТА (онлайн) — Борика' : 'НП — Наложен платеж';
+
+    const { rec_date, rec_time } = formatNapRecDateTimeFromScheduledTime(order);
+    const totals = computeOrderTotalsForExport(order);
+
+    const cust_name = (order?.customerInfo?.name || '').toString().trim();
+    const cust_phone = (order?.customerInfo?.phone || '').toString().trim();
+    const cust_email = (order?.customerInfo?.email || '').toString().trim();
+
+    const rec_name = cust_name;
+    const rec_phone = cust_phone;
+    const rec_address = (order?.customerInfo?.address || '').toString().trim();
+
+    const order_note = (order?.customerInfo?.notes || '').toString();
+    const promo_code = (order?.promoCode || '').toString().trim();
+    const discount_info = promo_code ? `${promo_code} (-${Number(order?.discount) || 0}%)` : '';
+
+    const borica_order6 = (order?.payment?.order6 || order?.payment?.providerOrderId || '').toString();
+    const cart_payload_json = JSON.stringify({
+        id: order?.id,
+        items: Array.isArray(order?.items) ? order.items : [],
+        promoCode: order?.promoCode,
+        discount: order?.discount,
+        deliveryMethod: order?.deliveryMethod,
+        deliveryFee: order?.deliveryFee,
+        total: order?.total,
+        createdAt: order?.createdAt,
+        scheduledTime: order?.scheduledTime,
+        customerInfo: order?.customerInfo
+    });
+
+    return {
+        id: (order?.id || '').toString(),
+        created_at,
+        cust_name,
+        cust_phone,
+        cust_email,
+        ship_method,
+        delivery_text,
+        rec_name,
+        rec_phone,
+        rec_address,
+        rec_date,
+        rec_time,
+        pay_method,
+        payment_text,
+        payment_method_human,
+        payment_status,
+        nap_doc_type,
+        total_products: safeToFixed(totals.total_products),
+        shipping_fee: safeToFixed(totals.shipping_fee),
+        grand_total: safeToFixed(totals.grand_total),
+        order_note,
+        promo_code,
+        discount_info,
+        discount_total: safeToFixed(totals.discount_total),
+        products_original: safeToFixed(totals.products_original),
+        products_after_individual_promo: safeToFixed(totals.products_after_individual_promo),
+        borica_order6,
+        notify_sent: '',
+        notify_sent_at: '',
+        cart_payload_json,
+        shop_name: (order?.restaurantName || '').toString()
+    };
+}
+
+function exportOrdersHistoryPdf() {
+    const filtered = getFilteredOrdersHistory();
+    if (!filtered || filtered.length === 0) {
+        alert(t('noOrdersMatch', 'No orders match the filters.'));
+        return;
+    }
+
+    const headers = [
+        'id', 'created_at', 'cust_name', 'cust_phone', 'cust_email',
+        'ship_method', 'delivery_text', 'rec_name', 'rec_phone', 'rec_address',
+        'rec_date', 'rec_time',
+        'pay_method', 'payment_text',
+        'payment_method_human', 'payment_status', 'nap_doc_type',
+        'total_products', 'shipping_fee', 'grand_total', 'order_note',
+        'promo_code', 'discount_info', 'discount_total',
+        'products_original', 'products_after_individual_promo',
+        'borica_order6',
+        'notify_sent', 'notify_sent_at',
+        'cart_payload_json', 'shop_name'
+    ];
+
+    const rows = filtered.map(o => buildNapExportRow(o));
+
+    const from = (document.getElementById('approved-orders-from')?.value || '').toString().trim();
+    const to = (document.getElementById('approved-orders-to')?.value || '').toString().trim();
+    const status = (document.getElementById('orders-history-status')?.value || '').toString().trim();
+    const method = (document.getElementById('orders-history-method')?.value || '').toString().trim();
+    const search = (document.getElementById('orders-history-search')?.value || '').toString().trim();
+
+    const title = `Orders Export (${rows.length})`;
+    const subtitle = [
+        from && to ? `Range: ${from} → ${to}` : '',
+        status ? `Status: ${status}` : '',
+        method ? `Method: ${method}` : '',
+        search ? `Search: ${search}` : ''
+    ].filter(Boolean).join(' • ');
+
+    const html = `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${title}</title>
+  <style>
+    @page { size: A4 landscape; margin: 12mm; }
+    body { font-family: Arial, sans-serif; color: #111; }
+    h1 { font-size: 16px; margin: 0 0 6px; }
+    .meta { font-size: 11px; color: #444; margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 9px; vertical-align: top; word-break: break-word; }
+    th { background: #f5f5f5; font-weight: 700; }
+    .nowrap { white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <h1>${title}</h1>
+  <div class="meta">${subtitle || ''}</div>
+  <table>
+    <thead>
+      <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
+    </thead>
+    <tbody>
+      ${rows.map(r => `<tr>${headers.map(h => `<td>${escapeHtml(String(r[h] ?? ''))}</td>`).join('')}</tr>`).join('')}
+    </tbody>
+  </table>
+  <script>window.onload = () => { window.print(); };</script>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) {
+        alert('Popup blocked. Please allow popups to export PDF.');
+        return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+}
+
 function exportOrdersHistoryCsv() {
     const filtered = getFilteredOrdersHistory();
     if (!filtered || filtered.length === 0) {
@@ -4364,78 +4641,33 @@ function exportOrdersHistoryCsv() {
         return;
     }
 
-    const delimiter = ';';
+    // PHP/NAP-compatible header structure (see submit_order CSV block)
+    const delimiter = ',';
     const headers = [
-        t('csvOrderId', 'Order ID'),
-        t('csvCreatedAt', 'Created At'),
-        t('csvStatus', 'Status'),
-        t('csvMethod', 'Method'),
-        t('csvCustomerName', 'Customer Name'),
-        t('csvCustomerPhone', 'Customer Phone'),
-        t('csvCustomerEmail', 'Customer Email'),
-        t('csvCity', 'City'),
-        t('csvAddress', 'Address'),
-        t('csvCustomerNotes', 'Customer Notes'),
-        t('csvItems', 'Items'),
-        t('csvItemsNotes', 'Item Notes'),
-        t('csvSubtotal', 'Subtotal'),
-        t('csvDeliveryFee', 'Delivery Fee'),
-        t('csvDiscount', 'Discount'),
-        t('csvTotal', 'Total'),
-        t('csvOwnerDiscount', 'Owner Discount'),
-        t('csvFinalTotal', 'Final Total')
+        'id', 'created_at', 'cust_name', 'cust_phone', 'cust_email',
+        'ship_method', 'delivery_text', 'rec_name', 'rec_phone', 'rec_address',
+        'rec_date', 'rec_time',
+        'pay_method', 'payment_text',
+        'payment_method_human',
+        'payment_status',
+        'nap_doc_type',
+        'total_products', 'shipping_fee', 'grand_total', 'order_note',
+        'promo_code', 'discount_info', 'discount_total',
+        'products_original', 'products_after_individual_promo',
+        'borica_order6',
+        'notify_sent', 'notify_sent_at',
+        'cart_payload_json', 'shop_name'
     ];
 
     const rows = filtered.map(order => {
-        const created = formatOrderDateTime(order.timestamp || order.createdAt);
-        const status = getOrderStatusLabel(order.status);
-        const method = (order.deliveryMethod || order.deliveryType) === 'delivery' ? t('delivery', 'Delivery') : t('pickup', 'Pickup');
-
-        const items = (order.items || []).map(item => {
-            const qty = Number(item?.quantity) || 0;
-            const name = (item?.name || '').toString();
-            const unitPrice = Number(item?.promoPrice != null ? item.promoPrice : item.price) || 0;
-            return `${qty}x ${name} (${safeToFixed(unitPrice)}€)`;
-        }).join(' | ');
-
-        const itemNotes = (order.items || [])
-            .filter(i => i?.note)
-            .map(i => `${(i?.name || '').toString()}: ${(i?.note || '').toString()}`)
-            .join(' | ');
-
-        const subtotal = (order.total != null ? Number(order.total) : 0);
-        const deliveryFee = (order.deliveryFee != null ? Number(order.deliveryFee) : 0);
-        const discount = (order.discount != null ? Number(order.discount) : 0);
-        const ownerDiscount = (order.ownerDiscount != null ? Number(order.ownerDiscount) : 0);
-        const finalTotal = (order.finalTotal != null ? Number(order.finalTotal) : null);
-        const totalShown = (ownerDiscount > 0 && finalTotal != null) ? finalTotal : subtotal;
-
-        return [
-            order.id,
-            created,
-            status,
-            method,
-            order.customerInfo?.name || '',
-            order.customerInfo?.phone || '',
-            order.customerInfo?.email || '',
-            order.customerInfo?.city || '',
-            order.customerInfo?.address || '',
-            order.customerInfo?.notes || '',
-            items,
-            itemNotes,
-            safeToFixed(subtotal),
-            safeToFixed(deliveryFee),
-            safeToFixed(discount),
-            safeToFixed(totalShown),
-            safeToFixed(ownerDiscount),
-            finalTotal == null ? '' : safeToFixed(finalTotal)
-        ].map(v => escapeCsvValue(v, delimiter)).join(delimiter);
+        const row = buildNapExportRow(order);
+        return headers.map(h => escapeCsvValue(row[h], delimiter)).join(delimiter);
     });
 
     const from = (document.getElementById('approved-orders-from')?.value || '').toString().trim();
     const to = (document.getElementById('approved-orders-to')?.value || '').toString().trim();
     const datePart = (from && to) ? `${from}_to_${to}` : new Date().toISOString().split('T')[0];
-    const filename = `orders-export-${datePart}.csv`;
+    const filename = `orders-nap-export-${datePart}.csv`;
 
     const csvContent = '\ufeff' + [headers.map(h => escapeCsvValue(h, delimiter)).join(delimiter), ...rows].join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -4709,9 +4941,7 @@ async function saveOrderEdits() {
 
 // Render pending orders at the top
 function renderPendingOrders() {
-    const pendingOrders = (orders || [])
-        .filter(order => order && (order.status === 'pending' || order.status === 'pending_payment'))
-        .sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
+    const pendingOrders = getPendingOrdersSorted(orders);
 
     const section = document.getElementById('pending-orders-section');
     const badge = document.getElementById('pending-count-badge');
@@ -4839,10 +5069,7 @@ function renderPendingOrders() {
         `;
     }).join('');
 
-    // Play notification sound if there are new pending orders
-    if (pendingOrders.length > 0) {
-        playNotificationSound();
-    }
+    // Sound/notifications are handled by polling diff logic (startOrdersPolling)
 }
 
 // Update order status
@@ -4972,24 +5199,33 @@ function showBrowserNotification(order) {
 
 // Check for new orders periodically
 function startOrdersPolling() {
+    if (ordersCheckInterval) return;
+
     // Load orders immediately
-    loadOrders();
+    loadOrders().then(() => {
+        const pendingNow = getPendingOrdersSorted(orders);
+        lastPendingOrderIds = new Set(pendingNow.map(o => o.id));
+    }).catch(() => {});
     
     // Request notification permission
     requestNotificationPermission();
 
-    // Check for new orders every 30 seconds
+    // Check for new orders frequently so badges update quickly
     ordersCheckInterval = setInterval(async () => {
-        const oldOrdersCount = orders.filter(o => o.status === 'pending').length;
+        const prevPendingIds = new Set(lastPendingOrderIds);
         await loadOrders();
-        const newOrdersCount = orders.filter(o => o.status === 'pending').length;
+
+        const pendingNow = getPendingOrdersSorted(orders);
+        lastPendingOrderIds = new Set(pendingNow.map(o => o.id));
+
+        const newPendingOrders = pendingNow.filter(o => !prevPendingIds.has(o.id));
 
         // If there are new pending orders, show notification
-        if (newOrdersCount > oldOrdersCount) {
-            const newOrders = orders.filter(o => o.status === 'pending').slice(0, newOrdersCount - oldOrdersCount);
-            newOrders.forEach(order => showBrowserNotification(order));
+        if (newPendingOrders.length > 0) {
+            playNotificationSound();
+            newPendingOrders.forEach(order => showBrowserNotification(order));
         }
-    }, 30000); // 30 seconds
+    }, 5000);
 }
 
 // Stop orders polling

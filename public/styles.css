@@ -665,6 +665,7 @@ body {
     background-color: white;
     padding: 25px 0;
     box-shadow: 2px 0 10px rgba(0,0,0,0.04);
+    align-self: flex-start;
     position: sticky;
     top: calc(var(--top-bar-height) + var(--sticky-gap));
     height: calc(100vh - (var(--top-bar-height) + var(--sticky-gap)));
@@ -1219,7 +1220,7 @@ body {
     .add-to-cart-btn.btn-click-animate {
         animation:
             addToCartBtnPop 420ms cubic-bezier(0.2, 0.8, 0.2, 1) 0s 1,
-            addToCartBtnGreenBlink 140ms ease-in-out 0s 6 alternate;
+            addToCartBtnRedBlink 150ms ease-in-out 0s 2 alternate;
     }
 
     @keyframes addToCartBtnPop {
@@ -1237,14 +1238,15 @@ body {
         }
     }
 
-    @keyframes addToCartBtnGreenBlink {
+    @keyframes addToCartBtnRedBlink {
         0% {
             background: var(--highlight-color);
             box-shadow: none;
         }
         100% {
-            background: #27ae60;
-            box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.25);
+            /* custom accent red (different from the normal highlight red) */
+            background: #d84b5a;
+            box-shadow: 0 0 0 3px rgba(216, 75, 90, 0.25);
         }
     }
 

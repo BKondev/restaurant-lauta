@@ -841,7 +841,7 @@ document.addEventListener('click', (e) => {
     // Force reflow so animation can retrigger
     void btn.offsetWidth;
     btn.classList.add('btn-click-animate');
-    window.setTimeout(() => btn.classList.remove('btn-click-animate'), 1100);
+    window.setTimeout(() => btn.classList.remove('btn-click-animate'), 750);
 }, true);
 
 function hideSearchDropdown() {

@@ -1773,12 +1773,38 @@ app.get(API_PREFIX + '/products/:id', (req, res) => {
 // Create new product
 app.post(API_PREFIX + '/products', requireAuth, (req, res) => {
     const db = readDatabase();
+
+    const requestedId = req.body?.id;
+    const parsedRequestedId = (requestedId !== undefined && requestedId !== null) ? parseInt(requestedId, 10) : NaN;
+    let newId = Number.isFinite(parsedRequestedId) ? parsedRequestedId : Date.now();
+    if ((db.products || []).some(p => p && p.id === newId)) {
+        newId = Date.now() + Math.floor(Math.random() * 1000);
+    }
+
+    const codeRaw = (req.body?.code ?? '').toString().trim();
+    const codeNorm = codeRaw.toLowerCase();
+    if (codeRaw) {
+        const codeExists = (db.products || []).some(p => (p?.code ?? '').toString().trim().toLowerCase() === codeNorm);
+        if (codeExists) {
+            return res.status(409).json({ error: 'Product code already exists' });
+        }
+    }
+
+    const promoPercentageRaw = req.body?.promoPercentage;
+    const promoPercentage = (promoPercentageRaw === undefined || promoPercentageRaw === null || promoPercentageRaw === '')
+        ? null
+        : Number(promoPercentageRaw);
+
     const newProduct = {
-        id: Date.now(),
+        id: newId,
+        code: codeRaw,
         name: req.body.name,
         description: req.body.description,
-        price: parseFloat(req.body.price),
+        price: parseFloat(req.body.price) || 0,
         category: req.body.category,
+        subcategory: req.body.subcategory || '',
+        availability: (req.body.availability === undefined || req.body.availability === null) ? true : !!req.body.availability,
+        promoPercentage: (promoPercentage !== null && Number.isFinite(promoPercentage)) ? promoPercentage : null,
         image: req.body.image || 'https://via.placeholder.com/280x200?text=No+Image',
         weight: req.body.weight || '',
         promo: req.body.promo || null,
@@ -1805,12 +1831,32 @@ app.put(API_PREFIX + '/products/:id', requireAuth, (req, res) => {
     const index = db.products.findIndex(p => p.id === parseInt(req.params.id));
     
     if (index !== -1) {
+        const codeRaw = (req.body?.code ?? db.products[index]?.code ?? '').toString().trim();
+        const codeNorm = codeRaw.toLowerCase();
+        if (codeRaw) {
+            const codeExists = (db.products || []).some((p, i) => i !== index && (p?.code ?? '').toString().trim().toLowerCase() === codeNorm);
+            if (codeExists) {
+                return res.status(409).json({ error: 'Product code already exists' });
+            }
+        }
+
+        const promoPercentageRaw = req.body?.promoPercentage;
+        const promoPercentage = (promoPercentageRaw === undefined || promoPercentageRaw === null || promoPercentageRaw === '')
+            ? (db.products[index]?.promoPercentage ?? null)
+            : Number(promoPercentageRaw);
+
         db.products[index] = {
             id: parseInt(req.params.id),
+            code: codeRaw,
             name: req.body.name,
             description: req.body.description,
-            price: parseFloat(req.body.price),
+            price: parseFloat(req.body.price) || 0,
             category: req.body.category,
+            subcategory: req.body.subcategory || (db.products[index].subcategory || ''),
+            availability: (req.body.availability === undefined || req.body.availability === null)
+                ? (db.products[index].availability !== undefined ? !!db.products[index].availability : true)
+                : !!req.body.availability,
+            promoPercentage: (promoPercentage !== null && Number.isFinite(promoPercentage)) ? promoPercentage : null,
             image: req.body.image || db.products[index].image,
             weight: req.body.weight || '',
             promo: req.body.promo || null,
