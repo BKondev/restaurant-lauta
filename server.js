@@ -549,6 +549,7 @@ function getDefaultSiteSettings() {
     return {
         search: { mode: 'names_and_descriptions' },
         map: { enabled: false, lat: null, lng: null, zoom: 16, label: '' },
+        email: { webmailUrl: '' },
         footer: {
             contacts: { phone: '', email: '', address: '', addressMapsUrl: '' },
             aboutText: '',
@@ -615,7 +616,11 @@ function normalizeSiteSettings(input) {
         termsHtml: normalizeText(src.legal?.termsHtml, 20000)
     };
 
-    return { search: { mode }, map, footer, legal };
+    const email = {
+        webmailUrl: normalizeText(src.email?.webmailUrl, 500)
+    };
+
+    return { search: { mode }, map, email, footer, legal };
 }
 
 function isOrderForRestaurant(order, restaurantId, db) {
@@ -1555,6 +1560,54 @@ app.post(API_PREFIX + '/email/test', requireAuth, async (req, res) => {
         res.json({ success: !!sendResult?.success, verify: verifyResult, send: sendResult, diagnostics: diag });
     } catch (e) {
         res.status(500).json({ success: false, error: e?.message || 'Failed to send test email' });
+    }
+});
+
+// POST body: { to: string, subject: string, text: string }
+app.post(API_PREFIX + '/email/send', requireAuth, async (req, res) => {
+    try {
+        const diag = getEmailDiagnostics();
+        if (!diag.enabled) {
+            return res.status(400).json({ success: false, diagnostics: diag, error: 'Email is not enabled (missing SMTP config)' });
+        }
+
+        const to = (req.body?.to || '').toString().trim();
+        const subject = (req.body?.subject || '').toString().trim();
+        const text = (req.body?.text || '').toString();
+
+        if (!to || !isValidEmail(to)) {
+            return res.status(400).json({ success: false, diagnostics: diag, error: 'Valid "to" email is required' });
+        }
+
+        if (!subject) {
+            return res.status(400).json({ success: false, diagnostics: diag, error: 'Subject is required' });
+        }
+
+        if (!text || !text.trim()) {
+            return res.status(400).json({ success: false, diagnostics: diag, error: 'Message body is required' });
+        }
+
+        // Verify transport once (catches auth/TLS issues early)
+        const transport = getMailTransport();
+        try {
+            await transport.verify();
+        } catch (e) {
+            return res.status(500).json({ success: false, diagnostics: diag, stage: 'verify', error: e?.message || String(e), code: e?.code, response: e?.response });
+        }
+
+        const sendResult = await sendEmail({
+            to,
+            subject,
+            text
+        });
+
+        if (!sendResult?.success) {
+            return res.status(500).json({ success: false, diagnostics: diag, ...sendResult });
+        }
+
+        return res.json({ success: true, messageId: sendResult.messageId, accepted: sendResult.accepted, rejected: sendResult.rejected, diagnostics: diag });
+    } catch (e) {
+        return res.status(500).json({ success: false, error: e?.message || 'Failed to send email' });
     }
 });
 

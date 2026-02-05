@@ -74,6 +74,11 @@ const translations = {
         namesAndDescriptions: 'Names + Descriptions',
         namesOnly: 'Names only',
         searchModeHelp: 'Controls which fields are searchable in the storefront.',
+        webmail: 'Webmail',
+        webmailUrl: 'Webmail URL',
+        webmailUrlPlaceholder: 'https://mail.example.com/roundcube',
+        webmailUrlHelp: 'Optional. If set, admins can open Roundcube webmail in a new tab.',
+        openWebmail: 'Open Webmail',
         footer: 'Footer',
         footerAboutText: 'About text',
         footerAddressPlaceholder: 'Street, city',
@@ -455,6 +460,11 @@ const translations = {
         namesAndDescriptions: 'Имена + Описания',
         namesOnly: 'Само имена',
         searchModeHelp: 'Определя кои полета са търсими в магазина.',
+        webmail: 'Уеб поща',
+        webmailUrl: 'Линк към уеб поща',
+        webmailUrlPlaceholder: 'https://mail.example.com/roundcube',
+        webmailUrlHelp: 'По избор. Ако е зададено, админите могат да отварят Roundcube в нов таб.',
+        openWebmail: 'Отвори уеб поща',
         footer: 'Футър',
         footerAboutText: 'Текст „За нас“',
         footerAddressPlaceholder: 'Улица, град',
@@ -1496,6 +1506,9 @@ async function loadSiteSettings() {
         const modeEl = document.getElementById('site-search-mode');
         if (modeEl) modeEl.value = data?.search?.mode === 'names_only' ? 'names_only' : 'names_and_descriptions';
 
+        const webmailUrlEl = document.getElementById('site-webmail-url');
+        if (webmailUrlEl) webmailUrlEl.value = data?.email?.webmailUrl || '';
+
         const phoneEl = document.getElementById('site-footer-phone');
         const emailEl = document.getElementById('site-footer-email');
         const addressEl = document.getElementById('site-footer-address');
@@ -1543,6 +1556,15 @@ async function loadSiteSettings() {
     }
 }
 
+function openWebmail() {
+    const url = (document.getElementById('site-webmail-url')?.value || '').toString().trim();
+    if (!url) {
+        alert(t('webmailUrlHelp', 'Optional. If set, admins can open Roundcube webmail in a new tab.'));
+        return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 async function updateSiteSettings() {
     try {
         const token = getAdminToken();
@@ -1552,6 +1574,7 @@ async function updateSiteSettings() {
         }
 
         const mode = (document.getElementById('site-search-mode')?.value || 'names_and_descriptions').toString();
+        const webmailUrl = (document.getElementById('site-webmail-url')?.value || '').toString();
         const phone = (document.getElementById('site-footer-phone')?.value || '').toString();
         const email = (document.getElementById('site-footer-email')?.value || '').toString();
         const address = (document.getElementById('site-footer-address')?.value || '').toString();
@@ -1605,6 +1628,7 @@ async function updateSiteSettings() {
                 lng: mapLng,
                 zoom: mapZoom
             },
+            email: { webmailUrl },
             footer: {
                 contacts: { phone, email, address, addressMapsUrl },
                 aboutText,
@@ -1829,6 +1853,48 @@ async function sendSmtpTestEmail() {
     } catch (e) {
         console.error('sendSmtpTestEmail failed:', e);
         if (box) box.textContent = 'SMTP test failed';
+    }
+}
+
+async function sendAdminEmail() {
+    const to = (document.getElementById('smtp-send-to')?.value || '').toString().trim();
+    const subject = (document.getElementById('smtp-send-subject')?.value || '').toString().trim();
+    const text = (document.getElementById('smtp-send-body')?.value || '').toString();
+    const box = document.getElementById('smtp-status-box');
+
+    if (box) box.textContent = 'Sending email...';
+
+    try {
+        const token = getAdminToken();
+
+        const res = await fetch(`${API_URL}/email/send`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ to, subject, text })
+        });
+
+        const payload = await res.json().catch(() => ({}));
+
+        if (!res.ok || !payload?.success) {
+            const diagText = payload?.diagnostics ? formatEmailDiagnostics(payload.diagnostics) : '';
+            const errText = payload?.error || 'Failed to send email';
+            if (box) {
+                box.style.whiteSpace = 'pre-wrap';
+                box.textContent = [errText, payload?.code ? `Code: ${payload.code}` : '', payload?.response ? `Response: ${payload.response}` : '', diagText].filter(Boolean).join('\n');
+            }
+            return;
+        }
+
+        if (box) {
+            box.style.whiteSpace = 'pre-wrap';
+            box.textContent = `Email sent successfully.\nMessageId: ${payload?.messageId || 'n/a'}`;
+        }
+    } catch (e) {
+        console.error('sendAdminEmail failed:', e);
+        if (box) box.textContent = 'Failed to send email';
     }
 }
 

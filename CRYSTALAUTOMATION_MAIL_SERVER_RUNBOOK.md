@@ -4,6 +4,10 @@ Goal: Host working email for `crystalautomation.eu` on your VPS (`46.62.174.218`
 
 Target OS: Ubuntu 24.04 LTS (Noble).
 
+Note about the web app:
+- The backend already supports sending mail via generic SMTP (Nodemailer) using `SMTP_HOST`, `SMTP_PORT`, etc.
+- There is no first-party Brevo/Sendinblue API integration in this repo to “remove”; you just point SMTP to your own server.
+
 ---
 
 ## 0) Critical prerequisites (don’t skip)
@@ -154,6 +158,42 @@ High-level requirements:
 
 ---
 
+## 7.5) Install Roundcube (Webmail UI)
+
+Goal:
+- Provide a browser-based email client (Roundcube) for your IMAP mailboxes.
+
+Packages:
+- `apt install -y roundcube roundcube-core roundcube-sqlite3 php-fpm php-intl php-mbstring php-xml php-curl`
+
+During installation:
+- If prompted by `dbconfig-common`, choose **Yes** and pick **sqlite3** for the simplest setup.
+
+Expose Roundcube via nginx:
+- Recommended: `https://mail.crystalautomation.eu/roundcube`
+
+High-level nginx snippet (adjust PHP socket version if needed):
+
+```nginx
+location /roundcube {
+  alias /var/lib/roundcube/;
+  index index.php;
+  try_files $uri $uri/ /roundcube/index.php;
+}
+
+location ~ ^/roundcube/(.+\.php)$ {
+  alias /var/lib/roundcube/$1;
+  include snippets/fastcgi-php.conf;
+  fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+}
+```
+
+Roundcube config checks:
+- Confirm IMAP/SMTP endpoints in `/etc/roundcube/config.inc.php` (typically IMAP `tls://127.0.0.1:993`).
+- If you use a firewall, allow only `80/443` publicly; IMAP/SMTP should stay server-side unless you need external mail clients.
+
+---
+
 ## 8) Configure DKIM signing (OpenDKIM)
 
 Goal: Outgoing mail is DKIM-signed for `crystalautomation.eu`.
@@ -217,6 +257,9 @@ Per instance `.env`:
 - `SMTP_FROM=no-reply@crystalautomation.eu`
 - `SMTP_CREDENTIALS_FILE=/root/smtpapp-credentials.txt` (recommended on VPS instead of putting the password in PM2 env)
 - `PUBLIC_BASE_URL=https://<this-instance-domain>`
+
+Optional (Admin convenience):
+- Set the Site Content → Webmail URL to something like `https://mail.crystalautomation.eu/roundcube` so admins can open Roundcube from the admin panel.
 
 ---
 

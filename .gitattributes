@@ -1,0 +1,5 @@
+* text=auto
+
+# Avoid CRLF breaking Linux shebang scripts
+*.sh text eol=lf
+*.ps1 text eol=crlf

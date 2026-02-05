@@ -47,6 +47,11 @@ This makes the tracking link come out like:
 
 (while the app can still run internally at `BASE_PATH=/resturant-website`).
 
+## 4.1) Mailbox for bojole.bg (optional)
+
+If you want a real inbox like `info@bojole.bg` hosted on the VPS (Postfix/Dovecot/Roundcube), follow:
+- [TENANT_MAILBOXES.md](TENANT_MAILBOXES.md)
+
 ## 5) When onboarding a new restaurant
 
 Recommended approach (simple cloning):
