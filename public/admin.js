@@ -4438,6 +4438,199 @@ function formatNapRecDateTimeFromScheduledTime(order) {
     return { rec_date, rec_time };
 }
 
+// ==================== NAP-STYLE EXPORT (matches export_nap.php) ====================
+// Fixed exchange rate: 1 EUR = 1.95583 BGN
+const NAP_EUR_TO_BGN_RATE = 1.95583;
+
+function napGetShopSettingsForExport() {
+    const shop_name = (document.getElementById('restaurant-name-input')?.value || '').toString().trim();
+    const address_full = (document.getElementById('site-footer-address')?.value || '').toString().trim();
+    const phone_display = (document.getElementById('site-footer-phone')?.value || '').toString().trim();
+    const order_email = (
+        (document.getElementById('restaurant-notification-email-input')?.value || '').toString().trim() ||
+        (document.getElementById('site-footer-email')?.value || '').toString().trim()
+    );
+    const company_id = '';
+
+    return { shop_name, address_full, phone_display, order_email, company_id };
+}
+
+function napGetDefaultFromTo() {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = pad2(now.getMonth() + 1);
+    const firstDay = `${yyyy}-${mm}-01`;
+    const today = `${yyyy}-${mm}-${pad2(now.getDate())}`;
+    return { from: firstDay, to: today };
+}
+
+function napBgMonthName(mm) {
+    const months = {
+        '01': 'януари', '02': 'февруари', '03': 'март',
+        '04': 'април', '05': 'май', '06': 'юни',
+        '07': 'юли', '08': 'август', '09': 'септември',
+        '10': 'октомври', '11': 'ноември', '12': 'декември'
+    };
+    return months[String(mm)] || String(mm);
+}
+
+function napFormatDateBG(dateStr) {
+    const s = (dateStr || '').toString().trim();
+    const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(s);
+    if (!m) return s;
+    const yyyy = m[1];
+    const mm = m[2];
+    const dd = m[3];
+    return `${dd} ${napBgMonthName(mm)} ${yyyy}`;
+}
+
+function napFormatTableDateTime(ts) {
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return '';
+    return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function napGetPayMethod(order) {
+    const method = (order?.payment?.method || '').toString().trim().toLowerCase();
+    return method === 'card' ? 'bank' : 'cash';
+}
+
+function napIsPaid(order) {
+    const payMethod = napGetPayMethod(order);
+    if (payMethod === 'bank') {
+        return (order?.payment?.status || '').toString().trim().toLowerCase() === 'paid';
+    }
+    // Cash orders are considered paid when completed.
+    const st = (order?.status || '').toString();
+    const normalized = st === 'confirmed' ? 'approved' : st;
+    return normalized === 'completed';
+}
+
+function napCalcEurTotals(order) {
+    const items = Array.isArray(order?.items) ? order.items : [];
+    let subtotalCents = 0;
+    for (const it of items) {
+        const qty = Math.max(0, Math.floor(Number(it?.quantity) || 0));
+        if (!qty) continue;
+        const unitEUR = Math.max(0, Number(it?.price) || 0);
+        const unitCents = Math.round(unitEUR * 100);
+        subtotalCents += unitCents * qty;
+    }
+
+    const subtotalEUR = subtotalCents / 100;
+
+    // Discount in this app is percent; compute from subtotal.
+    const discountPct = Math.max(0, Math.min(100, Number(order?.discount) || 0));
+    const discountEUR = Math.round((subtotalEUR * (discountPct / 100)) * 100) / 100;
+
+    const deliveryEUR = Math.round((Number(order?.deliveryFee) || 0) * 100) / 100;
+
+    let grandEUR = subtotalEUR - discountEUR + deliveryEUR;
+    if (grandEUR < 0) grandEUR = 0;
+
+    // If BORICA stores a EUR amount for card payments, treat it as truth.
+    const payMethod = napGetPayMethod(order);
+    const borCurr = (order?.payment?.currency || '').toString().trim().toUpperCase();
+    const borAmt = Number(order?.payment?.amount);
+    if (payMethod === 'bank' && borCurr === 'EUR' && Number.isFinite(borAmt) && borAmt > 0) {
+        grandEUR = Math.round(borAmt * 100) / 100;
+    } else {
+        grandEUR = Math.round(grandEUR * 100) / 100;
+    }
+
+    return {
+        subtotal_eur: Math.round(subtotalEUR * 100) / 100,
+        discount_eur: Math.round(discountEUR * 100) / 100,
+        delivery_eur: Math.round(deliveryEUR * 100) / 100,
+        grand_eur: grandEUR
+    };
+}
+
+function napCalcAmounts(order) {
+    const eur = napCalcEurTotals(order);
+    const payMethod = napGetPayMethod(order);
+    const borCurr = (order?.payment?.currency || '').toString().trim().toUpperCase();
+    const borAmt = Number(order?.payment?.amount);
+
+    let grand_bgn = eur.grand_eur * NAP_EUR_TO_BGN_RATE;
+    if (payMethod === 'bank' && borCurr === 'BGN' && Number.isFinite(borAmt) && borAmt > 0) {
+        grand_bgn = borAmt;
+    }
+
+    return {
+        grand_eur: eur.grand_eur,
+        grand_bgn: Math.round(grand_bgn * 100) / 100
+    };
+}
+
+function napGetNapDocType(order) {
+    const payMethod = napGetPayMethod(order);
+    return payMethod === 'bank'
+        ? 'КАРТА (онлайн) — Борика'
+        : 'НП — Наложен платеж';
+}
+
+function napExportTypeLabel(exportType) {
+    if (exportType === 'bank_paid') return 'Само платени картови';
+    if (exportType === 'bank') return 'Само картови плащания';
+    if (exportType === 'cash') return 'Само кеш плащания';
+    return 'Всички плащания';
+}
+
+function napPromptExportParams() {
+    const storedType = (localStorage.getItem('napExportType') || 'all').toString();
+    const storedCurrency = (localStorage.getItem('napExportCurrency') || 'bgn').toString();
+    const storedOnlyPaid = (localStorage.getItem('napExportOnlyPaid') || '1').toString();
+
+    const type = (prompt(
+        'NAP export type: all | bank | bank_paid | cash',
+        storedType
+    ) || '').toString().trim().toLowerCase();
+    if (!type) return null;
+    if (!['all', 'bank', 'bank_paid', 'cash'].includes(type)) {
+        alert('Invalid export type. Use: all, bank, bank_paid, cash');
+        return null;
+    }
+
+    const currency = (prompt('Currency: bgn | eur', storedCurrency) || '').toString().trim().toLowerCase();
+    if (!currency) return null;
+    if (!['bgn', 'eur'].includes(currency)) {
+        alert('Invalid currency. Use: bgn or eur');
+        return null;
+    }
+
+    const onlyPaidDefault = storedOnlyPaid === '1';
+    const onlyPaid = confirm(`Only paid? (OK = yes, Cancel = no)\nCurrent: ${onlyPaidDefault ? 'YES' : 'NO'}`) ? true : false;
+
+    localStorage.setItem('napExportType', type);
+    localStorage.setItem('napExportCurrency', currency);
+    localStorage.setItem('napExportOnlyPaid', onlyPaid ? '1' : '0');
+
+    return { exportType: type, currency, onlyPaid };
+}
+
+function napFilterOrder(order, exportType, onlyPaid) {
+    const payMethod = napGetPayMethod(order);
+    const paid = napIsPaid(order);
+
+    if (exportType === 'bank') {
+        if (payMethod !== 'bank') return false;
+        if (onlyPaid && !paid) return false;
+        return true;
+    }
+    if (exportType === 'bank_paid') {
+        if (payMethod !== 'bank') return false;
+        return paid;
+    }
+    if (exportType === 'cash') {
+        return payMethod === 'cash';
+    }
+
+    // all
+    if (onlyPaid && payMethod === 'bank' && !paid) return false;
+    return true;
+}
+
 function parseBoolLike(v) {
     const s = (v ?? '').toString().trim().toLowerCase();
     if (!s) return false;
@@ -4556,71 +4749,265 @@ function buildNapExportRow(order) {
 }
 
 function exportOrdersHistoryPdf() {
-    const filtered = getFilteredOrdersHistory();
-    if (!filtered || filtered.length === 0) {
+    const base = getFilteredOrdersHistory();
+    if (!base || base.length === 0) {
         alert(t('noOrdersMatch', 'No orders match the filters.'));
         return;
     }
 
-    const headers = [
-        'id', 'created_at', 'cust_name', 'cust_phone', 'cust_email',
-        'ship_method', 'delivery_text', 'rec_name', 'rec_phone', 'rec_address',
-        'rec_date', 'rec_time',
-        'pay_method', 'payment_text',
-        'payment_method_human', 'payment_status', 'nap_doc_type',
-        'total_products', 'shipping_fee', 'grand_total', 'order_note',
-        'promo_code', 'discount_info', 'discount_total',
-        'products_original', 'products_after_individual_promo',
-        'borica_order6',
-        'notify_sent', 'notify_sent_at',
-        'cart_payload_json', 'shop_name'
-    ];
+    const params = napPromptExportParams();
+    if (!params) return;
 
-    const rows = filtered.map(o => buildNapExportRow(o));
+    const { exportType, onlyPaid, currency } = params;
+    const settings = napGetShopSettingsForExport();
 
-    const from = (document.getElementById('approved-orders-from')?.value || '').toString().trim();
-    const to = (document.getElementById('approved-orders-to')?.value || '').toString().trim();
-    const status = (document.getElementById('orders-history-status')?.value || '').toString().trim();
-    const method = (document.getElementById('orders-history-method')?.value || '').toString().trim();
-    const search = (document.getElementById('orders-history-search')?.value || '').toString().trim();
+    const fromRaw = (document.getElementById('approved-orders-from')?.value || '').toString().trim();
+    const toRaw = (document.getElementById('approved-orders-to')?.value || '').toString().trim();
+    const defaults = napGetDefaultFromTo();
+    const from = fromRaw || defaults.from;
+    const to = toRaw || defaults.to;
 
-    const title = `Orders Export (${rows.length})`;
-    const subtitle = [
-        from && to ? `Range: ${from} → ${to}` : '',
-        status ? `Status: ${status}` : '',
-        method ? `Method: ${method}` : '',
-        search ? `Search: ${search}` : ''
-    ].filter(Boolean).join(' • ');
+    const filtered = base
+        .filter(o => napFilterOrder(o, exportType, onlyPaid));
+
+    if (filtered.length === 0) {
+        alert(t('noOrdersMatch', 'No orders match the filters.'));
+        return;
+    }
+
+    const showInEuro = currency === 'eur';
+    let totalAmountBgn = 0;
+    let totalAmountEur = 0;
+    let bankOrders = 0;
+    let cashOrders = 0;
+    let paidOrders = 0;
+    let pendingOrders = 0;
+
+    const rows = filtered.map((o, idx) => {
+        const payMethod = napGetPayMethod(o);
+        const paid = napIsPaid(o);
+        const amounts = napCalcAmounts(o);
+
+        if (payMethod === 'bank') bankOrders++;
+        if (payMethod === 'cash') cashOrders++;
+        if (paid) paidOrders++; else pendingOrders++;
+
+        totalAmountBgn += amounts.grand_bgn;
+        totalAmountEur += amounts.grand_eur;
+
+        const amountText = showInEuro
+            ? `${safeToFixed(amounts.grand_eur)} €`
+            : `${safeToFixed(amounts.grand_bgn)} лв.`;
+
+        return {
+            n: idx + 1,
+            created_at: napFormatTableDateTime(o.timestamp || o.createdAt),
+            id: (o?.id || '').toString(),
+            cust_name: (o?.customerInfo?.name || '').toString(),
+            cust_phone: (o?.customerInfo?.phone || '').toString(),
+            pay_label: payMethod === 'bank' ? 'КАРТА' : 'КЕШ',
+            status_label: paid ? 'ПЛАТЕНО' : 'ЧАКА',
+            nap_doc_type: napGetNapDocType(o),
+            amount_text: amountText
+        };
+    });
+
+    totalAmountBgn = Math.round(totalAmountBgn * 100) / 100;
+    totalAmountEur = Math.round(totalAmountEur * 100) / 100;
+
+    const exportTypeLabel = napExportTypeLabel(exportType);
+    const currencyLabel = showInEuro ? 'Евро (€)' : 'Български лева (BGN)';
+    const onlyPaidLabel = (exportType === 'bank_paid') ? 'Само PAID' : (onlyPaid ? 'Да' : 'Не');
+    const totalAmountText = showInEuro
+        ? `${safeToFixed(totalAmountEur)} €`
+        : `${safeToFixed(totalAmountBgn)} лв.`;
+
+    const avgText = rows.length
+        ? (showInEuro
+            ? `${safeToFixed(totalAmountEur / rows.length)} €`
+            : `${safeToFixed(totalAmountBgn / rows.length)} лв.`)
+        : (showInEuro ? '0.00 €' : '0.00 лв.');
+
+    const ITEMS_PER_PAGE = 25;
+    const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
+
+    const style = `
+        @media print {
+            @page { size: A4 landscape; margin: 0.5cm; }
+            body { margin: 0; padding: 0; font-size: 10pt; }
+            .no-print { display: none !important; }
+            .page-break { page-break-after: always; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #000; line-height: 1.3; margin: 20px; background: #fff; }
+        .print-controls { background: #f8f9fa; padding: 15px; margin-bottom: 20px; border: 2px solid #dc2626; border-radius: 10px; text-align: center; }
+        .print-btn { background: #dc2626; color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; margin: 0 10px; }
+        .print-btn:hover { background: #b91c1c; }
+        .container { width: 100%; max-width: 29.7cm; margin: 0 auto; }
+        .header-section { text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #dc2626; }
+        .header-title { color: #dc2626; font-size: 22pt; margin-bottom: 8px; font-weight: bold; text-transform: uppercase; }
+        .header-subtitle { color: #666; font-size: 14pt; }
+        .company-info { margin-bottom: 15px; padding: 12px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #3b82f6; font-size: 10pt; }
+        .company-info p { margin: 4px 0; }
+        .report-period { margin-bottom: 18px; padding: 12px; background: #f0f9ff; border-radius: 5px; border: 2px solid #93c5fd; font-size: 10pt; }
+        .report-period h3 { color: #1e40af; margin-bottom: 8px; font-size: 12pt; font-weight: bold; }
+        .period-details { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .period-label { font-weight: bold; color: #475569; }
+        .period-value { color: #1e293b; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+        .stat-box { padding: 12px 10px; border-radius: 5px; text-align: center; border: 2px solid; }
+        .stat-total { background: #dbeafe; border-color: #3b82f6; }
+        .stat-bank { background: #dcfce7; border-color: #10b981; }
+        .stat-cash { background: #fef3c7; border-color: #f59e0b; }
+        .stat-amount { background: #fce7f3; border-color: #db2777; }
+        .stat-number { font-size: 16pt; font-weight: bold; margin-bottom: 4px; color: #1e293b; }
+        .stat-label { font-size: 9pt; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+        .orders-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 9.5pt; }
+        .table-header { background: #f3f4f6; border: 2px solid #d1d5db; }
+        .table-header th { padding: 8px 6px; text-align: left; font-weight: bold; color: #374151; border: 1px solid #d1d5db; }
+        .table-row td { padding: 6px 5px; border: 1px solid #d1d5db; vertical-align: top; }
+        .table-row:nth-child(even) { background: #f9fafb; }
+        .order-id { font-family: "Courier New", monospace; font-weight: bold; color: #1e40af; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 8.5pt; font-weight: bold; text-align: center; min-width: 50px; }
+        .badge-paid { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
+        .badge-pending { background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; }
+        .badge-cash { background: #e0e7ff; color: #3730a3; border: 1px solid #4f46e5; }
+        .badge-bank { background: #dbeafe; color: #1e40af; border: 1px solid #3b82f6; }
+        .amount-cell { text-align: right; font-weight: bold; color: #1e293b; }
+        .summary-section { margin-top: 20px; padding: 15px; background: #f8fafc; border-radius: 5px; border: 2px solid #cbd5e1; }
+        .summary-title { font-size: 12pt; font-weight: bold; color: #1e293b; margin-bottom: 10px; }
+        .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .summary-item { padding: 6px 0; border-bottom: 1px dashed #cbd5e1; }
+        .summary-label { font-weight: bold; color: #475569; }
+        .summary-value { color: #1e293b; text-align: right; }
+        .total-row { font-size: 12pt; font-weight: bold; color: #dc2626; padding-top: 8px; border-top: 3px solid #dc2626; }
+        .footer { margin-top: 20px; padding-top: 10px; border-top: 2px solid #d1d5db; text-align: center; color: #6b7280; font-size: 9pt; }
+        .no-data { text-align: center; padding: 30px; background: #fef2f2; border-radius: 5px; border: 2px solid #fecaca; }
+        .no-data h3 { color: #dc2626; margin-bottom: 10px; font-size: 14pt; }
+    `;
+
+    const headerHtml = `
+        <div class="header-section">
+            <div class="header-title">ОТЧЕТ ЗА НАП</div>
+            <div class="header-subtitle">${escapeHtml(settings.shop_name || '')}</div>
+        </div>
+
+        <div class="company-info">
+            <p><strong>Адрес:</strong> ${escapeHtml(settings.address_full || '')}</p>
+            <p><strong>Телефон:</strong> ${escapeHtml(settings.phone_display || '')}</p>
+            <p><strong>Имейл:</strong> ${escapeHtml(settings.order_email || '')}</p>
+            <p><strong>ЕИК/БУЛСТАТ:</strong> ${escapeHtml(settings.company_id || '')}</p>
+        </div>
+
+        <div class="report-period">
+            <h3>ПАРАМЕТРИ НА ОТЧЕТА</h3>
+            <div class="period-details">
+                <div class="period-item"><span class="period-label">Период:</span> <span class="period-value">${escapeHtml(napFormatDateBG(from))} - ${escapeHtml(napFormatDateBG(to))}</span></div>
+                <div class="period-item"><span class="period-label">Тип плащане:</span> <span class="period-value">${escapeHtml(exportTypeLabel)}</span></div>
+                <div class="period-item"><span class="period-label">Валута:</span> <span class="period-value">${escapeHtml(currencyLabel)}</span></div>
+                <div class="period-item"><span class="period-label">Филтър платени:</span> <span class="period-value">${escapeHtml(onlyPaidLabel)}</span></div>
+                <div class="period-item"><span class="period-label">Дата на генериране:</span> <span class="period-value">${escapeHtml(new Date().toLocaleString('bg-BG'))}</span></div>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-box stat-total"><div class="stat-number">${rows.length}</div><div class="stat-label">Общо поръчки</div></div>
+            <div class="stat-box stat-bank"><div class="stat-number">${bankOrders}</div><div class="stat-label">Картови</div></div>
+            <div class="stat-box stat-cash"><div class="stat-number">${cashOrders}</div><div class="stat-label">Кеш</div></div>
+            <div class="stat-box stat-amount"><div class="stat-number">${escapeHtml(totalAmountText)}</div><div class="stat-label">Обща сума</div></div>
+        </div>
+    `;
+
+    const tableHeader = `
+        <thead class="table-header">
+            <tr>
+                <th width="4%">№</th>
+                <th width="12%">Дата и час</th>
+                <th width="13%">ID поръчка</th>
+                <th width="18%">Клиент</th>
+                <th width="12%">Телефон</th>
+                <th width="10%">Плащане</th>
+                <th width="10%">Статус</th>
+                <th width="11%">НАП документ</th>
+                <th width="10%">Сума ${showInEuro ? '(€)' : '(лв.)'}</th>
+            </tr>
+        </thead>
+    `;
+
+    const pagesHtml = Array.from({ length: totalPages }).map((_, pageIdx) => {
+        const start = pageIdx * ITEMS_PER_PAGE;
+        const pageRows = rows.slice(start, start + ITEMS_PER_PAGE);
+        const counterStart = start + 1;
+        const tableRowsHtml = pageRows.map((r, i) => {
+            const paymentBadge = r.pay_label === 'КАРТА'
+                ? '<span class="badge badge-bank">КАРТА</span>'
+                : '<span class="badge badge-cash">КЕШ</span>';
+            const statusBadge = r.status_label === 'ПЛАТЕНО'
+                ? '<span class="badge badge-paid">ПЛАТЕНО</span>'
+                : '<span class="badge badge-pending">ЧАКА</span>';
+            return `
+                <tr class="table-row">
+                    <td>${counterStart + i}</td>
+                    <td>${escapeHtml(r.created_at)}</td>
+                    <td><span class="order-id">${escapeHtml(r.id)}</span></td>
+                    <td>${escapeHtml(r.cust_name)}</td>
+                    <td>${escapeHtml(r.cust_phone)}</td>
+                    <td>${paymentBadge}</td>
+                    <td>${statusBadge}</td>
+                    <td>${escapeHtml(r.nap_doc_type)}</td>
+                    <td class="amount-cell">${escapeHtml(r.amount_text)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        return `
+            ${pageIdx > 0 ? '<div class="page-break"></div>' : ''}
+            <h3 style="font-size: 12pt; font-weight: bold; margin-bottom: 10px; color: #1e293b;">ДЕТАЙЛЕН СПИСЪК НА ПОРЪЧКИТЕ - Страница ${pageIdx + 1} от ${totalPages}</h3>
+            <table class="orders-table">${tableHeader}<tbody>${tableRowsHtml}</tbody></table>
+        `;
+    }).join('');
+
+    const summaryHtml = `
+        <div class="summary-section">
+            <div class="summary-title">ОБОБЩЕНИЕ НА ОТЧЕТА</div>
+            <div class="summary-grid">
+                <div class="summary-item"><span class="summary-label">Общ брой поръчки:</span> <span class="summary-value">${rows.length} бр.</span></div>
+                <div class="summary-item"><span class="summary-label">Картови:</span> <span class="summary-value">${bankOrders} бр.</span></div>
+                <div class="summary-item"><span class="summary-label">Кеш:</span> <span class="summary-value">${cashOrders} бр.</span></div>
+                <div class="summary-item"><span class="summary-label">Платени (PAID):</span> <span class="summary-value">${paidOrders} бр.</span></div>
+                <div class="summary-item"><span class="summary-label">Други статуси:</span> <span class="summary-value">${pendingOrders} бр.</span></div>
+                <div class="summary-item"><span class="summary-label">Средна поръчка:</span> <span class="summary-value">${escapeHtml(avgText)}</span></div>
+                <div class="summary-item total-row"><span class="summary-label">ОБЩА СУМА:</span> <span class="summary-value">${escapeHtml(totalAmountText)}</span></div>
+            </div>
+        </div>
+    `;
 
     const html = `
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="bg">
 <head>
-  <meta charset="utf-8" />
-  <title>${title}</title>
-  <style>
-    @page { size: A4 landscape; margin: 12mm; }
-    body { font-family: Arial, sans-serif; color: #111; }
-    h1 { font-size: 16px; margin: 0 0 6px; }
-    .meta { font-size: 11px; color: #444; margin-bottom: 10px; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 9px; vertical-align: top; word-break: break-word; }
-    th { background: #f5f5f5; font-weight: 700; }
-    .nowrap { white-space: nowrap; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Отчет за НАП - ${escapeHtml(settings.shop_name || 'shop')}</title>
+    <style>${style}</style>
 </head>
 <body>
-  <h1>${title}</h1>
-  <div class="meta">${subtitle || ''}</div>
-  <table>
-    <thead>
-      <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
-    </thead>
-    <tbody>
-      ${rows.map(r => `<tr>${headers.map(h => `<td>${escapeHtml(String(r[h] ?? ''))}</td>`).join('')}</tr>`).join('')}
-    </tbody>
-  </table>
-  <script>window.onload = () => { window.print(); };</script>
+    <div class="print-controls no-print">
+        <button class="print-btn" onclick="window.print()">Принтирай / Запази като PDF</button>
+        <button class="print-btn" onclick="window.close()">Затвори</button>
+        <p style="margin-top: 10px; color: #666; font-size: 12pt;"><strong>Инструкции:</strong> Натисни "Принтирай", избери "Запази като PDF".</p>
+    </div>
+
+    <div class="container">
+        ${headerHtml}
+        ${pagesHtml}
+        ${summaryHtml}
+        <div class="footer">
+            <p>Този отчет е генериран автоматично от системата на <strong>${escapeHtml(settings.shop_name || '')}</strong></p>
+            <p>Валута: ${escapeHtml(currencyLabel)} | Дата: ${escapeHtml(new Date().toLocaleString('bg-BG'))}</p>
+        </div>
+    </div>
 </body>
 </html>`;
 
@@ -4635,41 +5022,56 @@ function exportOrdersHistoryPdf() {
 }
 
 function exportOrdersHistoryCsv() {
-    const filtered = getFilteredOrdersHistory();
+    const base = getFilteredOrdersHistory();
+    if (!base || base.length === 0) {
+        alert(t('noOrdersMatch', 'No orders match the filters.'));
+        return;
+    }
+
+    const params = napPromptExportParams();
+    if (!params) return;
+
+    const { exportType, onlyPaid, currency } = params;
+    const showInEuro = currency === 'eur';
+    const settings = napGetShopSettingsForExport();
+
+    const filtered = base.filter(o => napFilterOrder(o, exportType, onlyPaid));
     if (!filtered || filtered.length === 0) {
         alert(t('noOrdersMatch', 'No orders match the filters.'));
         return;
     }
 
-    // PHP/NAP-compatible header structure (see submit_order CSV block)
-    const delimiter = ',';
-    const headers = [
-        'id', 'created_at', 'cust_name', 'cust_phone', 'cust_email',
-        'ship_method', 'delivery_text', 'rec_name', 'rec_phone', 'rec_address',
-        'rec_date', 'rec_time',
-        'pay_method', 'payment_text',
-        'payment_method_human',
-        'payment_status',
-        'nap_doc_type',
-        'total_products', 'shipping_fee', 'grand_total', 'order_note',
-        'promo_code', 'discount_info', 'discount_total',
-        'products_original', 'products_after_individual_promo',
-        'borica_order6',
-        'notify_sent', 'notify_sent_at',
-        'cart_payload_json', 'shop_name'
-    ];
+    const headers = ['№', 'Дата и час', 'ID поръчка', 'Клиент', 'Телефон', 'Плащане', 'Статус', 'НАП документ', 'Сума'];
+    const delimiter = ';';
 
-    const rows = filtered.map(order => {
-        const row = buildNapExportRow(order);
-        return headers.map(h => escapeCsvValue(row[h], delimiter)).join(delimiter);
+    const lines = filtered.map((o, idx) => {
+        const payMethod = napGetPayMethod(o);
+        const paid = napIsPaid(o);
+        const amounts = napCalcAmounts(o);
+        const amountText = showInEuro
+            ? `${safeToFixed(amounts.grand_eur)} €`
+            : `${safeToFixed(amounts.grand_bgn)} лв.`;
+
+        const row = [
+            String(idx + 1),
+            napFormatTableDateTime(o.timestamp || o.createdAt),
+            (o?.id || '').toString(),
+            (o?.customerInfo?.name || '').toString(),
+            (o?.customerInfo?.phone || '').toString(),
+            payMethod === 'bank' ? 'КАРТА' : 'КЕШ',
+            paid ? 'ПЛАТЕНО' : 'ЧАКА',
+            napGetNapDocType(o),
+            amountText
+        ];
+        return row.map(v => escapeCsvValue(v, delimiter)).join(delimiter);
     });
 
-    const from = (document.getElementById('approved-orders-from')?.value || '').toString().trim();
-    const to = (document.getElementById('approved-orders-to')?.value || '').toString().trim();
-    const datePart = (from && to) ? `${from}_to_${to}` : new Date().toISOString().split('T')[0];
-    const filename = `orders-nap-export-${datePart}.csv`;
+    const shopSafe = (settings.shop_name || 'shop').replace(/[^a-zA-Z0-9]/g, '_');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+    const currencySuffix = showInEuro ? '_EUR' : '_BGN';
+    const filename = `NAP_REPORT_${shopSafe}_${stamp}${currencySuffix}.csv`;
 
-    const csvContent = '\ufeff' + [headers.map(h => escapeCsvValue(h, delimiter)).join(delimiter), ...rows].join('\r\n');
+    const csvContent = '\ufeff' + [headers.map(h => escapeCsvValue(h, delimiter)).join(delimiter), ...lines].join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
