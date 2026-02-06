@@ -4442,6 +4442,13 @@ function formatNapRecDateTimeFromScheduledTime(order) {
 // Fixed exchange rate: 1 EUR = 1.95583 BGN
 const NAP_EUR_TO_BGN_RATE = 1.95583;
 
+function napExcelText(value) {
+    const s = (value || '').toString();
+    // Force Excel to treat the cell as text when opening CSV.
+    // Using formula syntax avoids the leading apostrophe showing up.
+    return s ? `="${s.replace(/"/g, '""')}"` : '';
+}
+
 function napGetShopSettingsForExport() {
     const shop_name = (document.getElementById('restaurant-name-input')?.value || '').toString().trim();
     const address_full = (document.getElementById('site-footer-address')?.value || '').toString().trim();
@@ -5054,7 +5061,7 @@ function exportOrdersHistoryCsv() {
 
         const row = [
             String(idx + 1),
-            napFormatTableDateTime(o.timestamp || o.createdAt),
+            napExcelText(napFormatTableDateTime(o.timestamp || o.createdAt)),
             (o?.id || '').toString(),
             (o?.customerInfo?.name || '').toString(),
             (o?.customerInfo?.phone || '').toString(),
