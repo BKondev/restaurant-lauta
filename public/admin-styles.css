@@ -3,6 +3,10 @@ body {
     background: #f8f9fa;
 }
 
+body.admin-drawer-open {
+    overflow: hidden;
+}
+
 .admin-container {
     max-width: 100%;
     margin: 0 auto;
@@ -20,6 +24,16 @@ body {
     align-items: center;
     justify-content: space-between;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.admin-header .admin-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 900;
+    letter-spacing: -0.2px;
 }
 
 /* Language Switcher (Desktop Sidebar) */
@@ -193,12 +207,14 @@ body {
     left: 0;
     height: 100vh;
     width: min(420px, 92vw);
-    background: #fff;
-    box-shadow: 0 18px 60px rgba(0,0,0,0.35);
+    background: #ffffff;
+    box-shadow: 0 20px 70px rgba(15, 23, 42, 0.45);
     transform: translateX(-105%);
-    transition: transform 220ms ease;
+    transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
     display: flex;
     flex-direction: column;
+    border-radius: 0 22px 22px 0;
+    overflow: hidden;
 }
 
 .admin-drawer-overlay.open .admin-drawer {
@@ -240,18 +256,11 @@ body {
     background: rgba(255, 255, 255, 0.22);
 }
 
-.admin-drawer-slides {
+.admin-drawer-body {
     flex: 1;
-    display: flex;
-    width: 200%;
-    transform: translateX(0);
-    transition: transform 220ms ease;
-}
-
-.admin-drawer-slide {
-    width: 50%;
     padding: 14px;
     overflow-y: auto;
+    background: linear-gradient(180deg, rgba(248,250,252,0.85), rgba(255,255,255,1));
 }
 
 .admin-drawer-section-title {
@@ -263,12 +272,23 @@ body {
     margin-bottom: 10px;
 }
 
-.admin-drawer-empty {
-    padding: 12px;
-    border: 1px dashed #e5e7eb;
+.admin-drawer-lang {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid #e9edf3;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+    margin-bottom: 12px;
+}
+
+.admin-drawer-lang .lang-btn {
+    flex: 1;
     border-radius: 14px;
-    color: #64748b;
-    font-weight: 700;
+    border: 1px solid #e6e6e6;
+    padding: 10px 12px;
+    font-weight: 900;
 }
 
 .admin-drawer-menu {
@@ -282,6 +302,7 @@ body {
     border-radius: 16px;
     overflow: hidden;
     background: #fff;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
 }
 
 .drawer-group-btn {
@@ -294,6 +315,10 @@ body {
     background: #fff;
     border: none;
     cursor: pointer;
+}
+
+.drawer-group-btn:hover {
+    background: rgba(102, 126, 234, 0.06);
 }
 
 .drawer-group-left {
@@ -334,14 +359,21 @@ body {
 }
 
 .drawer-items {
-    display: none;
     border-top: 1px solid #eef2f7;
     background: #fbfcfe;
-    padding: 8px;
+    padding: 0 8px;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transform: translateY(-6px);
+    transition: max-height 240ms ease, opacity 200ms ease, transform 220ms ease, padding 220ms ease;
 }
 
 .drawer-group.open .drawer-items {
-    display: block;
+    max-height: 900px;
+    opacity: 1;
+    transform: translateY(0);
+    padding: 8px;
 }
 
 .drawer-item-btn {
@@ -374,6 +406,45 @@ body {
 
 .drawer-item-btn.active {
     background: rgba(102, 126, 234, 0.14);
+}
+
+.admin-drawer-footer {
+    padding: 12px;
+    border-top: 1px solid #eef2f7;
+    background: #fff;
+    display: flex;
+    gap: 10px;
+}
+
+.admin-drawer-action {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 12px;
+    border-radius: 16px;
+    border: 1px solid #e9edf3;
+    background: #f8fafc;
+    color: #0f172a;
+    text-decoration: none;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.admin-drawer-action:hover {
+    background: rgba(102, 126, 234, 0.10);
+    border-color: rgba(102, 126, 234, 0.35);
+}
+
+.admin-drawer-action.danger {
+    background: rgba(231, 76, 60, 0.08);
+    border-color: rgba(231, 76, 60, 0.25);
+}
+
+.admin-drawer-action.danger:hover {
+    background: rgba(231, 76, 60, 0.12);
+    border-color: rgba(231, 76, 60, 0.35);
 }
 
 

@@ -912,6 +912,14 @@ function closeAdminDrawer() {
     document.body.classList.remove('admin-drawer-open');
 }
 
+function getAdminBasePath() {
+    try {
+        return window.location.pathname.includes('/resturant-website') ? '/resturant-website' : '';
+    } catch (e) {
+        return '';
+    }
+}
+
 // Toggle Navigation Visibility (repurposed to the drawer)
 function toggleNav() {
     const overlay = document.getElementById('adminDrawerOverlay');
@@ -1052,6 +1060,15 @@ function buildAdminDrawerMenu() {
 
         headerBtn.addEventListener('click', () => {
             const willOpen = !group.classList.contains('open');
+
+            // Accordion behavior: close others.
+            menu.querySelectorAll('.drawer-group.open').forEach(other => {
+                if (other === group) return;
+                other.classList.remove('open');
+                const otherBtn = other.querySelector('.drawer-group-btn');
+                if (otherBtn) otherBtn.setAttribute('aria-expanded', 'false');
+            });
+
             group.classList.toggle('open', willOpen);
             headerBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
         });
@@ -1074,6 +1091,12 @@ function initAdminDrawer() {
     const overlay = document.getElementById('adminDrawerOverlay');
     if (!overlay) return;
 
+    const backLink = document.getElementById('adminDrawerBackLink');
+    if (backLink) {
+        const base = getAdminBasePath();
+        backLink.setAttribute('href', `${base}/`);
+    }
+
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) closeAdminDrawer();
     });
@@ -1083,6 +1106,15 @@ function initAdminDrawer() {
     });
 
     try { buildAdminDrawerMenu(); } catch (e) {}
+
+    // Auto-open the menu on first entry per session.
+    try {
+        const didAutoOpen = sessionStorage.getItem('adminDrawerAutoOpened') === '1';
+        if (!didAutoOpen) {
+            sessionStorage.setItem('adminDrawerAutoOpened', '1');
+            setTimeout(() => openAdminDrawer(), 60);
+        }
+    } catch (e) {}
 }
 
 // Restore last active tab on page load

@@ -22,18 +22,6 @@
                 <i class="fas fa-utensils"></i>
                 <span data-translate="adminPanel">Admin Panel</span>
             </div>
-            <div class="admin-actions">
-                <div class="language-switcher">
-                    <button class="lang-btn" data-lang="en" onclick="switchLanguage('en')" title="English">EN</button>
-                    <button class="lang-btn" data-lang="bg" onclick="switchLanguage('bg')" title="Български">BG</button>
-                </div>
-                <a href="../" class="admin-action-btn" title="Back to Menu">
-                    <i class="fas fa-home"></i>
-                </a>
-                <button onclick="logout()" class="admin-action-btn" data-translate-title="logout" title="Logout">
-                    <i class="fas fa-sign-out-alt"></i>
-                </button>
-            </div>
             <button class="nav-toggle-btn" onclick="toggleNav()" title="Menu">
                 <i class="fas fa-bars" id="toggleIcon"></i>
             </button>
@@ -52,15 +40,25 @@
                     </button>
                 </div>
 
-                <div class="admin-drawer-slides" id="adminDrawerSlides">
-                    <div class="admin-drawer-slide" data-slide="main">
-                        <div class="admin-drawer-section-title">Menu</div>
-                        <div id="adminDrawerMenu" class="admin-drawer-menu" aria-label="Admin menu items"></div>
+                <div class="admin-drawer-body">
+                    <div class="admin-drawer-lang" aria-label="Language">
+                        <button class="lang-btn" data-lang="en" onclick="switchLanguage('en')" title="English">EN</button>
+                        <button class="lang-btn" data-lang="bg" onclick="switchLanguage('bg')" title="Български">BG</button>
                     </div>
-                    <div class="admin-drawer-slide" data-slide="details">
-                        <div class="admin-drawer-section-title">Details</div>
-                        <div class="admin-drawer-empty">(Reserved)</div>
-                    </div>
+
+                    <div class="admin-drawer-section-title">Menu</div>
+                    <div id="adminDrawerMenu" class="admin-drawer-menu" aria-label="Admin menu items"></div>
+                </div>
+
+                <div class="admin-drawer-footer">
+                    <a href="../" id="adminDrawerBackLink" class="admin-drawer-action" data-translate-title="backToMenu" title="Back to Menu">
+                        <i class="fas fa-home"></i>
+                        <span data-translate="menu">Menu</span>
+                    </a>
+                    <button type="button" onclick="logout()" class="admin-drawer-action danger" data-translate-title="logout" title="Logout">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span data-translate="logout">Logout</span>
+                    </button>
                 </div>
             </aside>
         </div>
