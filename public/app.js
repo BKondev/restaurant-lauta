@@ -62,6 +62,82 @@ function getTopBarHeight() {
     return topBar ? topBar.getBoundingClientRect().height : 0;
 }
 
+let desktopSidebarClampInitialized = false;
+let desktopSidebarClampRaf = 0;
+
+function getStickyGap() {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue('--sticky-gap');
+    const val = parseFloat(raw);
+    return Number.isFinite(val) ? val : 0;
+}
+
+function getDesktopSidebarClampTarget() {
+    const mapEl = document.getElementById('site-map');
+    if (mapEl) {
+        const cs = getComputedStyle(mapEl);
+        if (cs.display !== 'none') {
+            const rect = mapEl.getBoundingClientRect();
+            if (rect.height > 0) return mapEl;
+        }
+    }
+
+    return document.getElementById('site-footer');
+}
+
+function updateDesktopSidebarClamp() {
+    if (window.innerWidth <= 1024) return;
+
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    const clampTarget = getDesktopSidebarClampTarget();
+    if (!clampTarget) return;
+
+    const baseTop = Math.ceil(getTopBarHeight() + getStickyGap());
+    sidebar.style.top = `${baseTop}px`;
+    sidebar.style.transform = '';
+
+    const sidebarRect = sidebar.getBoundingClientRect();
+    const sidebarHeight = sidebarRect.height;
+    if (!sidebarHeight) return;
+
+    const footerTopDoc = clampTarget.getBoundingClientRect().top + window.pageYOffset;
+    const sidebarTopDoc = window.pageYOffset + baseTop;
+    const sidebarBottomDoc = sidebarTopDoc + sidebarHeight;
+
+    const overlap = sidebarBottomDoc - footerTopDoc;
+    if (overlap > 0) {
+        sidebar.style.transform = `translateY(${-Math.ceil(overlap)}px)`;
+    }
+}
+
+function scheduleDesktopSidebarClampUpdate() {
+    if (desktopSidebarClampRaf) return;
+    desktopSidebarClampRaf = requestAnimationFrame(() => {
+        desktopSidebarClampRaf = 0;
+        updateDesktopSidebarClamp();
+    });
+}
+
+function initDesktopSidebarClamp() {
+    if (desktopSidebarClampInitialized) return;
+    desktopSidebarClampInitialized = true;
+
+    window.addEventListener('scroll', scheduleDesktopSidebarClampUpdate, { passive: true });
+    window.addEventListener('resize', scheduleDesktopSidebarClampUpdate);
+    window.addEventListener('orientationchange', scheduleDesktopSidebarClampUpdate);
+
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar && 'ResizeObserver' in window) {
+        try {
+            const ro = new ResizeObserver(() => scheduleDesktopSidebarClampUpdate());
+            ro.observe(sidebar);
+        } catch (e) {
+            // ignore
+        }
+    }
+}
+
 // Translations
 const translations = {
     en: {
@@ -211,6 +287,8 @@ async function loadData() {
         extractCategories();
         renderCategories();
         renderProducts();
+        initDesktopSidebarClamp();
+        scheduleDesktopSidebarClampUpdate();
         handleInitialProductDeepLink();
     } catch (error) {
         console.error('Error loading data:', error);
@@ -480,6 +558,7 @@ function filterByCategory(category, options = {}) {
     currentCategory = category;
     renderCategories();
     renderProducts();
+    scheduleDesktopSidebarClampUpdate();
 
     if (scrollToTop) {
         // Run after render so layout is stable and scroll target is correct.
@@ -1011,6 +1090,7 @@ function closeMobileSearch() {
 // Search functionality
 document.addEventListener('DOMContentLoaded', function() {
     initTopBarHeightSync();
+    initDesktopSidebarClamp();
     loadData();
     
     // Search input
