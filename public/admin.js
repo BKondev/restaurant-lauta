@@ -833,6 +833,11 @@ function switchLanguage(lang) {
     try { loadCombos(); } catch (e) {}
     try { updateManageSelectionUI(); } catch (e) {}
     try { loadSlideshowSettings(); } catch (e) {}
+
+    try {
+        buildAdminDrawerMenu();
+        updateAdminDrawerActive(localStorage.getItem('adminCurrentTab') || 'pending-orders');
+    } catch (e) {}
 }
 
 // Initialize language on page load
@@ -869,22 +874,215 @@ function switchTab(tabName) {
     const tabBtn = document.querySelector(`[onclick="switchTab('${normalizedTab}')"]`);
     if (tabBtn) tabBtn.classList.add('active');
 
+    try { updateAdminDrawerActive(normalizedTab); } catch (e) {}
+
     // Save current tab to localStorage
     localStorage.setItem('adminCurrentTab', normalizedTab);
 }
 
-// Toggle Navigation Visibility
+function getAdminHeaderHeight() {
+    const header = document.querySelector('.admin-header');
+    if (!header) return 0;
+    const rect = header.getBoundingClientRect();
+    return rect.height || 0;
+}
+
+function adminScrollToElement(el) {
+    if (!el) return;
+    const offset = Math.ceil(getAdminHeaderHeight() + 12);
+    const rect = el.getBoundingClientRect();
+    const target = rect.top + window.pageYOffset - offset;
+    window.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+}
+
+function openAdminDrawer() {
+    const overlay = document.getElementById('adminDrawerOverlay');
+    if (!overlay) return;
+    overlay.classList.add('open');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('admin-drawer-open');
+    try { buildAdminDrawerMenu(); } catch (e) {}
+}
+
+function closeAdminDrawer() {
+    const overlay = document.getElementById('adminDrawerOverlay');
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('admin-drawer-open');
+}
+
+// Toggle Navigation Visibility (repurposed to the drawer)
 function toggleNav() {
-    const nav = document.getElementById('adminNav');
-    const icon = document.getElementById('toggleIcon');
-    nav.classList.toggle('collapsed');
-    
-    // Change icon based on state
-    if (nav.classList.contains('collapsed')) {
-        icon.className = 'fas fa-chevron-down';
+    const overlay = document.getElementById('adminDrawerOverlay');
+    if (!overlay) return;
+    if (overlay.classList.contains('open')) {
+        closeAdminDrawer();
     } else {
-        icon.className = 'fas fa-chevron-up';
+        openAdminDrawer();
     }
+}
+
+function updateAdminDrawerActive(normalizedTab) {
+    const menu = document.getElementById('adminDrawerMenu');
+    if (!menu) return;
+    menu.querySelectorAll('.drawer-group').forEach(g => g.classList.remove('active'));
+    menu.querySelectorAll('.drawer-item-btn').forEach(b => b.classList.remove('active'));
+
+    const group = menu.querySelector(`.drawer-group[data-tab="${CSS.escape(normalizedTab)}"]`);
+    if (group) {
+        group.classList.add('active');
+        // If nothing is open yet, open the active group.
+        if (!group.classList.contains('open')) group.classList.add('open');
+    }
+}
+
+function extractTabNameFromOnclick(btn) {
+    const raw = (btn && btn.getAttribute('onclick')) ? btn.getAttribute('onclick') : '';
+    const m = raw.match(/switchTab\('([^']+)'\)/);
+    return m ? m[1] : '';
+}
+
+function getTabLabelFromBtn(btn) {
+    if (!btn) return '';
+    const span = btn.querySelector('.tab-text');
+    const txt = (span ? span.textContent : btn.textContent) || '';
+    return txt.toString().trim();
+}
+
+function getTabIconClass(btn) {
+    const icon = btn ? btn.querySelector('i') : null;
+    const cls = icon ? icon.className : '';
+    return (cls || 'fas fa-circle').toString();
+}
+
+function getTabSections(tabName) {
+    const normalizedTab = (tabName === 'combos') ? 'promo-codes' : tabName;
+
+    const tabsToScan = [normalizedTab];
+    if (normalizedTab === 'promo-codes') tabsToScan.push('combos');
+
+    const sections = [];
+    tabsToScan.forEach(t => {
+        const el = document.getElementById(`tab-${t}`);
+        if (!el) return;
+        const list = Array.from(el.querySelectorAll('.admin-section'));
+        list.forEach((sec, idx) => {
+            let id = (sec.getAttribute('id') || '').toString().trim();
+            if (!id) {
+                id = `section-${t}-${idx + 1}`;
+                sec.setAttribute('id', id);
+            }
+
+            const heading = sec.querySelector('h2, h3');
+            const title = heading ? heading.textContent.toString().trim().replace(/\s+/g, ' ') : `Section ${idx + 1}`;
+            sections.push({ id, title });
+        });
+    });
+
+    return { normalizedTab, sections };
+}
+
+function buildAdminDrawerMenu() {
+    const menu = document.getElementById('adminDrawerMenu');
+    if (!menu) return;
+
+    const tabBtns = Array.from(document.querySelectorAll('.admin-tabs-nav .admin-tab-btn'));
+    if (!tabBtns.length) return;
+
+    const activeTab = (localStorage.getItem('adminCurrentTab') || 'pending-orders').toString();
+    menu.innerHTML = '';
+
+    tabBtns.forEach(btn => {
+        const tabName = extractTabNameFromOnclick(btn);
+        if (!tabName) return;
+
+        const label = getTabLabelFromBtn(btn) || tabName;
+        const iconClass = getTabIconClass(btn);
+        const { normalizedTab, sections } = getTabSections(tabName);
+
+        const group = document.createElement('div');
+        group.className = 'drawer-group';
+        group.dataset.tab = normalizedTab;
+
+        const headerBtn = document.createElement('button');
+        headerBtn.type = 'button';
+        headerBtn.className = 'drawer-group-btn';
+        headerBtn.setAttribute('aria-expanded', 'false');
+
+        headerBtn.innerHTML = `
+            <div class="drawer-group-left">
+                <span class="drawer-group-icon"><i class="${escapeHtml(iconClass)}"></i></span>
+                <span class="drawer-group-title">${escapeHtml(label)}</span>
+            </div>
+            <span class="drawer-chevron"><i class="fas fa-chevron-down"></i></span>
+        `;
+
+        const items = document.createElement('div');
+        items.className = 'drawer-items';
+
+        // First item: open tab (top)
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'drawer-item-btn';
+        openBtn.innerHTML = `<span class="drawer-item-bullet"></span><span>${escapeHtml(label)}</span>`;
+        openBtn.addEventListener('click', () => {
+            closeAdminDrawer();
+            switchTab(normalizedTab);
+            setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 50);
+        });
+        items.appendChild(openBtn);
+
+        sections.forEach(sec => {
+            const secBtn = document.createElement('button');
+            secBtn.type = 'button';
+            secBtn.className = 'drawer-item-btn';
+            secBtn.dataset.sectionId = sec.id;
+            secBtn.innerHTML = `<span class="drawer-item-bullet"></span><span>${escapeHtml(sec.title)}</span>`;
+            secBtn.addEventListener('click', () => {
+                closeAdminDrawer();
+                switchTab(normalizedTab);
+                setTimeout(() => {
+                    const el = document.getElementById(sec.id);
+                    if (el) adminScrollToElement(el);
+                }, 80);
+            });
+            items.appendChild(secBtn);
+        });
+
+        headerBtn.addEventListener('click', () => {
+            const willOpen = !group.classList.contains('open');
+            group.classList.toggle('open', willOpen);
+            headerBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        });
+
+        group.appendChild(headerBtn);
+        group.appendChild(items);
+        menu.appendChild(group);
+
+        // Auto-open the active tab group
+        if (normalizedTab === (activeTab === 'combos' ? 'promo-codes' : activeTab)) {
+            group.classList.add('open');
+            headerBtn.setAttribute('aria-expanded', 'true');
+        }
+    });
+
+    updateAdminDrawerActive(activeTab === 'combos' ? 'promo-codes' : activeTab);
+}
+
+function initAdminDrawer() {
+    const overlay = document.getElementById('adminDrawerOverlay');
+    if (!overlay) return;
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeAdminDrawer();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeAdminDrawer();
+    });
+
+    try { buildAdminDrawerMenu(); } catch (e) {}
 }
 
 // Restore last active tab on page load
@@ -892,6 +1090,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedRaw = localStorage.getItem('adminCurrentTab') || 'pending-orders';
     const savedTab = savedRaw === 'combos' ? 'promo-codes' : savedRaw;
     switchTab(savedTab);
+    try { initAdminDrawer(); } catch (e) {}
 });
 
 // Admin Panel JavaScript

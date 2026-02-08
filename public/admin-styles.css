@@ -9,9 +9,17 @@ body {
     padding: 0;
 }
 
-/* Fixed Header - Hidden on Desktop */
+/* Fixed Header */
 .admin-header {
-    display: none;
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 10px 12px;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
 /* Language Switcher (Desktop Sidebar) */
@@ -156,6 +164,216 @@ body {
     border-bottom: 3px solid rgba(255,255,255,0.2);
     transition: all 0.3s ease;
     width: 100%;
+}
+
+/* Hide legacy tab bar UI (kept in DOM for compatibility) */
+.admin-tabs-nav {
+    display: none !important;
+}
+
+/* ==================== Admin Drawer ==================== */
+.admin-drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+    z-index: 2000;
+}
+
+.admin-drawer-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.admin-drawer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: min(420px, 92vw);
+    background: #fff;
+    box-shadow: 0 18px 60px rgba(0,0,0,0.35);
+    transform: translateX(-105%);
+    transition: transform 220ms ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.admin-drawer-overlay.open .admin-drawer {
+    transform: translateX(0);
+}
+
+.admin-drawer-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 14px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+}
+
+.admin-drawer-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 900;
+    letter-spacing: -0.2px;
+}
+
+.admin-drawer-close {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.admin-drawer-close:hover {
+    background: rgba(255, 255, 255, 0.22);
+}
+
+.admin-drawer-slides {
+    flex: 1;
+    display: flex;
+    width: 200%;
+    transform: translateX(0);
+    transition: transform 220ms ease;
+}
+
+.admin-drawer-slide {
+    width: 50%;
+    padding: 14px;
+    overflow-y: auto;
+}
+
+.admin-drawer-section-title {
+    font-size: 12px;
+    font-weight: 900;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+}
+
+.admin-drawer-empty {
+    padding: 12px;
+    border: 1px dashed #e5e7eb;
+    border-radius: 14px;
+    color: #64748b;
+    font-weight: 700;
+}
+
+.admin-drawer-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.drawer-group {
+    border: 1px solid #e9edf3;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #fff;
+}
+
+.drawer-group-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 12px;
+    background: #fff;
+    border: none;
+    cursor: pointer;
+}
+
+.drawer-group-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.drawer-group-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    background: rgba(102, 126, 234, 0.12);
+    color: #667eea;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.drawer-group-title {
+    font-weight: 900;
+    color: #0f172a;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.drawer-chevron {
+    color: #64748b;
+    transition: transform 160ms ease;
+}
+
+.drawer-group.open .drawer-chevron {
+    transform: rotate(180deg);
+}
+
+.drawer-items {
+    display: none;
+    border-top: 1px solid #eef2f7;
+    background: #fbfcfe;
+    padding: 8px;
+}
+
+.drawer-group.open .drawer-items {
+    display: block;
+}
+
+.drawer-item-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 10px;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    cursor: pointer;
+    color: #334155;
+    font-weight: 800;
+    text-align: left;
+}
+
+.drawer-item-btn:hover {
+    background: rgba(102, 126, 234, 0.10);
+    color: #334155;
+}
+
+.drawer-item-bullet {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(231, 76, 60, 0.28);
+    flex: 0 0 auto;
+}
+
+.drawer-item-btn.active {
+    background: rgba(102, 126, 234, 0.14);
 }
 
 

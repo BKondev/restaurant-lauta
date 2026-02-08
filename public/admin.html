@@ -34,9 +34,35 @@
                     <i class="fas fa-sign-out-alt"></i>
                 </button>
             </div>
-            <button class="nav-toggle-btn" onclick="toggleNav()" title="Toggle Menu">
-                <i class="fas fa-chevron-down" id="toggleIcon"></i>
+            <button class="nav-toggle-btn" onclick="toggleNav()" title="Menu">
+                <i class="fas fa-bars" id="toggleIcon"></i>
             </button>
+        </div>
+
+        <!-- Drawer Navigation (Slide 1: Menu, Slide 2: Reserved) -->
+        <div class="admin-drawer-overlay" id="adminDrawerOverlay" aria-hidden="true">
+            <aside class="admin-drawer" id="adminDrawer" role="dialog" aria-modal="true" aria-label="Admin Menu">
+                <div class="admin-drawer-top">
+                    <div class="admin-drawer-brand">
+                        <i class="fas fa-utensils"></i>
+                        <span data-translate="adminPanel">Admin Panel</span>
+                    </div>
+                    <button type="button" class="admin-drawer-close" onclick="closeAdminDrawer()" aria-label="Close menu">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div class="admin-drawer-slides" id="adminDrawerSlides">
+                    <div class="admin-drawer-slide" data-slide="main">
+                        <div class="admin-drawer-section-title">Menu</div>
+                        <div id="adminDrawerMenu" class="admin-drawer-menu" aria-label="Admin menu items"></div>
+                    </div>
+                    <div class="admin-drawer-slide" data-slide="details">
+                        <div class="admin-drawer-section-title">Details</div>
+                        <div class="admin-drawer-empty">(Reserved)</div>
+                    </div>
+                </div>
+            </aside>
         </div>
         
         <!-- Tab Navigation -->
