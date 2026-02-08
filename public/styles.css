@@ -8,6 +8,7 @@
     --price-color: #e74c3c;
     --top-bar-height: 70px;
     --sticky-gap: 0px;
+    --sidebar-width: 300px;
 }
 
 * {
@@ -661,7 +662,7 @@ body {
 
 /* Sidebar */
 .sidebar {
-    width: 300px;
+    width: var(--sidebar-width);
     background-color: white;
     padding: 25px 0;
     box-shadow: 2px 0 10px rgba(0,0,0,0.04);
@@ -671,6 +672,18 @@ body {
     height: calc(100vh - (var(--top-bar-height) + var(--sticky-gap)));
     overflow-y: auto;
     border-radius: 0 16px 16px 0;
+}
+
+/* Desktop: keep categories visible even when scrolling past short content */
+@media (min-width: 1025px) {
+    .main-container {
+        padding-left: var(--sidebar-width);
+    }
+
+    .sidebar {
+        position: fixed;
+        left: max(0px, calc((100vw - 1400px) / 2));
+    }
 }
 
 .categories-header {
@@ -1494,12 +1507,14 @@ body {
 @media (max-width: 1024px) {
     .main-container {
         flex-direction: column;
+        padding-left: 0;
     }
 
     .sidebar {
         width: 100%;
         height: auto;
         position: sticky;
+        left: auto;
         z-index: 100;
         border-radius: 0;
         padding: 10px 0;
