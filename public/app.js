@@ -295,6 +295,116 @@ function renderRestaurantStatusBanner() {
     }
 }
 
+function showUxModal({ title, message, primaryText }) {
+    try {
+        const existing = document.getElementById('ux-modal-overlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'ux-modal-overlay';
+        overlay.className = 'ux-modal-overlay';
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay.remove();
+        });
+
+        const modal = document.createElement('div');
+        modal.className = 'ux-modal';
+        modal.innerHTML = `
+            <div class="ux-modal-header">
+                <div>
+                    <div class="ux-modal-title">${title || ''}</div>
+                </div>
+                <button type="button" class="ux-modal-close" aria-label="Close">×</button>
+            </div>
+            <div class="ux-modal-body">${message || ''}</div>
+            <div class="ux-modal-actions">
+                <button type="button" class="ux-modal-btn ux-modal-btn-primary">${primaryText || 'OK'}</button>
+            </div>
+        `;
+
+        modal.querySelector('.ux-modal-close')?.addEventListener('click', () => overlay.remove());
+        modal.querySelector('.ux-modal-btn-primary')?.addEventListener('click', () => overlay.remove());
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+    } catch (e) {
+        alert((title || '') + (message ? `\n${message}` : ''));
+    }
+}
+
+function showRestaurantClosedModal({ type, open, close, opensAt, tomorrow }) {
+    const isBg = currentLanguage === 'bg';
+    const isManual = type === 'manual';
+
+    const title = isManual
+        ? (isBg ? 'Временно затворено' : 'Temporarily closed')
+        : (isBg ? 'Извън работно време' : 'Outside working hours');
+
+    const heroIcon = isManual ? '<i class="fas fa-store-slash"></i>' : '<i class="fas fa-clock"></i>';
+    const heroTitle = isManual
+        ? (isBg ? 'В момента не приемаме поръчки' : 'We are not accepting orders right now')
+        : (isBg ? 'В момента сме затворени' : 'We are currently closed');
+
+    const openLine = (!isManual && opensAt)
+        ? (isBg
+            ? (tomorrow ? `Отваряме утре в <b>${escapeHtml(opensAt)}</b>.` : `Отваряме в <b>${escapeHtml(opensAt)}</b>.`)
+            : (tomorrow ? `Opens tomorrow at <b>${escapeHtml(opensAt)}</b>.` : `Opens at <b>${escapeHtml(opensAt)}</b>.`))
+        : '';
+
+    const heroSub = isManual
+        ? (isBg ? 'Заповядайте по-късно.' : 'Please come again later.')
+        : (openLine || (isBg ? 'Можете да поръчате в работното време по-долу.' : 'You can order during the hours shown below.'));
+
+    const hoursHtml = (!isManual && open && close)
+        ? `
+            <div class="ux-hours-row">
+                <div class="ux-hour-chip"><i class="fas fa-door-open"></i> ${isBg ? 'От' : 'From'} <span>${escapeHtml(open)}</span></div>
+                <div class="ux-hour-chip"><i class="fas fa-door-closed"></i> ${isBg ? 'До' : 'To'} <span>${escapeHtml(close)}</span></div>
+            </div>
+            <div class="ux-tip">
+                <i class="fas fa-info-circle"></i>
+                ${isBg ? 'Можете да разгледате менюто и да се върнете, когато отворим.' : 'You can browse the menu and come back when we open.'}
+            </div>
+        `
+        : '';
+
+    const msg = `
+        <div class="ux-closed-hero ${isManual ? 'manual' : ''}">
+            <div class="ux-closed-icon">${heroIcon}</div>
+            <div class="ux-closed-text">
+                <div class="ux-closed-title">${heroTitle}</div>
+                <div class="ux-closed-sub">${heroSub}</div>
+            </div>
+        </div>
+        ${hoursHtml}
+    `;
+
+    showUxModal({
+        title,
+        message: msg,
+        primaryText: isBg ? 'Разбрах' : 'OK'
+    });
+}
+
+function maybeShowClosedModalOnce() {
+    const reason = getStorefrontClosedReason();
+    if (!reason) return;
+
+    const key = `closedModalShown:${reason.type}`;
+    if (sessionStorage.getItem(key) === '1') return;
+    sessionStorage.setItem(key, '1');
+
+    const open = (siteWorkingHours?.openingTime || '').toString().trim();
+    const close = (siteWorkingHours?.closingTime || '').toString().trim();
+    showRestaurantClosedModal({
+        type: reason.type,
+        open: open || undefined,
+        close: close || undefined,
+        opensAt: reason.opensAt,
+        tomorrow: !!reason.tomorrow
+    });
+}
+
 // Initialize language on page load
 function initLanguage() {
     // Set active button
@@ -380,6 +490,7 @@ async function loadData() {
         renderSiteFooter();
 
         renderRestaurantStatusBanner();
+        maybeShowClosedModalOnce();
         
         extractCategories();
         renderCategories();
@@ -1189,6 +1300,25 @@ document.addEventListener('DOMContentLoaded', function() {
     initTopBarHeightSync();
     initDesktopSidebarClamp();
     loadData();
+
+    // Block checkout navigation while closed (manual or outside hours)
+    const cartBtn = document.getElementById('cart-button');
+    if (cartBtn) {
+        cartBtn.addEventListener('click', (e) => {
+            const reason = getStorefrontClosedReason();
+            if (!reason) return;
+            e.preventDefault();
+            const open = (siteWorkingHours?.openingTime || '').toString().trim();
+            const close = (siteWorkingHours?.closingTime || '').toString().trim();
+            showRestaurantClosedModal({
+                type: reason.type,
+                open: open || undefined,
+                close: close || undefined,
+                opensAt: reason.opensAt,
+                tomorrow: !!reason.tomorrow
+            });
+        });
+    }
     
     // Search input
     const searchInput = document.getElementById('search-input');

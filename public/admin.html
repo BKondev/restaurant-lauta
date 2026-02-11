@@ -748,6 +748,11 @@
                     <input type="number" id="flyer-limit" min="1" step="1" placeholder="e.g., 50" />
                     <small data-translate="limitHelp">Leave empty to generate for all eligible codes.</small>
                 </div>
+                <div class="form-group" style="min-width: 200px;">
+                    <label for="flyer-generate-count"><span data-translate="flyerGenerateCount">Generate Flyers (new codes)</span>:</label>
+                    <input type="number" id="flyer-generate-count" min="1" step="1" placeholder="e.g., 1000" />
+                    <small data-translate="flyerGenerateCountHelp">If set, creates that many new promo codes and generates flyers for them.</small>
+                </div>
                 <div class="form-group" style="min-width: 180px;">
                     <label for="flyer-font-size"><span data-translate="fontSize">Font Size</span>:</label>
                     <input type="number" id="flyer-font-size" min="18" max="120" step="1" value="36" />
@@ -760,6 +765,11 @@
                     <label for="flyer-text-prefix"><span data-translate="flyerText">Flyer Text</span>:</label>
                     <input type="text" id="flyer-text-prefix" value="Промо код: " />
                     <small data-translate="flyerTextHelp">Text shown before the code (supports Bulgarian if your browser has the font).</small>
+                </div>
+                <div class="form-group" style="min-width: 220px;">
+                    <label for="flyer-code-prefix"><span data-translate="flyerCodePrefix">Promo code prefix</span>:</label>
+                    <input type="text" id="flyer-code-prefix" value="FLY" />
+                    <small data-translate="flyerCodePrefixHelp">Used when generating new promo codes (letters/numbers only).</small>
                 </div>
                 <div class="form-group" style="display:flex; align-items:flex-end; gap:10px;">
                     <button type="button" class="btn btn-primary" id="generate-flyers-btn">

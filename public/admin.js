@@ -262,10 +262,14 @@ const translations = {
         baseImageHelp: 'Upload the background image used for every flyer.',
         limitOptional: 'Limit (optional)',
         limitHelp: 'Leave empty to generate for all eligible codes.',
+        flyerGenerateCount: 'Generate flyers (new codes)',
+        flyerGenerateCountHelp: 'If set, creates that many new promo codes and generates flyers for them.',
         fontSize: 'Font size',
         fontSizeHelp: 'Used for the promo code text overlay.',
         flyerText: 'Flyer text',
         flyerTextHelp: 'Text shown before the code.',
+        flyerCodePrefix: 'Promo code prefix',
+        flyerCodePrefixHelp: 'Used when generating new promo codes (letters/numbers only).',
         downloadFlyersZip: 'Download Flyers ZIP',
         eligibleCodes: 'eligible',
         printedCodes: 'printed',
@@ -274,6 +278,7 @@ const translations = {
         flyerGenerating: 'Generating flyers…',
         flyerGeneratedZip: 'Flyers ZIP generated.',
         flyerMarkPrintedFailed: 'Flyers downloaded, but failed to mark as printed. Please refresh and try again.',
+        flyerBulkNeedsDiscount: 'Please set a discount (1-100%) in the Promo Codes form above before generating new flyers.',
         promoCode: 'Promo Code',
         promoCodePlaceholder: 'e.g., SUMMER25',
         promoUppercaseHelp: 'Code will be converted to uppercase automatically',
@@ -675,10 +680,14 @@ const translations = {
         baseImageHelp: 'Качете фон снимка, която ще се използва за всеки флаер.',
         limitOptional: 'Лимит (по избор)',
         limitHelp: 'Оставете празно за всички налични кодове.',
+        flyerGenerateCount: 'Генерирай флаери (нови кодове)',
+        flyerGenerateCountHelp: 'Ако зададете брой, ще създаде толкова нови промо кодове и ще генерира флаери за тях.',
         fontSize: 'Размер на шрифта',
         fontSizeHelp: 'Използва се за текста с промо кода.',
         flyerText: 'Текст на флаера',
         flyerTextHelp: 'Текст преди кода.',
+        flyerCodePrefix: 'Префикс на промо кода',
+        flyerCodePrefixHelp: 'Използва се при генериране на нови промо кодове (само букви/цифри).',
         downloadFlyersZip: 'Свали ZIP с флаери',
         eligibleCodes: 'за печат',
         printedCodes: 'отпечатани',
@@ -687,6 +696,7 @@ const translations = {
         flyerGenerating: 'Генериране на флаери…',
         flyerGeneratedZip: 'ZIP файлът с флаери е готов.',
         flyerMarkPrintedFailed: 'ZIP е свален, но не успях да маркирам кодовете като отпечатани. Моля опитайте пак.',
+        flyerBulkNeedsDiscount: 'Моля задайте отстъпка (1–100%) в формата за промо кодове по-горе, преди да генерирате нови флаери.',
         promoCode: 'Промо код',
         promoCodePlaceholder: 'напр. SUMMER25',
         promoUppercaseHelp: 'Кодът се конвертира автоматично в главни букви',
@@ -4063,12 +4073,38 @@ async function markPromoCodesFlyerPrinted(ids) {
     return res.json().catch(() => ({}));
 }
 
+async function bulkCreatePromoCodes(count, { discount, category, isActive, codePrefix }) {
+    const token = getAdminToken();
+    const res = await fetch(`${API_URL}/promo-codes/bulk`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+            count,
+            discount,
+            category,
+            isActive,
+            codePrefix
+        })
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Failed' }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const payload = await res.json().catch(() => ({}));
+    return Array.isArray(payload.promoCodes) ? payload.promoCodes : [];
+}
+
 async function generatePromoFlyersZip() {
     const btn = document.getElementById('generate-flyers-btn');
     const fileInput = document.getElementById('flyer-base-image');
     const limitInput = document.getElementById('flyer-limit');
+    const generateCountInput = document.getElementById('flyer-generate-count');
     const fontSizeInput = document.getElementById('flyer-font-size');
     const prefixInput = document.getElementById('flyer-text-prefix');
+    const codePrefixInput = document.getElementById('flyer-code-prefix');
 
     if (!fileInput || !btn) return;
     if (!window.JSZip) {
@@ -4082,7 +4118,42 @@ async function generatePromoFlyersZip() {
         return;
     }
 
+    // Optional: generate N new promo codes first (for large flyer batches, e.g. 1000)
+    const rawGenCount = (generateCountInput && generateCountInput.value || '').toString().trim();
+    const generateCount = rawGenCount ? Math.max(1, parseInt(rawGenCount, 10) || 0) : 0;
+
     let eligible = getEligiblePromoCodesForFlyers();
+
+    if (generateCount > 0) {
+        const discount = parseFloat(document.getElementById('promo-code-discount')?.value);
+        const category = (document.getElementById('promo-code-category')?.value || 'all').toString();
+        const isActive = (document.getElementById('promo-code-active')?.value || 'true') === 'true';
+        const codePrefix = (codePrefixInput && codePrefixInput.value !== undefined)
+            ? String(codePrefixInput.value)
+            : 'FLY';
+
+        if (!discount || discount < 1 || discount > 100) {
+            alert(t('flyerBulkNeedsDiscount', 'Please set a discount (1-100%) in the Promo Codes form above before generating new flyers.'));
+            return;
+        }
+
+        btn.disabled = true;
+        setFlyerProgress(`${t('flyerGenerating', 'Generating flyers…')} (0/${generateCount})`, true);
+
+        try {
+            const created = await bulkCreatePromoCodes(generateCount, { discount, category, isActive, codePrefix });
+            promoCodes = (promoCodes || []).concat(created);
+            eligible = created.filter(pc => !!pc && pc.isActive && !pc.flyerGenerated);
+            try { updatePromoFlyersStats(); } catch (e) {}
+        } catch (e) {
+            console.error('Bulk create promo codes failed:', e);
+            alert(e.message || 'Failed to generate promo codes');
+            return;
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
     const rawLimit = (limitInput && limitInput.value || '').toString().trim();
     const limit = rawLimit ? Math.max(1, parseInt(rawLimit, 10) || 0) : null;
     if (limit) eligible = eligible.slice(0, limit);

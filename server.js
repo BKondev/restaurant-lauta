@@ -383,6 +383,46 @@ function boricaGetMerchGmtEuropeSofia(date = new Date()) {
     return formatOffsetMinutesToGmtString(localOffsetMinutes);
 }
 
+function parseHHMMToMinutes(hhmm) {
+    if (!hhmm || typeof hhmm !== 'string') return null;
+    const m = hhmm.trim().match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    if (!m) return null;
+    return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function getMinutesOfDayInTimeZone(timeZone, date = new Date()) {
+    try {
+        const dtf = new Intl.DateTimeFormat('en-US', {
+            timeZone,
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+        const parts = dtf.formatToParts(date);
+        const map = {};
+        for (const p of parts) {
+            if (p.type !== 'literal') map[p.type] = p.value;
+        }
+        const hh = Number(map.hour);
+        const mm = Number(map.minute);
+        if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+        return hh * 60 + mm;
+    } catch (e) {
+        return null;
+    }
+}
+
+function isMinutesWithinWindow(nowMinutes, openMinutes, closeMinutes) {
+    if (!Number.isFinite(nowMinutes) || !Number.isFinite(openMinutes) || !Number.isFinite(closeMinutes)) return false;
+    if (openMinutes === closeMinutes) return false;
+    // Normal window (same day)
+    if (closeMinutes > openMinutes) {
+        return nowMinutes >= openMinutes && nowMinutes < closeMinutes;
+    }
+    // Overnight window (e.g. 18:00 - 02:00)
+    return nowMinutes >= openMinutes || nowMinutes < closeMinutes;
+}
+
 function boricaSignHexSha256(symbol, privateKeyPem) {
     const sig = crypto.sign('RSA-SHA256', Buffer.from(String(symbol || ''), 'utf8'), privateKeyPem);
     return sig.toString('hex').toUpperCase();
@@ -2424,6 +2464,69 @@ app.post(API_PREFIX + '/promo-codes', requireAuth, (req, res) => {
     }
 });
 
+// Bulk create promo codes
+// Body: { count: number, discount: number, category: string, isActive?: boolean, codePrefix?: string }
+app.post(API_PREFIX + '/promo-codes/bulk', requireAuth, (req, res) => {
+    const db = readDatabase();
+    if (!db.promoCodes) db.promoCodes = [];
+
+    const countRaw = parseInt(req.body?.count, 10);
+    const count = Number.isFinite(countRaw) ? Math.max(1, Math.min(5000, countRaw)) : 0;
+    const discount = parseFloat(req.body?.discount);
+    const category = (req.body?.category || 'all').toString();
+    const isActive = req.body?.isActive !== undefined ? !!req.body.isActive : true;
+
+    let prefix = (req.body?.codePrefix || 'FLY').toString().trim().toUpperCase();
+    prefix = prefix.replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    if (!prefix) prefix = 'FLY';
+
+    if (!count) {
+        return res.status(400).json({ error: 'count (1-5000) required' });
+    }
+
+    if (!discount || discount < 1 || discount > 100) {
+        return res.status(400).json({ error: 'discount (1-100) required' });
+    }
+
+    const existing = new Set((db.promoCodes || []).map(pc => (pc?.code || '').toString().toUpperCase()));
+    const nowIso = new Date().toISOString();
+    const created = [];
+
+    for (let i = 0; i < count; i++) {
+        let code = '';
+        for (let tries = 0; tries < 25; tries++) {
+            const suffix = crypto.randomBytes(3).toString('hex').toUpperCase();
+            const candidate = `${prefix}${suffix}`;
+            if (!existing.has(candidate)) {
+                code = candidate;
+                existing.add(candidate);
+                break;
+            }
+        }
+        if (!code) {
+            return res.status(500).json({ error: 'Failed to generate unique promo codes' });
+        }
+
+        const newPromoCode = {
+            id: Date.now() + i,
+            code,
+            category,
+            discount: parseFloat(discount),
+            isActive,
+            createdAt: nowIso
+        };
+
+        db.promoCodes.push(newPromoCode);
+        created.push(newPromoCode);
+    }
+
+    if (writeDatabase(db)) {
+        return res.status(201).json({ success: true, createdCount: created.length, promoCodes: created });
+    }
+
+    res.status(500).json({ error: 'Failed to save promo codes' });
+});
+
 // Update promo code
 app.put(API_PREFIX + '/promo-codes/:id', requireAuth, (req, res) => {
     const db = readDatabase();
@@ -2957,6 +3060,66 @@ app.post(API_PREFIX + '/orders', (req, res) => {
                 error: 'Restaurant temporarily closed',
                 message: 'Restaurant is temporarily closed and not accepting orders'
             });
+        }
+
+        // Working hours enforcement (server-side)
+        // - Manual close: always blocks.
+        // - Outside hours: blocks "order now"; scheduled orders are allowed only if orderSettings.allowOrderLater is enabled and scheduledTime is within the allowed window.
+        const orderSettings = data.orderSettings || {};
+        const allowOrderLater = orderSettings.allowOrderLater !== false;
+
+        const workingHours = data.workingHours || { openingTime: '09:00', closingTime: '22:00' };
+        const deliveryHours = (data.deliverySettings && data.deliverySettings.deliveryHours) || { openingTime: '11:00', closingTime: '21:30' };
+
+        const whOpen = parseHHMMToMinutes(workingHours.openingTime) ?? (9 * 60);
+        const whClose = parseHHMMToMinutes(workingHours.closingTime) ?? (22 * 60);
+        const dhOpen = parseHHMMToMinutes(deliveryHours.openingTime) ?? (11 * 60);
+        const dhClose = parseHHMMToMinutes(deliveryHours.closingTime) ?? (21 * 60 + 30);
+
+        const nowMinutes = getMinutesOfDayInTimeZone('Europe/Sofia') ?? (new Date().getHours() * 60 + new Date().getMinutes());
+
+        const requiresDeliveryWindow = (deliveryMethod || deliveryType) === 'delivery';
+        const withinWorking = isMinutesWithinWindow(nowMinutes, whOpen, whClose);
+        const withinDelivery = !requiresDeliveryWindow || isMinutesWithinWindow(nowMinutes, dhOpen, dhClose);
+
+        const normalizedOrderTime = (orderTime === 'now' || orderTime === 'later') ? orderTime : 'now';
+        const scheduledMinutes = parseHHMMToMinutes(typeof scheduledTime === 'string' ? scheduledTime : '');
+
+        if (normalizedOrderTime === 'later') {
+            if (!allowOrderLater) {
+                return res.status(423).json({
+                    error: 'Ordering later is disabled',
+                    message: 'Scheduling orders for later is disabled by the restaurant'
+                });
+            }
+            if (!Number.isFinite(scheduledMinutes)) {
+                return res.status(400).json({
+                    error: 'Invalid scheduledTime',
+                    message: 'scheduledTime must be in HH:MM format'
+                });
+            }
+
+            const withinScheduledWorking = isMinutesWithinWindow(scheduledMinutes, whOpen, whClose);
+            const withinScheduledDelivery = !requiresDeliveryWindow || isMinutesWithinWindow(scheduledMinutes, dhOpen, dhClose);
+            if (!withinScheduledWorking || !withinScheduledDelivery) {
+                return res.status(423).json({
+                    error: 'Restaurant closed',
+                    reason: 'hours',
+                    message: 'The restaurant is not accepting orders at the selected time',
+                    workingHours,
+                    deliveryHours
+                });
+            }
+        } else {
+            if (!withinWorking || !withinDelivery) {
+                return res.status(423).json({
+                    error: 'Restaurant closed',
+                    reason: 'hours',
+                    message: 'The restaurant is not accepting orders right now',
+                    workingHours,
+                    deliveryHours
+                });
+            }
         }
 
         // Single-restaurant fallback for restaurantId

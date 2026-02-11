@@ -1223,23 +1223,77 @@ function showWorkingHoursModal() {
     const restaurant = getRestaurantWindowMinutes();
     const open = minutesToHHMM(restaurant.open);
     const close = minutesToHHMM(restaurant.close);
-    showUxModal({
-        title: currentLanguage === 'bg' ? 'Работно време' : 'Working Hours',
-        message: currentLanguage === 'bg'
-            ? `Поръчки се приемат между <b>${open}</b> и <b>${close}</b>.`
-            : `Orders are accepted between <b>${open}</b> and <b>${close}</b>.`,
-        primaryText: currentLanguage === 'bg' ? 'Разбрах' : 'OK'
+    showRestaurantClosedModal({
+        type: 'hours',
+        context: 'restaurant',
+        open,
+        close
     });
 }
 
 function showDeliveryHoursModal() {
     const delivery = getDeliveryWindowMinutes();
+    showRestaurantClosedModal({
+        type: 'hours',
+        context: 'delivery',
+        open: minutesToHHMM(delivery.open),
+        close: minutesToHHMM(delivery.close)
+    });
+}
+
+function showRestaurantClosedModal({ type, context, open, close }) {
+    const isBg = currentLanguage === 'bg';
+    const isManual = type === 'manual';
+    const contextTitle = isManual
+        ? (isBg ? 'Временно затворено' : 'Temporarily closed')
+        : (context === 'delivery'
+            ? (isBg ? 'Извън часовете за доставка' : 'Outside delivery hours')
+            : (isBg ? 'Извън работно време' : 'Outside working hours'));
+
+    const heroIcon = isManual
+        ? '<i class="fas fa-store-slash"></i>'
+        : (context === 'delivery' ? '<i class="fas fa-truck"></i>' : '<i class="fas fa-clock"></i>');
+
+    const heroTitle = isManual
+        ? (isBg ? 'В момента не приемаме поръчки' : 'We are not accepting orders right now')
+        : (isBg ? 'В момента сме затворени' : 'We are currently closed');
+
+    const heroSub = isManual
+        ? (isBg ? 'Заповядайте по-късно.' : 'Please come again later.')
+        : (isBg
+            ? 'Можете да поръчате в работното време по-долу.'
+            : 'You can order during the hours shown below.');
+
+    const hoursHtml = (!isManual && open && close)
+        ? `
+            <div class="ux-hours-row">
+                <div class="ux-hour-chip"><i class="fas fa-door-open"></i> ${isBg ? 'От' : 'From'} <span>${escapeHtml(open)}</span></div>
+                <div class="ux-hour-chip"><i class="fas fa-door-closed"></i> ${isBg ? 'До' : 'To'} <span>${escapeHtml(close)}</span></div>
+            </div>
+            <div class="ux-tip">
+                <i class="fas fa-info-circle"></i>
+                ${isBg
+                    ? 'Когато отворим, ще можете да завършите поръчката за минути.'
+                    : 'When we open, you’ll be able to complete your order in minutes.'}
+            </div>
+        `
+        : '';
+
+    const msg = `
+        <div class="ux-closed-hero ${isManual ? 'manual' : ''}">
+            <div class="ux-closed-icon">${heroIcon}</div>
+            <div class="ux-closed-text">
+                <div class="ux-closed-title">${heroTitle}</div>
+                <div class="ux-closed-sub">${heroSub}</div>
+            </div>
+        </div>
+        ${hoursHtml}
+    `;
+
     showUxModal({
-        title: currentLanguage === 'bg' ? 'Доставка' : 'Delivery',
-        message: currentLanguage === 'bg'
-            ? `Доставки се извършват между <b>${minutesToHHMM(delivery.open)}</b> и <b>${minutesToHHMM(delivery.close)}</b>.`
-            : `Delivery is available between <b>${minutesToHHMM(delivery.open)}</b> and <b>${minutesToHHMM(delivery.close)}</b>.`,
-        primaryText: currentLanguage === 'bg' ? 'Разбрах' : 'OK'
+        title: contextTitle,
+        message: msg,
+        primaryText: isBg ? 'Разбрах' : 'OK'
     });
 }
 
@@ -1544,13 +1598,7 @@ function removePromoCode() {
 // Place order
 async function placeOrder() {
     if (orderSettings?.temporarilyClosed === true) {
-        showUxModal({
-            title: currentLanguage === 'bg' ? 'Временно затворено' : 'Temporarily closed',
-            message: currentLanguage === 'bg'
-                ? 'Ресторантът е временно затворен и не приема поръчки в момента.'
-                : 'The restaurant is temporarily closed and is not accepting orders right now.',
-            primaryText: 'OK'
-        });
+        showRestaurantClosedModal({ type: 'manual' });
         return;
     }
 
@@ -1656,7 +1704,30 @@ async function placeOrder() {
         });
 
         if (!response.ok) {
-            throw new Error('Failed to place order');
+            const errPayload = await response.json().catch(() => ({}));
+            if (response.status === 423) {
+                const errText = (errPayload && (errPayload.error || errPayload.message)) ? String(errPayload.error || errPayload.message) : '';
+                if (/temporarily\s+closed/i.test(errText)) {
+                    showRestaurantClosedModal({ type: 'manual' });
+                    return;
+                }
+                // Hours-based closure
+                if ((errPayload && errPayload.reason) === 'hours' || /closed/i.test(errText)) {
+                    // Prefer delivery hours modal if delivery is selected and we are outside delivery window.
+                    if (deliveryMethod === 'delivery') {
+                        const nowMins = nowMinutesOfDay();
+                        const delivery = getDeliveryWindowMinutes();
+                        const outOfDelivery = nowMins < delivery.open || nowMins >= delivery.close;
+                        if (outOfDelivery) {
+                            showDeliveryHoursModal();
+                            return;
+                        }
+                    }
+                    showWorkingHoursModal();
+                    return;
+                }
+            }
+            throw new Error(errText || 'Failed to place order');
         }
 
         const result = await response.json();
