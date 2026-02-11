@@ -895,6 +895,20 @@ function switchLanguage(lang) {
 // Initialize language on page load
 document.addEventListener('DOMContentLoaded', () => {
     switchLanguage(currentLanguage);
+
+    // Mobile: start with the menu collapsed (dropdown opens via the header toggle)
+    try {
+        const nav = document.getElementById('adminNav');
+        const icon = document.getElementById('toggleIcon');
+        const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+        if (nav && isMobile) {
+            nav.classList.add('collapsed');
+            if (icon) {
+                icon.classList.add('fa-bars');
+                icon.classList.remove('fa-times');
+            }
+        }
+    } catch (e) {}
 });
 
 // Tab Switching Function
@@ -930,6 +944,20 @@ function switchTab(tabName) {
 
     // Save current tab to localStorage
     localStorage.setItem('adminCurrentTab', normalizedTab);
+
+    // Mobile: close the dropdown after selecting a tab
+    try {
+        const nav = document.getElementById('adminNav');
+        const icon = document.getElementById('toggleIcon');
+        const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+        if (nav && isMobile) {
+            nav.classList.add('collapsed');
+            if (icon) {
+                icon.classList.add('fa-bars');
+                icon.classList.remove('fa-times');
+            }
+        }
+    } catch (e) {}
 }
 
 function getAdminHeaderHeight() {
@@ -974,12 +1002,17 @@ function getAdminBasePath() {
 
 // Toggle Navigation Visibility (repurposed to the drawer)
 function toggleNav() {
-    const overlay = document.getElementById('adminDrawerOverlay');
-    if (!overlay) return;
-    if (overlay.classList.contains('open')) {
-        closeAdminDrawer();
-    } else {
-        openAdminDrawer();
+    const nav = document.getElementById('adminNav');
+    if (!nav) return;
+    const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+    if (!isMobile) return;
+    nav.classList.toggle('collapsed');
+
+    const icon = document.getElementById('toggleIcon');
+    if (icon) {
+        const isCollapsed = nav.classList.contains('collapsed');
+        icon.classList.toggle('fa-bars', isCollapsed);
+        icon.classList.toggle('fa-times', !isCollapsed);
     }
 }
 

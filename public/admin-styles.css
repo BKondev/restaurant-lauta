@@ -19,7 +19,8 @@ body.admin-drawer-open {
 
 /* Fixed Header */
 .admin-header {
-    display: flex;
+    /* Desktop: sidebar is always visible, so hide the mobile header */
+    display: none;
     position: sticky;
     top: 0;
     z-index: 1000;
@@ -243,21 +244,23 @@ body.admin-drawer-open {
 .admin-tabs-nav .admin-actions {
     margin-top: auto;
     display: flex;
-    flex-direction: column;
-    gap: 0;
+    flex-direction: row;
+    gap: 8px;
     border-left: none;
     border-top: 1px solid #f0f0f0;
     padding: 8px;
 }
 
 .admin-tabs-nav .admin-action-btn {
-    width: 100%;
+    width: auto;
+    min-width: 0;
     border-radius: 12px;
     padding: 12px 12px;
     color: #111827;
     background: #f9fafb;
     border: 1px solid #eef2f7;
-    justify-content: flex-start;
+    flex: 1;
+    justify-content: center;
 }
 
 .admin-tabs-nav .admin-action-btn:hover {
@@ -772,154 +775,74 @@ body.admin-drawer-open {
 
 /* Mobile Responsive for Tabs */
 @media (max-width: 768px) {
-    /* Keep sidebar always visible; narrow it on small screens */
-    .admin-tabs-nav {
-        --admin-sidebar-width: 92px;
+    /* Mobile: use the old top dropdown menu controlled by #adminNav.collapsed */
+    .admin-container {
+        flex-direction: column;
     }
 
-    .admin-tabs-nav .tab-text,
-    .admin-tabs-nav .action-text,
-    .admin-tabs-nav .admin-logo span {
-        display: none;
-    }
-
-    .admin-tabs-nav .admin-logo {
-        justify-content: center;
-        padding: 14px 10px;
-    }
-
-    .admin-tabs-nav .admin-lang-switcher {
-        justify-content: center;
-        padding: 10px 10px 12px;
-    }
-
-    .admin-tabs-nav .admin-tab-btn,
-    .admin-tabs-nav .admin-action-btn {
-        justify-content: center;
-        gap: 0;
-    }
-
-    /* Hide header/drawer UI if still present */
-    .admin-header,
-    .nav-toggle-btn,
-    .admin-drawer-overlay {
-        display: none !important;
-    }
-    
-    .admin-header .admin-logo {
+    .admin-header {
         display: flex;
-        align-items: center;
-        gap: 6px;
-        color: white;
-        font-size: 14px;
-        font-weight: 600;
-        flex: 1;
-        white-space: nowrap;
     }
-    
-    .admin-header .admin-logo i {
-        font-size: 16px;
-    }
-    
-    .admin-header .admin-actions {
-        display: flex;
-        gap: 10px;
-        margin-left: auto;
-        margin-right: 12px;
-    }
-    
-    .admin-header .admin-action-btn {
-        background: rgba(255, 255, 255, 0.2);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        color: white;
-        padding: 10px 16px;
-        border-radius: 12px;
-        cursor: pointer;
-        transition: all 0.3s;
-        font-size: 14px;
-        text-decoration: none;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    
-    .admin-header .admin-action-btn:hover {
-        background: rgba(255, 255, 255, 0.3);
-        transform: translateY(-2px);
-    }
-    
+
     .admin-header .nav-toggle-btn {
-        position: relative;
-        width: auto;
-        height: auto;
-        padding: 10px 16px;
-        background: rgba(255, 255, 255, 0.2);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 12px;
-        color: white;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.3s ease;
-        flex-shrink: 0;
+        width: 44px;
+        height: 44px;
+        margin-left: 12px;
     }
-    
-    .admin-header .nav-toggle-btn:hover {
-        background: rgba(255, 255, 255, 0.3);
-        transform: translateY(-2px);
-    }
-    
+
     .admin-header .nav-toggle-btn i {
-        font-size: 16px;
+        font-size: 18px;
     }
-    
-    /* Tabs positioned below header on mobile */
+
     .admin-tabs-nav {
-        top: 77px;
-        padding: 0;
-        gap: 0;
-        flex-wrap: wrap;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 0;
-        max-height: 500px;
+        --admin-sidebar-width: 100%;
+
+        position: relative;
+        top: 0;
+        width: 100%;
+        height: auto;
+        max-height: 520px;
         opacity: 1;
         overflow: hidden;
         transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+
+        border-right: none;
+        border-bottom: 1px solid rgba(255,255,255,0.12);
+        box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     }
-    
-    .admin-tabs-nav .admin-logo,
-    .admin-tabs-nav .admin-actions {
-        display: none;
-    }
-    
+
     .admin-tabs-nav.collapsed {
         max-height: 0;
         padding: 0;
         opacity: 0;
+        pointer-events: none;
     }
-    
-    .admin-action-btn {
-        background: rgba(255, 255, 255, 0.2);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        color: white;
-        padding: 10px 16px;
-        border-radius: 12px;
-        cursor: pointer;
-        transition: all 0.3s;
-        font-size: 14px;
-        text-decoration: none;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+
+    /* Avoid duplicate branding: header already shows the title */
+    .admin-tabs-nav .admin-logo {
+        display: none;
     }
-    
-    .admin-action-btn:hover {
-        background: rgba(255, 255, 255, 0.3);
-        transform: translateY(-2px);
+
+    .admin-tabs-nav .admin-lang-switcher {
+        padding: 10px 12px;
+        justify-content: flex-start;
     }
-    
-    .admin-tab-btn {
+
+    .admin-tabs-nav .admin-lang-switcher .lang-btn {
+        border-color: rgba(255,255,255,0.35);
+        background: rgba(255,255,255,0.16);
+        color: #fff;
+    }
+
+    .admin-tabs-nav .admin-lang-switcher .lang-btn.active {
+        background: #fff;
+        color: #667eea;
+        border-color: rgba(255,255,255,0.65);
+        box-shadow: none;
+    }
+
+    .admin-tabs-nav .admin-tab-btn {
         flex: 1 1 calc(50% - 2px);
         min-width: calc(50% - 2px);
         padding: 14px 8px;
@@ -928,23 +851,39 @@ body.admin-drawer-open {
         gap: 6px;
         border-radius: 0;
         border-bottom: none;
-        border-right: 1px solid rgba(255,255,255,0.1);
+        border-right: 1px solid rgba(255,255,255,0.14);
+        border-left: none;
+        color: rgba(255,255,255,0.95);
+        background: transparent;
     }
-    
-    .admin-tab-btn:nth-child(even) {
+
+    .admin-tabs-nav .admin-tab-btn:nth-child(even) {
         border-right: none;
     }
-    
-    .admin-tab-btn .tab-text {
-        font-size: 11px;
+
+    .admin-tabs-nav .admin-tab-btn:hover {
+        background: rgba(255,255,255,0.10);
+        color: #fff;
     }
-    
-    .admin-tab-btn i {
+
+    .admin-tabs-nav .admin-tab-btn.active {
+        background: rgba(255,255,255,0.16);
+        border-left: none;
+        box-shadow: none;
+    }
+
+    .admin-tabs-nav .admin-tab-btn i {
         font-size: 20px;
         margin: 0;
     }
-    
-    .tab-badge {
+
+    .admin-tabs-nav .admin-tab-btn .tab-text {
+        font-size: 11px;
+        display: block;
+        font-weight: 800;
+    }
+
+    .admin-tabs-nav .tab-badge {
         position: absolute;
         top: 8px;
         right: 8px;
@@ -952,11 +891,22 @@ body.admin-drawer-open {
         font-size: 10px;
     }
 
-    .admin-actions {
+    .admin-tabs-nav .admin-actions {
         width: 100%;
-        margin-left: 0;
-        border-left: none;
-        border-top: 1px solid rgba(255,255,255,0.2);
+        margin-top: 0;
+        padding: 10px 12px 12px;
+        border-top: 1px solid rgba(255,255,255,0.18);
+        gap: 10px;
+    }
+
+    .admin-tabs-nav .admin-action-btn {
+        background: rgba(255,255,255,0.16);
+        border: 1px solid rgba(255,255,255,0.28);
+        color: #fff;
+    }
+
+    .admin-tabs-nav .admin-action-btn:hover {
+        background: rgba(255,255,255,0.24);
     }
 
     .admin-tabs-content {

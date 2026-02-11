@@ -16,6 +16,17 @@
 </head>
 <body>
     <div class="admin-container">
+        <!-- Mobile Header (shows on small screens) -->
+        <div class="admin-header" id="adminMobileHeader">
+            <div class="admin-logo">
+                <i class="fas fa-utensils"></i>
+                <span data-translate="adminPanel">Admin Panel</span>
+            </div>
+            <button class="nav-toggle-btn" onclick="toggleNav()" title="Menu" aria-label="Menu">
+                <i class="fas fa-bars" id="toggleIcon"></i>
+            </button>
+        </div>
+
         <!-- Tab Navigation -->
         <div class="admin-tabs-nav" id="adminNav">
             
