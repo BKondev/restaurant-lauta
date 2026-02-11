@@ -16,55 +16,8 @@
 </head>
 <body>
     <div class="admin-container">
-        <!-- Fixed Header -->
-        <div class="admin-header">
-            <div class="admin-logo">
-                <i class="fas fa-utensils"></i>
-                <span data-translate="adminPanel">Admin Panel</span>
-            </div>
-            <button class="nav-toggle-btn" onclick="toggleNav()" title="Menu">
-                <i class="fas fa-bars" id="toggleIcon"></i>
-            </button>
-        </div>
-
-        <!-- Drawer Navigation (Slide 1: Menu, Slide 2: Reserved) -->
-        <div class="admin-drawer-overlay" id="adminDrawerOverlay" aria-hidden="true">
-            <aside class="admin-drawer" id="adminDrawer" role="dialog" aria-modal="true" aria-label="Admin Menu">
-                <div class="admin-drawer-top">
-                    <div class="admin-drawer-brand">
-                        <i class="fas fa-utensils"></i>
-                        <span data-translate="adminPanel">Admin Panel</span>
-                    </div>
-                    <button type="button" class="admin-drawer-close" onclick="closeAdminDrawer()" aria-label="Close menu">
-                        <i class="fas fa-xmark"></i>
-                    </button>
-                </div>
-
-                <div class="admin-drawer-body">
-                    <div class="admin-drawer-lang" aria-label="Language">
-                        <button class="lang-btn" data-lang="en" onclick="switchLanguage('en')" title="English">EN</button>
-                        <button class="lang-btn" data-lang="bg" onclick="switchLanguage('bg')" title="Български">BG</button>
-                    </div>
-
-                    <div class="admin-drawer-section-title">Menu</div>
-                    <div id="adminDrawerMenu" class="admin-drawer-menu" aria-label="Admin menu items"></div>
-                </div>
-
-                <div class="admin-drawer-footer">
-                    <a href="../" id="adminDrawerBackLink" class="admin-drawer-action" data-translate-title="backToMenu" title="Back to Menu">
-                        <i class="fas fa-home"></i>
-                        <span data-translate="menu">Menu</span>
-                    </a>
-                    <button type="button" onclick="logout()" class="admin-drawer-action danger" data-translate-title="logout" title="Logout">
-                        <i class="fas fa-sign-out-alt"></i>
-                        <span data-translate="logout">Logout</span>
-                    </button>
-                </div>
-            </aside>
-        </div>
-        
         <!-- Tab Navigation -->
-        <div class="admin-tabs-nav collapsed" id="adminNav">
+        <div class="admin-tabs-nav" id="adminNav">
             
             <div class="admin-logo">
                 <i class="fas fa-utensils"></i>
