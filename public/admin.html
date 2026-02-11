@@ -522,6 +522,24 @@
                 </div>
             </div>
 
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="allow-order-later" checked>
+                        <span data-translate="allowOrderLater">Allow "Later" scheduling in checkout</span>
+                    </label>
+                    <small style="color: #666; display: block; margin-top: 5px;" data-translate="allowOrderLaterHelp">When disabled, customers can only order "Now".</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="restaurant-temporarily-closed">
+                        <span data-translate="restaurantTemporarilyClosed">Temporarily close restaurant</span>
+                    </label>
+                    <small style="color: #666; display: block; margin-top: 5px;" data-translate="restaurantTemporarilyClosedHelp">Shows a warning banner and blocks checkout ordering.</small>
+                </div>
+            </div>
+
             <button onclick="updateOrderSettings()" class="btn btn-primary">
                 <i class="fas fa-save"></i> <span data-translate="saveOrderSettings">Save Order Settings</span>
             </button>
@@ -637,6 +655,18 @@
             </div>
             
             <div id="delivery-settings-section">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="delivery-opening-time"><span data-translate="deliveryOpeningTime">Delivery Opening Time</span>:</label>
+                        <input type="time" id="delivery-opening-time" value="11:00">
+                        <small data-translate="deliveryOpeningTimeHelp">Earliest time delivery orders can be scheduled.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="delivery-closing-time"><span data-translate="deliveryClosingTime">Delivery Closing Time</span>:</label>
+                        <input type="time" id="delivery-closing-time" value="21:30">
+                        <small data-translate="deliveryClosingTimeHelp">Latest time delivery orders can be scheduled.</small>
+                    </div>
+                </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label class="checkbox-label">

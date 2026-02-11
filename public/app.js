@@ -30,6 +30,7 @@ let currencySettings = {};
 let siteSettings = null;
 let siteSearchMode = 'names_and_descriptions';
 let siteWorkingHours = null;
+let siteOrderSettings = null;
 
 let modalProductId = null;
 let modalQuantity = 1;
@@ -208,6 +209,90 @@ function switchLanguage(lang) {
     // Re-render to apply translations
     renderCategories();
     renderProducts();
+
+    renderRestaurantStatusBanner();
+}
+
+function parseHHMMToMinutes(hhmm) {
+    if (!hhmm || typeof hhmm !== 'string') return null;
+    const match = hhmm.trim().match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    if (!match) return null;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    return hours * 60 + minutes;
+}
+
+function minutesToHHMM(totalMinutes) {
+    const normalized = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+    const hours = String(Math.floor(normalized / 60)).padStart(2, '0');
+    const minutes = String(normalized % 60).padStart(2, '0');
+    return `${hours}:${minutes}`;
+}
+
+function nowMinutesOfDay() {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+}
+
+function getStorefrontClosedReason() {
+    if (siteOrderSettings?.temporarilyClosed === true) {
+        return { type: 'manual' };
+    }
+
+    const open = parseHHMMToMinutes(siteWorkingHours?.openingTime) ?? (9 * 60);
+    const close = parseHHMMToMinutes(siteWorkingHours?.closingTime) ?? (22 * 60);
+    const now = nowMinutesOfDay();
+
+    if (now < open) {
+        return { type: 'hours', opensAt: minutesToHHMM(open), tomorrow: false };
+    }
+
+    if (now >= close) {
+        return { type: 'hours', opensAt: minutesToHHMM(open), tomorrow: true };
+    }
+
+    return null;
+}
+
+function renderRestaurantStatusBanner() {
+    const topBar = document.getElementById('top-bar') || document.querySelector('.top-bar');
+    if (!topBar) return;
+
+    const reason = getStorefrontClosedReason();
+    const existing = document.getElementById('restaurant-status-banner');
+    if (!reason) {
+        if (existing) existing.remove();
+        return;
+    }
+
+    const banner = existing || document.createElement('div');
+    banner.id = 'restaurant-status-banner';
+    banner.className = 'restaurant-status-banner';
+
+    const msg = (() => {
+        if (reason.type === 'manual') {
+            return currentLanguage === 'bg'
+                ? 'Ресторантът е временно затворен.'
+                : 'The restaurant is temporarily closed.';
+        }
+
+        const timeText = reason.opensAt;
+        if (currentLanguage === 'bg') {
+            return reason.tomorrow
+                ? `Ресторантът в момента не работи. Отваряме утре в ${timeText}.`
+                : `Ресторантът в момента не работи. Отваряме в ${timeText}.`;
+        }
+
+        return reason.tomorrow
+            ? `The restaurant is currently closed. Opens tomorrow at ${timeText}.`
+            : `The restaurant is currently closed. Opens at ${timeText}.`;
+    })();
+
+    banner.textContent = msg;
+
+    if (!existing) {
+        topBar.insertAdjacentElement('afterend', banner);
+    }
 }
 
 // Initialize language on page load
@@ -277,12 +362,24 @@ async function loadData() {
         } catch (e) {
             // ignore
         }
+
+        // Load order settings (for temporarily closed banner)
+        try {
+            const orderRes = await fetch(`${API_URL}/settings/order`);
+            if (orderRes.ok) {
+                siteOrderSettings = await orderRes.json();
+            }
+        } catch (e) {
+            // ignore
+        }
         
         // Initialize language
         initLanguage();
 
         renderSiteMap();
         renderSiteFooter();
+
+        renderRestaurantStatusBanner();
         
         extractCategories();
         renderCategories();

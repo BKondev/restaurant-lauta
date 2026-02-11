@@ -16,6 +16,10 @@ const translations = {
         manageProducts: 'Manage Products',
         restaurantSettings: 'Restaurant Settings',
         deliverySettings: 'Delivery Settings',
+        deliveryOpeningTime: 'Delivery Opening Time',
+        deliveryOpeningTimeHelp: 'Earliest time delivery orders can be scheduled.',
+        deliveryClosingTime: 'Delivery Closing Time',
+        deliveryClosingTimeHelp: 'Latest time delivery orders can be scheduled.',
         searchProduct: 'Search product...',
         addProduct: 'Add Product',
         selected: 'selected',
@@ -127,6 +131,10 @@ const translations = {
         orderSettings: 'Order Settings',
         minimumOrderAmountEur: 'Minimum Order Amount (EUR)',
         minOrderHint: 'Set to 0 to disable minimum order requirement',
+        allowOrderLater: 'Allow "Later" scheduling in checkout',
+        allowOrderLaterHelp: 'When disabled, customers can only order "Now".',
+        restaurantTemporarilyClosed: 'Temporarily close restaurant',
+        restaurantTemporarilyClosedHelp: 'Shows a warning banner and blocks checkout ordering.',
         saveOrderSettings: 'Save Order Settings',
 
         openingTimeHelp: 'Restaurant opening time for pickup orders',
@@ -421,6 +429,10 @@ const translations = {
         manageProducts: 'Управление на Продукти',
         restaurantSettings: 'Настройки на Ресторант',
         deliverySettings: 'Настройки за Доставка',
+        deliveryOpeningTime: 'Начален час за доставка',
+        deliveryOpeningTimeHelp: 'Най-ранният час за доставка (за планиране).',
+        deliveryClosingTime: 'Краен час за доставка',
+        deliveryClosingTimeHelp: 'Най-късният час за доставка (за планиране).',
         searchProduct: 'Търси продукт...',
         addProduct: 'Добави Продукт',
         selected: 'избрани',
@@ -532,6 +544,10 @@ const translations = {
         orderSettings: 'Настройки на Поръчки',
         minimumOrderAmountEur: 'Минимална сума на поръчка (EUR)',
         minOrderHint: 'Задайте 0, за да изключите минималната сума',
+        allowOrderLater: 'Разреши опцията "По-късно" в поръчката',
+        allowOrderLaterHelp: 'Когато е изключено, клиентите могат да поръчват само "Сега".',
+        restaurantTemporarilyClosed: 'Временно затвори ресторанта',
+        restaurantTemporarilyClosedHelp: 'Показва предупреждение и блокира поръчките.',
         saveOrderSettings: 'Запази Настройките на Поръчки',
 
         openingTimeHelp: 'Час на отваряне за поръчки с вземане',
@@ -3203,7 +3219,9 @@ async function updateOrderSettings() {
     }
 
     const orderSettings = {
-        minimumOrderAmount: parseFloat(document.getElementById('minimum-order-amount').value) || 0
+        minimumOrderAmount: parseFloat(document.getElementById('minimum-order-amount').value) || 0,
+        allowOrderLater: document.getElementById('allow-order-later')?.checked !== false,
+        temporarilyClosed: document.getElementById('restaurant-temporarily-closed')?.checked === true
     };
 
     try {
@@ -3233,6 +3251,12 @@ async function loadOrderSettings() {
         const settings = await response.json();
         
         document.getElementById('minimum-order-amount').value = settings.minimumOrderAmount || 0;
+
+        const allowLaterEl = document.getElementById('allow-order-later');
+        if (allowLaterEl) allowLaterEl.checked = settings.allowOrderLater !== false;
+
+        const tempClosedEl = document.getElementById('restaurant-temporarily-closed');
+        if (tempClosedEl) tempClosedEl.checked = settings.temporarilyClosed === true;
     } catch (error) {
         console.error('Error loading order settings:', error);
     }
@@ -6146,6 +6170,12 @@ async function loadDeliverySettings() {
         const response = await fetch(`${API_URL}/settings/delivery`);
         if (response.ok) {
             const settings = await response.json();
+
+            const deliveryHours = settings.deliveryHours || {};
+            const deliveryOpening = document.getElementById('delivery-opening-time');
+            const deliveryClosing = document.getElementById('delivery-closing-time');
+            if (deliveryOpening) deliveryOpening.value = deliveryHours.openingTime || '11:00';
+            if (deliveryClosing) deliveryClosing.value = deliveryHours.closingTime || '21:30';
             
             document.getElementById('delivery-enabled').checked = settings.deliveryEnabled !== false;
             document.getElementById('free-delivery-enabled').checked = settings.freeDeliveryEnabled || false;
@@ -6209,6 +6239,11 @@ async function saveDeliverySettings() {
     const freeDeliveryAmount = parseFloat(document.getElementById('free-delivery-amount').value) || 50;
     const deliveryFee = parseFloat(document.getElementById('delivery-fee').value) || 5;
 
+    const deliveryHours = {
+        openingTime: document.getElementById('delivery-opening-time')?.value || '11:00',
+        closingTime: document.getElementById('delivery-closing-time')?.value || '21:30'
+    };
+
     try {
         // Get current settings to preserve cityPrices
         const currentResponse = await fetch(`${API_URL}/settings/delivery`);
@@ -6219,6 +6254,7 @@ async function saveDeliverySettings() {
             freeDeliveryEnabled,
             freeDeliveryAmount,
             deliveryFee,
+            deliveryHours,
             cityPrices: currentSettings.cityPrices || {}
         };
 

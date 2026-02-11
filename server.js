@@ -2073,11 +2073,15 @@ app.put(API_PREFIX + '/settings/currency', requireAuth, (req, res) => {
 // Get delivery settings
 app.get(API_PREFIX + '/settings/delivery', (req, res) => {
     const db = readDatabase();
-    res.json(db.deliverySettings || {
+    const defaults = {
         deliveryEnabled: true,
         freeDeliveryEnabled: false,
         freeDeliveryAmount: 50,
         deliveryFee: 5,
+        deliveryHours: {
+            openingTime: '11:00',
+            closingTime: '21:30'
+        },
         cityPrices: {
             'Пловдив': 5,
             'София': 5,
@@ -2088,7 +2092,20 @@ app.get(API_PREFIX + '/settings/delivery', (req, res) => {
             'Плевен': 5,
             'Сливен': 5
         }
-    });
+    };
+
+    const raw = db.deliverySettings || {};
+    const merged = {
+        ...defaults,
+        ...raw,
+        deliveryHours: {
+            ...defaults.deliveryHours,
+            ...(raw.deliveryHours || {})
+        },
+        cityPrices: raw.cityPrices || defaults.cityPrices
+    };
+
+    res.json(merged);
 });
 
 // Update delivery settings
@@ -2106,8 +2123,15 @@ app.put(API_PREFIX + '/settings/delivery', requireAuth, (req, res) => {
 // Get order settings
 app.get(API_PREFIX + '/settings/order', (req, res) => {
     const db = readDatabase();
-    res.json(db.orderSettings || {
-        minimumOrderAmount: 0
+    const defaults = {
+        minimumOrderAmount: 0,
+        allowOrderLater: true,
+        temporarilyClosed: false
+    };
+
+    res.json({
+        ...defaults,
+        ...(db.orderSettings || {})
     });
 });
 
@@ -2115,7 +2139,9 @@ app.get(API_PREFIX + '/settings/order', (req, res) => {
 app.put(API_PREFIX + '/settings/order', requireAuth, (req, res) => {
     const db = readDatabase();
     db.orderSettings = {
-        minimumOrderAmount: parseFloat(req.body.minimumOrderAmount) || 0
+        minimumOrderAmount: parseFloat(req.body.minimumOrderAmount) || 0,
+        allowOrderLater: req.body.allowOrderLater !== false,
+        temporarilyClosed: req.body.temporarilyClosed === true
     };
     
     if (writeDatabase(db)) {
@@ -2924,6 +2950,13 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         const data = readDatabase();
         if (!data.orders) {
             data.orders = [];
+        }
+
+        if (data.orderSettings?.temporarilyClosed === true) {
+            return res.status(423).json({
+                error: 'Restaurant temporarily closed',
+                message: 'Restaurant is temporarily closed and not accepting orders'
+            });
         }
 
         // Single-restaurant fallback for restaurantId

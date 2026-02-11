@@ -67,6 +67,15 @@ body {
     backdrop-filter: blur(10px);
 }
 
+.restaurant-status-banner {
+    background: #b00020;
+    color: #fff;
+    padding: 10px 16px;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 0.2px;
+}
+
 .top-bar .container {
     min-height: 49px;
 }

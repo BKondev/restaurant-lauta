@@ -37,13 +37,19 @@ let deliverySettings = {
     freeDeliveryEnabled: false,
     freeDeliveryAmount: 50,
     deliveryFee: 5,
+    deliveryHours: {
+        openingTime: '11:00',
+        closingTime: '21:30'
+    },
     cityPrices: {} // Object with city names as keys and delivery fees as values
 };
 let currencySettings = {
     showBgnPrices: false
 };
 let orderSettings = {
-    minimumOrderAmount: 0
+    minimumOrderAmount: 0,
+    allowOrderLater: true,
+    temporarilyClosed: false
 };
 let workingHours = {
     openingTime: '09:00',
@@ -77,6 +83,17 @@ function resetCheckoutFlowBelowDeliveryMethod() {
     selectedTimeSlot = '';
     paymentMethod = cardPaymentsEnabled ? '' : 'cash';
     currentStep = 1;
+}
+
+function enforceOrderSettingsConstraints() {
+    // If scheduling is disabled, force "now" (and clear any scheduled selection).
+    if (orderSettings?.allowOrderLater === false) {
+        if (orderTime === 'later') {
+            orderTime = 'now';
+        }
+        scheduledTime = '';
+        selectedTimeSlot = '';
+    }
 }
 
 function ensureValidPaymentMethod() {
@@ -365,6 +382,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadPaymentsConfig();
     await loadSiteSettings();
     loadCheckoutState();
+    enforceOrderSettingsConstraints();
     loadCart();
     // If checkout state restored a delivery order, compute the correct delivery fee right away.
     if (deliveryMethod === 'delivery') {
@@ -376,6 +394,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupBackArrowMobile();
     updateLanguage();
     renderCheckout();
+    renderRestaurantStatusBanner();
 
     renderSiteMap();
     renderSiteFooter();
@@ -816,6 +835,8 @@ function updateLanguage() {
 
     // Keep language UI (buttons/dropdown) consistent with currentLanguage.
     syncLanguageUi();
+
+    renderRestaurantStatusBanner();
 }
 
 // Render checkout page
@@ -847,6 +868,8 @@ function renderCheckout() {
 
     const deliverySection = document.createElement('div');
     deliverySection.className = 'delivery-options';
+
+    const allowLater = orderSettings?.allowOrderLater !== false;
     deliverySection.innerHTML = `
         <h2 class="section-title"><span class="step-number-badge">1</span> ${currentLanguage === 'bg' ? 'Метод за доставка' : 'Delivery Method'}</h2>
         <div class="delivery-method">
@@ -872,12 +895,14 @@ function renderCheckout() {
                 <div class="delivery-option-title">${currentLanguage === 'bg' ? 'Сега' : 'Now'}</div>
                 <div class="delivery-option-desc">${currentLanguage === 'bg' ? 'Възможно най-скоро' : 'As soon as possible'}</div>
             </label>
+            ${allowLater ? `
             <label class="delivery-option ${orderTime === 'later' ? 'active' : ''}" onclick="selectOrderTime('later')">
                 <input type="radio" name="orderTime" value="later" ${orderTime === 'later' ? 'checked' : ''}>
                 <div class="delivery-option-icon"><i class="fas fa-clock"></i></div>
                 <div class="delivery-option-title">${currentLanguage === 'bg' ? 'По-късно' : 'Later'}</div>
                 <div class="delivery-option-desc">${currentLanguage === 'bg' ? 'Изберете час' : 'Choose time'}</div>
             </label>
+            ` : ''}
         </div>
         <div id="time-picker-section" style="display: ${orderTime === 'later' ? 'block' : 'none'}; margin-top: 20px;">
             <div class="form-group">
@@ -1018,7 +1043,7 @@ function renderCheckout() {
             ${currentLanguage === 'bg' ? 'Текуща сума' : 'Current amount'}: ${formatPrice(total)}
         </div>
         ` : ''}
-        <button class="checkout-btn" onclick="placeOrder()" ${orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount ? 'disabled' : ''}>
+        <button class="checkout-btn" onclick="placeOrder()" ${(orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'disabled' : ''}>
             ${deliveryMethod === 'delivery' 
                 ? (currentLanguage === 'bg' ? 'Поръчай с Доставка' : 'Order with Delivery')
                 : (currentLanguage === 'bg' ? 'Поръчай и Вземи' : 'Order and Pickup')}
@@ -1035,6 +1060,7 @@ function renderCheckout() {
     applyCheckoutStepVisibility();
     setupFormListeners();
     initializeTimePicker();
+    renderRestaurantStatusBanner();
 }
 
 function parseHHMMToMinutes(hhmm) {
@@ -1069,17 +1095,22 @@ function getRestaurantWindowMinutes() {
 }
 
 function getDeliveryWindowMinutes() {
-    // Delivery cutoff: last delivery orders must be placed by 21:30
-    // so they can arrive by 22:00.
-    return { open: 11 * 60, close: (21 * 60) + 30 };
+    const open = parseHHMMToMinutes(deliverySettings?.deliveryHours?.openingTime) ?? (11 * 60);
+    const close = parseHHMMToMinutes(deliverySettings?.deliveryHours?.closingTime) ?? ((21 * 60) + 30);
+    return { open, close };
 }
 
 function getMinAllowedTimeMinutes() {
     const window = getAllowedWindowMinutes();
-    const minCandidate = roundUpTo15Minutes(nowMinutesOfDay() + 60);
-    // Delivery starts at 11:00 and needs 60 minutes prep+delivery => earliest 12:00.
-    const deliveryEarliest = deliveryMethod === 'delivery' ? (12 * 60) : 0;
-    return Math.max(window.open, minCandidate, deliveryEarliest);
+    const now = nowMinutesOfDay();
+    const minFromNow = roundUpTo15Minutes(now + 60);
+
+    // If we're before opening, earliest selectable is (opening + 60 minutes).
+    const minFromOpening = now < window.open
+        ? roundUpTo15Minutes(window.open + 60)
+        : window.open;
+
+    return Math.max(minFromNow, minFromOpening);
 }
 
 function getAllowedWindowMinutes() {
@@ -1090,6 +1121,66 @@ function getAllowedWindowMinutes() {
         open: Math.max(restaurant.open, delivery.open),
         close: Math.min(restaurant.close, delivery.close)
     };
+}
+
+function getRestaurantClosedReason() {
+    if (orderSettings?.temporarilyClosed === true) {
+        return { type: 'manual' };
+    }
+
+    const window = (deliveryMethod === 'delivery') ? getAllowedWindowMinutes() : getRestaurantWindowMinutes();
+    const now = nowMinutesOfDay();
+
+    if (now < window.open) {
+        return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: false };
+    }
+
+    if (now >= window.close) {
+        return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: true };
+    }
+
+    return null;
+}
+
+function renderRestaurantStatusBanner() {
+    const topBar = document.getElementById('top-bar') || document.querySelector('.top-bar');
+    if (!topBar) return;
+
+    const reason = getRestaurantClosedReason();
+    const existing = document.getElementById('restaurant-status-banner');
+    if (!reason) {
+        if (existing) existing.remove();
+        return;
+    }
+
+    const banner = existing || document.createElement('div');
+    banner.id = 'restaurant-status-banner';
+    banner.className = 'restaurant-status-banner';
+
+    const msg = (() => {
+        if (reason.type === 'manual') {
+            return currentLanguage === 'bg'
+                ? 'Ресторантът е временно затворен.'
+                : 'The restaurant is temporarily closed.';
+        }
+
+        const timeText = reason.opensAt;
+        if (currentLanguage === 'bg') {
+            return reason.tomorrow
+                ? `Ресторантът в момента не работи. Отваряме утре в ${timeText}.`
+                : `Ресторантът в момента не работи. Отваряме в ${timeText}.`;
+        }
+
+        return reason.tomorrow
+            ? `The restaurant is currently closed. Opens tomorrow at ${timeText}.`
+            : `The restaurant is currently closed. Opens at ${timeText}.`;
+    })();
+
+    banner.textContent = msg;
+
+    if (!existing) {
+        topBar.insertAdjacentElement('afterend', banner);
+    }
 }
 
 function showUxModal({ title, message, primaryText }) {
@@ -1452,6 +1543,17 @@ function removePromoCode() {
 
 // Place order
 async function placeOrder() {
+    if (orderSettings?.temporarilyClosed === true) {
+        showUxModal({
+            title: currentLanguage === 'bg' ? 'Временно затворено' : 'Temporarily closed',
+            message: currentLanguage === 'bg'
+                ? 'Ресторантът е временно затворен и не приема поръчки в момента.'
+                : 'The restaurant is temporarily closed and is not accepting orders right now.',
+            primaryText: 'OK'
+        });
+        return;
+    }
+
     // Basic flow validation (prevents stale step states when user goes back)
     if (!deliveryMethod) {
         alert(currentLanguage === 'bg' ? 'Моля, изберете метод на доставка' : 'Please select a delivery method');
@@ -1466,14 +1568,14 @@ async function placeOrder() {
     if (orderTime === 'now') {
         const restaurant = getRestaurantWindowMinutes();
         const nowMins = nowMinutesOfDay();
-        if (nowMins < restaurant.open || nowMins > restaurant.close) {
+        if (nowMins < restaurant.open || nowMins >= restaurant.close) {
             showWorkingHoursModal();
             return;
         }
 
         if (deliveryMethod === 'delivery') {
             const delivery = getDeliveryWindowMinutes();
-            if (nowMins < delivery.open || nowMins > delivery.close) {
+            if (nowMins < delivery.open || nowMins >= delivery.close) {
                 showDeliveryHoursModal();
                 return;
             }
@@ -1488,8 +1590,7 @@ async function placeOrder() {
         }
 
         const window = getAllowedWindowMinutes();
-        const minCandidate = roundUpTo15Minutes(nowMinutesOfDay() + 60);
-        const minAllowed = Math.max(window.open, minCandidate);
+        const minAllowed = getMinAllowedTimeMinutes();
         if (picked < minAllowed || picked > window.close) {
             // Force a valid time and explain constraints.
             initializeTimePicker();
@@ -1598,6 +1699,8 @@ function selectDeliveryMethod(method) {
     if (prev && (prev !== method || hasProgressBelow)) {
         resetCheckoutFlowBelowDeliveryMethod();
     }
+
+    enforceOrderSettingsConstraints();
     
     renderCheckout();
     applyCheckoutStepVisibility();
@@ -1614,6 +1717,11 @@ function selectDeliveryMethod(method) {
 // Select order time
 function selectOrderTime(time) {
     captureCustomerInfoFromDom();
+
+    if (time === 'later' && orderSettings?.allowOrderLater === false) {
+        return;
+    }
+
     orderTime = time;
     
     // Update active state on order time buttons
@@ -1749,7 +1857,13 @@ function updateOrderSummary() {
             <span>${currentLanguage === 'bg' ? `Минимална сума за поръчка: ${formatPrice(orderSettings.minimumOrderAmount)}` : `Minimum order amount: ${formatPrice(orderSettings.minimumOrderAmount)}`}</span>
         </div>
         ` : ''}
-        <button class="checkout-btn" onclick="placeOrder()" ${orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount ? 'disabled' : ''}>
+        ${orderSettings?.temporarilyClosed === true ? `
+        <div class="order-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span>${currentLanguage === 'bg' ? 'Ресторантът е временно затворен.' : 'The restaurant is temporarily closed.'}</span>
+        </div>
+        ` : ''}
+        <button class="checkout-btn" onclick="placeOrder()" ${(orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'disabled' : ''}>
             <i class="fas fa-${deliveryMethod === 'delivery' ? 'truck' : 'shopping-bag'}"></i>
             <span data-translate="placeOrder">${deliveryMethod === 'delivery' ? translations[currentLanguage].orderDelivery : translations[currentLanguage].orderPickup}</span>
         </button>
