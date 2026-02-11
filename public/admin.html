@@ -735,6 +735,59 @@
                 </table>
             </div>
         </div>
+
+        <!-- Promo Flyers Section -->
+        <div class="admin-section" id="promo-flyers-section">
+            <h2><i class="fas fa-image"></i> <span data-translate="promoFlyers">Promo Flyers</span></h2>
+            <p style="color:#666; margin-top:-6px; margin-bottom:14px;">
+                <span data-translate="promoFlyersHelp">Generate a ZIP of flyer images for all active promo codes that haven't been printed yet.</span>
+            </p>
+
+            <div class="form-row">
+                <div class="form-group" style="min-width: 260px;">
+                    <label for="flyer-base-image"><span data-translate="baseImage">Base Image</span>:</label>
+                    <input type="file" id="flyer-base-image" accept="image/*" />
+                    <small data-translate="baseImageHelp">Upload the background image used for every flyer.</small>
+                </div>
+                <div class="form-group" style="min-width: 180px;">
+                    <label for="flyer-limit"><span data-translate="limitOptional">Limit (optional)</span>:</label>
+                    <input type="number" id="flyer-limit" min="1" step="1" placeholder="e.g., 50" />
+                    <small data-translate="limitHelp">Leave empty to generate for all eligible codes.</small>
+                </div>
+                <div class="form-group" style="min-width: 180px;">
+                    <label for="flyer-font-size"><span data-translate="fontSize">Font Size</span>:</label>
+                    <input type="number" id="flyer-font-size" min="18" max="120" step="1" value="36" />
+                    <small data-translate="fontSizeHelp">Used for the promo code text overlay.</small>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="min-width: 280px;">
+                    <label for="flyer-text-prefix"><span data-translate="flyerText">Flyer Text</span>:</label>
+                    <input type="text" id="flyer-text-prefix" value="Промо код: " />
+                    <small data-translate="flyerTextHelp">Text shown before the code (supports Bulgarian if your browser has the font).</small>
+                </div>
+                <div class="form-group" style="display:flex; align-items:flex-end; gap:10px;">
+                    <button type="button" class="btn btn-primary" id="generate-flyers-btn">
+                        <i class="fas fa-file-zipper"></i> <span data-translate="downloadFlyersZip">Download Flyers ZIP</span>
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="refresh-flyers-stats-btn" title="Refresh">
+                        <i class="fas fa-rotate"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="flyer-stats" style="display:flex; gap:12px; flex-wrap:wrap; margin-top: 8px;">
+                <div style="background:#f8f9fa; border:1px solid #eee; padding:10px 12px; border-radius:10px;">
+                    <strong id="flyer-eligible-count">0</strong> <span data-translate="eligibleCodes">eligible</span>
+                </div>
+                <div style="background:#f8f9fa; border:1px solid #eee; padding:10px 12px; border-radius:10px;">
+                    <strong id="flyer-printed-count">0</strong> <span data-translate="printedCodes">printed</span>
+                </div>
+            </div>
+
+            <div id="flyer-progress" style="display:none; margin-top:12px; padding:10px 12px; background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; border-radius:10px;"></div>
+        </div>
         </div><!-- End Promo Codes Tab -->
 
         <!-- Combos Tab -->
@@ -1307,6 +1360,7 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="vendor/jszip.min.js"></script>
     <script src="admin.js"></script>
 </body>
 </html>

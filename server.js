@@ -82,9 +82,12 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 if (BASE_PATH) {
     app.use(BASE_PATH, express.static(path.join(__dirname, 'public')));
     app.use(BASE_PATH + '/uploads', express.static(path.join(__dirname, 'uploads')));
+    // Minimal vendor assets (served from node_modules)
+    app.use(BASE_PATH + '/vendor', express.static(path.join(__dirname, 'node_modules', 'jszip', 'dist')));
 } else {
     app.use(express.static(path.join(__dirname, 'public')));
     app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+    app.use('/vendor', express.static(path.join(__dirname, 'node_modules', 'jszip', 'dist')));
 }
 
 // Vendor static assets (keeps the UI working without external CDNs; helps E2E tests)
@@ -2437,6 +2440,34 @@ app.delete(API_PREFIX + '/promo-codes/:id', requireAuth, (req, res) => {
     } else {
         res.status(404).json({ error: 'Promo code not found' });
     }
+});
+
+// Mark promo codes as printed on flyers
+// Body: { ids: number[] }
+app.post(API_PREFIX + '/promo-codes/flyers/mark-printed', requireAuth, (req, res) => {
+    const ids = (req.body && Array.isArray(req.body.ids)) ? req.body.ids : null;
+    if (!ids || !ids.length) {
+        return res.status(400).json({ error: 'ids (array) required' });
+    }
+
+    const db = readDatabase();
+    const now = new Date().toISOString();
+    let updated = 0;
+
+    db.promoCodes = (db.promoCodes || []).map(pc => {
+        if (ids.includes(pc.id)) {
+            updated++;
+            return {
+                ...pc,
+                flyerGenerated: true,
+                flyerGeneratedAt: now
+            };
+        }
+        return pc;
+    });
+
+    writeDatabase(db);
+    res.json({ success: true, updated });
 });
 
 // ==================== CATEGORY MANAGEMENT ====================

@@ -248,6 +248,24 @@ const translations = {
         resetAllData: 'Reset All Data',
 
         promoCodesManagement: 'Promo Codes Management',
+        promoFlyers: 'Promo Flyers',
+        promoFlyersHelp: "Generate a ZIP of flyer images for all active promo codes that haven't been printed yet.",
+        baseImage: 'Base image',
+        baseImageHelp: 'Upload the background image used for every flyer.',
+        limitOptional: 'Limit (optional)',
+        limitHelp: 'Leave empty to generate for all eligible codes.',
+        fontSize: 'Font size',
+        fontSizeHelp: 'Used for the promo code text overlay.',
+        flyerText: 'Flyer text',
+        flyerTextHelp: 'Text shown before the code.',
+        downloadFlyersZip: 'Download Flyers ZIP',
+        eligibleCodes: 'eligible',
+        printedCodes: 'printed',
+        flyerSelectBaseImage: 'Please select a base image first.',
+        flyerNoEligibleCodes: 'No eligible promo codes (active + not printed).',
+        flyerGenerating: 'Generating flyers…',
+        flyerGeneratedZip: 'Flyers ZIP generated.',
+        flyerMarkPrintedFailed: 'Flyers downloaded, but failed to mark as printed. Please refresh and try again.',
         promoCode: 'Promo Code',
         promoCodePlaceholder: 'e.g., SUMMER25',
         promoUppercaseHelp: 'Code will be converted to uppercase automatically',
@@ -635,6 +653,24 @@ const translations = {
         resetAllData: 'Нулирай всички данни',
 
         promoCodesManagement: 'Управление на промо кодове',
+        promoFlyers: 'Промо флаери',
+        promoFlyersHelp: 'Генерирай ZIP с флаери за всички активни промо кодове, които още не са отпечатани.',
+        baseImage: 'Базова снимка',
+        baseImageHelp: 'Качете фон снимка, която ще се използва за всеки флаер.',
+        limitOptional: 'Лимит (по избор)',
+        limitHelp: 'Оставете празно за всички налични кодове.',
+        fontSize: 'Размер на шрифта',
+        fontSizeHelp: 'Използва се за текста с промо кода.',
+        flyerText: 'Текст на флаера',
+        flyerTextHelp: 'Текст преди кода.',
+        downloadFlyersZip: 'Свали ZIP с флаери',
+        eligibleCodes: 'за печат',
+        printedCodes: 'отпечатани',
+        flyerSelectBaseImage: 'Моля изберете базова снимка.',
+        flyerNoEligibleCodes: 'Няма налични промо кодове за печат (активни + неотпечатани).',
+        flyerGenerating: 'Генериране на флаери…',
+        flyerGeneratedZip: 'ZIP файлът с флаери е готов.',
+        flyerMarkPrintedFailed: 'ZIP е свален, но не успях да маркирам кодовете като отпечатани. Моля опитайте пак.',
         promoCode: 'Промо код',
         promoCodePlaceholder: 'напр. SUMMER25',
         promoUppercaseHelp: 'Кодът се конвертира автоматично в главни букви',
@@ -1271,6 +1307,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setupForm();
         setupColorInputs();
         loadPromoCodes();
+        initPromoFlyersUI();
         initManageControls();
         loadCategories();
         initProductSearchUI();
@@ -3884,6 +3921,226 @@ function renderPromoCodes() {
             </td>
         </tr>
     `).join('');
+
+    try { updatePromoFlyersStats(); } catch (e) {}
+}
+
+// ========== PROMO FLYERS (CLIENT-SIDE GENERATOR) ==========
+
+function getEligiblePromoCodesForFlyers() {
+    return (promoCodes || []).filter(pc => !!pc && pc.isActive && !pc.flyerGenerated);
+}
+
+function updatePromoFlyersStats() {
+    const eligibleEl = document.getElementById('flyer-eligible-count');
+    const printedEl = document.getElementById('flyer-printed-count');
+    if (!eligibleEl || !printedEl) return;
+
+    const eligible = getEligiblePromoCodesForFlyers();
+    const printed = (promoCodes || []).filter(pc => !!pc && !!pc.flyerGenerated);
+
+    eligibleEl.textContent = String(eligible.length);
+    printedEl.textContent = String(printed.length);
+}
+
+function setFlyerProgress(text, show = true) {
+    const box = document.getElementById('flyer-progress');
+    if (!box) return;
+    box.style.display = show ? 'block' : 'none';
+    if (show) box.textContent = text || '';
+}
+
+async function loadImageFromFile(file) {
+    const url = URL.createObjectURL(file);
+    try {
+        const img = new Image();
+        img.decoding = 'async';
+        img.crossOrigin = 'anonymous';
+        await new Promise((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = url;
+        });
+        return img;
+    } finally {
+        try { URL.revokeObjectURL(url); } catch (e) {}
+    }
+}
+
+function canvasToJpegBlob(canvas, quality = 0.88) {
+    return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+            if (!blob) return reject(new Error('Failed to export image'));
+            resolve(blob);
+        }, 'image/jpeg', quality);
+    });
+}
+
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => {
+        try { URL.revokeObjectURL(url); } catch (e) {}
+    }, 3000);
+}
+
+async function markPromoCodesFlyerPrinted(ids) {
+    const token = getAdminToken();
+    const res = await fetch(`${API_URL}/promo-codes/flyers/mark-printed`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ ids })
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Failed' }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json().catch(() => ({}));
+}
+
+async function generatePromoFlyersZip() {
+    const btn = document.getElementById('generate-flyers-btn');
+    const fileInput = document.getElementById('flyer-base-image');
+    const limitInput = document.getElementById('flyer-limit');
+    const fontSizeInput = document.getElementById('flyer-font-size');
+    const prefixInput = document.getElementById('flyer-text-prefix');
+
+    if (!fileInput || !btn) return;
+    if (!window.JSZip) {
+        alert('JSZip is missing. Please refresh the page.');
+        return;
+    }
+
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) {
+        alert(t('flyerSelectBaseImage', 'Please select a base image first.'));
+        return;
+    }
+
+    let eligible = getEligiblePromoCodesForFlyers();
+    const rawLimit = (limitInput && limitInput.value || '').toString().trim();
+    const limit = rawLimit ? Math.max(1, parseInt(rawLimit, 10) || 0) : null;
+    if (limit) eligible = eligible.slice(0, limit);
+
+    if (!eligible.length) {
+        alert(t('flyerNoEligibleCodes', 'No eligible promo codes (active + not printed).'));
+        return;
+    }
+
+    const fontSize = Math.max(18, Math.min(120, parseInt((fontSizeInput && fontSizeInput.value) || '36', 10) || 36));
+    const prefix = (prefixInput && prefixInput.value !== undefined) ? String(prefixInput.value) : 'Промо код: ';
+
+    btn.disabled = true;
+    setFlyerProgress(t('flyerGenerating', 'Generating flyers…'), true);
+
+    try {
+        const baseImg = await loadImageFromFile(file);
+        const w = baseImg.naturalWidth || baseImg.width;
+        const h = baseImg.naturalHeight || baseImg.height;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Canvas not supported');
+
+        const zip = new window.JSZip();
+        const idsToMark = [];
+
+        const padding = 20;
+        const boxHeight = fontSize + padding * 2;
+        const boxY = Math.max(0, h - 40 - boxHeight);
+
+        for (let i = 0; i < eligible.length; i++) {
+            const pc = eligible[i];
+            const code = (pc && pc.code) ? String(pc.code) : '';
+            if (!code) continue;
+
+            setFlyerProgress(`${t('flyerGenerating', 'Generating flyers…')} (${i + 1}/${eligible.length})`, true);
+
+            // Base image
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, w, h);
+            ctx.filter = 'none';
+            ctx.globalAlpha = 1;
+            ctx.drawImage(baseImg, 0, 0, w, h);
+
+            // Blur strip (clip + redraw with blur)
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, boxY, w, boxHeight);
+            ctx.clip();
+            ctx.filter = 'blur(8px)';
+            ctx.drawImage(baseImg, 0, 0, w, h);
+            ctx.restore();
+
+            // Red translucent bar
+            ctx.filter = 'none';
+            ctx.fillStyle = 'rgba(200, 0, 0, 0.68)';
+            ctx.fillRect(0, boxY, w, boxHeight);
+
+            // Text
+            const text = `${prefix}${code}`;
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+            ctx.textBaseline = 'alphabetic';
+            const metrics = ctx.measureText(text);
+            const textWidth = metrics.width || 0;
+            const x = Math.max(0, Math.floor((w - textWidth) / 2));
+            const y = Math.floor(boxY + padding + fontSize);
+            ctx.fillText(text, x, y);
+
+            const blob = await canvasToJpegBlob(canvas, 0.88);
+            zip.file(`flyer_${i + 1}.jpg`, blob);
+            idsToMark.push(pc.id);
+        }
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        downloadBlob(zipBlob, `flyers_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.zip`);
+        setFlyerProgress(t('flyerGeneratedZip', 'Flyers ZIP generated.'), true);
+
+        // Mark as printed on server
+        try {
+            await markPromoCodesFlyerPrinted(idsToMark);
+            await loadPromoCodes();
+        } catch (e) {
+            console.error('Failed to mark printed:', e);
+            alert(t('flyerMarkPrintedFailed', 'Flyers downloaded, but failed to mark as printed. Please refresh and try again.'));
+        }
+    } finally {
+        btn.disabled = false;
+        setTimeout(() => setFlyerProgress('', false), 2500);
+    }
+}
+
+function initPromoFlyersUI() {
+    const btn = document.getElementById('generate-flyers-btn');
+    const refreshBtn = document.getElementById('refresh-flyers-stats-btn');
+    if (btn && !btn.dataset.bound) {
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+            generatePromoFlyersZip().catch(err => {
+                console.error(err);
+                setFlyerProgress('', false);
+                alert(err.message || 'Failed to generate flyers');
+            });
+        });
+    }
+    if (refreshBtn && !refreshBtn.dataset.bound) {
+        refreshBtn.dataset.bound = '1';
+        refreshBtn.addEventListener('click', () => {
+            try { updatePromoFlyersStats(); } catch (e) {}
+        });
+    }
+    try { updatePromoFlyersStats(); } catch (e) {}
 }
 
 // Save promo code (add or edit)

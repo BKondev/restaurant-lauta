@@ -151,6 +151,7 @@ body.admin-drawer-open {
     align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
+    margin-left: auto;
 }
 
 .admin-header .nav-toggle-btn:hover {
@@ -457,7 +458,8 @@ body.admin-drawer-open {
     height: 40px;
     background: rgba(255, 255, 255, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.3);
-    margin: 0 auto;
+    margin-left: auto;
+    margin-right: 0;
 }
 
 .admin-header .nav-toggle-btn:hover {
