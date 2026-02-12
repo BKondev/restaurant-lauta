@@ -94,7 +94,7 @@ function updateDesktopSidebarClamp() {
     const clampTarget = getDesktopSidebarClampTarget();
     if (!clampTarget) return;
 
-    const baseTop = Math.ceil(getTopBarHeight() + getStickyGap());
+    const baseTop = 51;
     sidebar.style.top = `${baseTop}px`;
     sidebar.style.transform = '';
 

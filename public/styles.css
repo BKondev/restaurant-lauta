@@ -779,8 +779,8 @@ body {
     box-shadow: 2px 0 10px rgba(0,0,0,0.04);
     align-self: flex-start;
     position: sticky;
-    top: calc(var(--top-bar-height) + var(--sticky-gap));
-    height: calc(100vh - (var(--top-bar-height) + var(--sticky-gap)));
+    top: 51px;
+    height: calc(100vh - 51px);
     overflow-y: auto;
     border-radius: 0 16px 16px 0;
 }
