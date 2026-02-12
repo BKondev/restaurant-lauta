@@ -746,6 +746,34 @@ function renderCategories() {
         btn.onclick = () => filterByCategory(category);
         nav.appendChild(btn);
     });
+
+    // On mobile, keep the active category centered in the horizontal scroller.
+    requestAnimationFrame(() => centerActiveCategoryButton({ behavior: 'smooth' }));
+}
+
+function centerActiveCategoryButton({ behavior = 'auto' } = {}) {
+    const nav = document.getElementById('categories-nav');
+    if (!nav) return;
+
+    const isMobile = !!(window?.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+    if (!isMobile) return;
+
+    // Only attempt to scroll if the nav is horizontally scrollable.
+    if (nav.scrollWidth <= nav.clientWidth + 4) return;
+
+    const active = nav.querySelector('.category-btn.active');
+    if (!active) return;
+
+    const targetCenter = active.offsetLeft + (active.offsetWidth / 2);
+    const targetLeft = targetCenter - (nav.clientWidth / 2);
+    const maxLeft = Math.max(0, nav.scrollWidth - nav.clientWidth);
+    const clamped = Math.min(Math.max(0, targetLeft), maxLeft);
+
+    try {
+        nav.scrollTo({ left: clamped, behavior });
+    } catch (e) {
+        nav.scrollLeft = clamped;
+    }
 }
 
 // Filter products by category
@@ -767,6 +795,9 @@ function filterByCategory(category, options = {}) {
     renderCategories();
     renderProducts();
     scheduleDesktopSidebarClampUpdate();
+
+    // Keep restaurant status visible/updated even when switching categories.
+    renderRestaurantStatusBanner();
 
     if (scrollToTop) {
         // Run after render so layout is stable and scroll target is correct.
@@ -1300,25 +1331,6 @@ document.addEventListener('DOMContentLoaded', function() {
     initTopBarHeightSync();
     initDesktopSidebarClamp();
     loadData();
-
-    // Block checkout navigation while closed (manual or outside hours)
-    const cartBtn = document.getElementById('cart-button');
-    if (cartBtn) {
-        cartBtn.addEventListener('click', (e) => {
-            const reason = getStorefrontClosedReason();
-            if (!reason) return;
-            e.preventDefault();
-            const open = (siteWorkingHours?.openingTime || '').toString().trim();
-            const close = (siteWorkingHours?.closingTime || '').toString().trim();
-            showRestaurantClosedModal({
-                type: reason.type,
-                open: open || undefined,
-                close: close || undefined,
-                opensAt: reason.opensAt,
-                tomorrow: !!reason.tomorrow
-            });
-        });
-    }
     
     // Search input
     const searchInput = document.getElementById('search-input');

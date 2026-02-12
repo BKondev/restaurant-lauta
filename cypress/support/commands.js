@@ -2,6 +2,7 @@ Cypress.Commands.add('visitWithCleanState', (path) => {
   cy.visit(path, {
     onBeforeLoad(win) {
       win.localStorage.setItem('language', 'en');
+      win.localStorage.setItem('language_user_selected_v1', '1');
       win.localStorage.removeItem('cart');
       win.localStorage.removeItem('checkoutState_v1');
       win.sessionStorage.removeItem('adminToken');
@@ -23,6 +24,7 @@ Cypress.Commands.add('apiAdminLogin', (username = 'bojole_admin', password = 'bo
         win.sessionStorage.setItem('adminToken', token);
         win.sessionStorage.setItem('adminUser', username);
         win.localStorage.setItem('language', 'en');
+        win.localStorage.setItem('language_user_selected_v1', '1');
       }
     });
   });

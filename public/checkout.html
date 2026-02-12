@@ -460,6 +460,94 @@
             background: rgba(231, 76, 60, 0.05);
         }
 
+        .delivery-option.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            border-color: rgba(231, 76, 60, 0.35);
+            background: rgba(231, 76, 60, 0.04);
+        }
+
+        .delivery-option.disabled:hover {
+            border-color: rgba(231, 76, 60, 0.35);
+        }
+
+        .checkout-inline-notice {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            margin-top: -10px;
+            margin-bottom: 20px;
+            font-weight: 700;
+            font-size: 14px;
+            line-height: 1.25;
+        }
+
+        .checkout-inline-notice i {
+            margin-top: 1px;
+        }
+
+        .checkout-inline-notice-danger {
+            background: rgba(231, 76, 60, 0.10);
+            border: 1px solid rgba(231, 76, 60, 0.26);
+            color: #c0392b;
+        }
+
+        /* Step lock overlay (checkout stays accessible, but steps are disabled) */
+        .ux-step-locked {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .ux-step-overlay {
+            position: absolute;
+            inset: 0;
+            padding: 18px;
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(2px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+        }
+
+        .ux-checkout-lock {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            max-width: 440px;
+            background: #fff;
+            border: 1px solid rgba(231, 76, 60, 0.24);
+            border-radius: 14px;
+            padding: 14px 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.10);
+        }
+
+        .ux-checkout-lock-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: rgba(231, 76, 60, 0.10);
+            color: #e74c3c;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex: 0 0 auto;
+        }
+
+        .ux-checkout-lock-title {
+            font-weight: 900;
+            color: #1a1a1a;
+            margin-bottom: 2px;
+        }
+
+        .ux-checkout-lock-sub {
+            color: #666;
+            font-weight: 700;
+        }
+
         .delivery-option input[type="radio"] {
             display: none;
         }

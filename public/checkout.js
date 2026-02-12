@@ -856,6 +856,17 @@ function renderCheckout() {
     cartSection.className = 'cart-section';
     
     const cartTotals = calculateTotals();
+
+    const restaurantClosedReason = getRestaurantClosedReason();
+    const deliveryClosedReason = getDeliveryClosedReason();
+
+    // If delivery is currently outside delivery hours but was selected from saved state,
+    // force pickup so the checkout stays usable.
+    if (deliveryClosedReason && deliveryMethod === 'delivery') {
+        deliveryMethod = 'pickup';
+        resetCheckoutFlowBelowDeliveryMethod();
+        enforceOrderSettingsConstraints();
+    }
     
     cartSection.innerHTML = `
         <h2 class="section-title" data-translate="cartItems">${translations[currentLanguage].cartItems}</h2>
@@ -870,11 +881,22 @@ function renderCheckout() {
     deliverySection.className = 'delivery-options';
 
     const allowLater = orderSettings?.allowOrderLater !== false;
+    const deliveryDisabled = !!deliveryClosedReason || !!restaurantClosedReason;
+    const deliveryNoticeText = deliveryClosedReason
+        ? (currentLanguage === 'bg'
+            ? (deliveryClosedReason.tomorrow
+                ? `Доставките започват утре в ${deliveryClosedReason.opensAt}.`
+                : `Доставките започват в ${deliveryClosedReason.opensAt}.`)
+            : (deliveryClosedReason.tomorrow
+                ? `Delivery starts tomorrow at ${deliveryClosedReason.opensAt}.`
+                : `Delivery starts at ${deliveryClosedReason.opensAt}.`))
+        : '';
+
     deliverySection.innerHTML = `
         <h2 class="section-title"><span class="step-number-badge">1</span> ${currentLanguage === 'bg' ? 'Метод за доставка' : 'Delivery Method'}</h2>
         <div class="delivery-method">
-            <label class="delivery-option ${deliveryMethod === 'delivery' ? 'active' : ''}" onclick="selectDeliveryMethod('delivery')">
-                <input type="radio" name="delivery" value="delivery" ${deliveryMethod === 'delivery' ? 'checked' : ''}>
+            <label class="delivery-option ${deliveryMethod === 'delivery' ? 'active' : ''} ${deliveryDisabled ? 'disabled' : ''}" ${deliveryDisabled ? 'aria-disabled="true"' : ''} onclick="selectDeliveryMethod('delivery')">
+                <input type="radio" name="delivery" value="delivery" ${deliveryMethod === 'delivery' ? 'checked' : ''} ${deliveryDisabled ? 'disabled' : ''}>
                 <div class="delivery-option-icon"><i class="fas fa-truck"></i></div>
                 <div class="delivery-option-title">${currentLanguage === 'bg' ? 'Доставка' : 'Delivery'}</div>
                 <div class="delivery-option-desc">${currentLanguage === 'bg' ? 'Директно до вас' : 'Directly to you'}</div>
@@ -886,6 +908,12 @@ function renderCheckout() {
                 <div class="delivery-option-desc">${currentLanguage === 'bg' ? 'От ресторанта' : 'From restaurant'}</div>
             </label>
         </div>
+        ${deliveryClosedReason && !restaurantClosedReason ? `
+            <div class="checkout-inline-notice checkout-inline-notice-danger" id="delivery-hours-notice">
+                <i class="fas fa-clock"></i>
+                <span>${escapeHtml(deliveryNoticeText)}</span>
+            </div>
+        ` : ''}
         <div id="order-time-section" class="checkout-step" style="display: none;">
             <h2 class="section-title" style="margin-top: 30px;"><span class="step-number-badge">2</span> ${currentLanguage === 'bg' ? 'Време на Поръчката' : 'Order Time'}</h2>
         <div class="delivery-method">
@@ -1043,7 +1071,7 @@ function renderCheckout() {
             ${currentLanguage === 'bg' ? 'Текуща сума' : 'Current amount'}: ${formatPrice(total)}
         </div>
         ` : ''}
-        <button class="checkout-btn" onclick="placeOrder()" ${(orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'disabled' : ''}>
+        <button class="checkout-btn" onclick="placeOrder()" ${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'disabled' : ''}>
             ${deliveryMethod === 'delivery' 
                 ? (currentLanguage === 'bg' ? 'Поръчай с Доставка' : 'Order with Delivery')
                 : (currentLanguage === 'bg' ? 'Поръчай и Вземи' : 'Order and Pickup')}
@@ -1061,6 +1089,76 @@ function renderCheckout() {
     setupFormListeners();
     initializeTimePicker();
     renderRestaurantStatusBanner();
+    applyCheckoutAvailabilityUi();
+}
+
+function buildCheckoutLockedOverlayHtml(reason) {
+    const isBg = currentLanguage === 'bg';
+    const title = reason?.type === 'manual'
+        ? (isBg ? 'Временно затворено' : 'Temporarily closed')
+        : (isBg ? 'Извън работно време' : 'Outside working hours');
+
+    const sub = (() => {
+        if (reason?.type === 'manual') {
+            return isBg ? 'Заповядайте по-късно.' : 'Please come again later.';
+        }
+        const timeText = reason?.opensAt ? escapeHtml(reason.opensAt) : '';
+        if (!timeText) {
+            return isBg ? 'Заповядайте по-късно.' : 'Please come again later.';
+        }
+        if (isBg) {
+            return reason?.tomorrow
+                ? `Отваряме утре в ${timeText}.`
+                : `Отваряме в ${timeText}.`;
+        }
+        return reason?.tomorrow
+            ? `We open tomorrow at ${timeText}.`
+            : `We open at ${timeText}.`;
+    })();
+
+    return `
+        <div class="ux-checkout-lock">
+            <div class="ux-checkout-lock-icon"><i class="fas fa-store-slash"></i></div>
+            <div class="ux-checkout-lock-text">
+                <div class="ux-checkout-lock-title">${title}</div>
+                <div class="ux-checkout-lock-sub">${sub}</div>
+            </div>
+        </div>
+    `;
+}
+
+function setSectionLocked(sectionEl, locked, overlayHtml) {
+    if (!sectionEl) return;
+
+    const existing = sectionEl.querySelector('.ux-step-overlay');
+    if (!locked) {
+        sectionEl.classList.remove('ux-step-locked');
+        if (existing) existing.remove();
+        return;
+    }
+
+    sectionEl.classList.add('ux-step-locked');
+    if (existing) {
+        existing.innerHTML = overlayHtml || '';
+        return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ux-step-overlay';
+    overlay.innerHTML = overlayHtml || '';
+    sectionEl.appendChild(overlay);
+}
+
+function applyCheckoutAvailabilityUi() {
+    const restaurantClosedReason = getRestaurantClosedReason();
+    const locked = !!restaurantClosedReason;
+    const overlayHtml = locked ? buildCheckoutLockedOverlayHtml(restaurantClosedReason) : '';
+
+    const stepsEl = document.querySelector('.delivery-options');
+    setSectionLocked(stepsEl, locked, overlayHtml);
+
+    const summaryEl = document.querySelector('.summary-section');
+    setSectionLocked(summaryEl, locked, overlayHtml);
 }
 
 function parseHHMMToMinutes(hhmm) {
@@ -1128,7 +1226,24 @@ function getRestaurantClosedReason() {
         return { type: 'manual' };
     }
 
-    const window = (deliveryMethod === 'delivery') ? getAllowedWindowMinutes() : getRestaurantWindowMinutes();
+    // Restaurant open/closed is based on working hours only.
+    // Delivery-hours are handled separately (delivery option disabled with a notice).
+    const window = getRestaurantWindowMinutes();
+    const now = nowMinutesOfDay();
+
+    if (now < window.open) {
+        return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: false };
+    }
+
+    if (now >= window.close) {
+        return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: true };
+    }
+
+    return null;
+}
+
+function getDeliveryClosedReason() {
+    const window = getDeliveryWindowMinutes();
     const now = nowMinutesOfDay();
 
     if (now < window.open) {
@@ -1303,6 +1418,9 @@ function navigateTo(url) {
 
 // Initialize time picker with default time
 function initializeTimePicker() {
+    // When the restaurant is closed, checkout remains accessible but steps are locked.
+    // Avoid popping modals or mutating time selection in that state.
+    if (getRestaurantClosedReason()) return;
     if (orderTime !== 'later') return;
 
     const window = getAllowedWindowMinutes();
@@ -1312,11 +1430,7 @@ function initializeTimePicker() {
     if (maxAllowed < minAllowed) {
         selectedTimeSlot = '';
         updateTimeDisplay();
-        if (deliveryMethod === 'delivery' && nowMinutesOfDay() < getDeliveryWindowMinutes().open) {
-            showDeliveryHoursModal();
-        } else {
-            showWorkingHoursModal();
-        }
+        // No valid time slots remain today.
         return;
     }
 
@@ -1328,6 +1442,7 @@ function initializeTimePicker() {
 
 // Adjust time by minutes (В±15)
 function adjustTime(minutes) {
+    if (getRestaurantClosedReason()) return;
     if (!selectedTimeSlot) {
         initializeTimePicker();
         return;
@@ -1602,6 +1717,27 @@ async function placeOrder() {
         return;
     }
 
+    // Checkout is accessible even when closed, but ordering is not.
+    const restaurantClosedReason = getRestaurantClosedReason();
+    if (restaurantClosedReason) {
+        renderCheckout();
+        applyCheckoutStepVisibility();
+        return;
+    }
+
+    if (deliveryMethod === 'delivery') {
+        const deliveryClosedReason = getDeliveryClosedReason();
+        if (deliveryClosedReason) {
+            renderCheckout();
+            applyCheckoutStepVisibility();
+            requestAnimationFrame(() => {
+                const notice = document.getElementById('delivery-hours-notice');
+                if (notice) notice.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+            return;
+        }
+    }
+
     // Basic flow validation (prevents stale step states when user goes back)
     if (!deliveryMethod) {
         alert(currentLanguage === 'bg' ? 'Моля, изберете метод на доставка' : 'Please select a delivery method');
@@ -1759,6 +1895,31 @@ async function placeOrder() {
 function selectDeliveryMethod(method) {
     captureCustomerInfoFromDom();
     const prev = deliveryMethod;
+
+    // Checkout is accessible even when closed, but steps are locked.
+    // Ignore delivery-method changes while locked.
+    if (getRestaurantClosedReason()) {
+        renderCheckout();
+        applyCheckoutStepVisibility();
+        saveCheckoutState();
+        return;
+    }
+
+    // If delivery is outside delivery hours, keep Delivery disabled.
+    if (method === 'delivery') {
+        const deliveryClosedReason = getDeliveryClosedReason();
+        if (deliveryClosedReason) {
+            renderCheckout();
+            applyCheckoutStepVisibility();
+            requestAnimationFrame(() => {
+                const notice = document.getElementById('delivery-hours-notice');
+                if (notice) notice.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+            saveCheckoutState();
+            return;
+        }
+    }
+
     deliveryMethod = method;
 
     if (deliveryMethod === 'delivery') {
@@ -1894,6 +2055,7 @@ function updateOrderSummary() {
     if (!summarySection) return;
     
     const { subtotal, discount, deliveryFee, freeDeliveryApplied, total } = calculateTotals();
+    const restaurantClosedReason = getRestaurantClosedReason();
     
     summarySection.innerHTML = `
         <div class="summary-row subtotal">
@@ -1934,11 +2096,13 @@ function updateOrderSummary() {
             <span>${currentLanguage === 'bg' ? 'Ресторантът е временно затворен.' : 'The restaurant is temporarily closed.'}</span>
         </div>
         ` : ''}
-        <button class="checkout-btn" onclick="placeOrder()" ${(orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'disabled' : ''}>
+        <button class="checkout-btn" onclick="placeOrder()" ${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'disabled' : ''}>
             <i class="fas fa-${deliveryMethod === 'delivery' ? 'truck' : 'shopping-bag'}"></i>
             <span data-translate="placeOrder">${deliveryMethod === 'delivery' ? translations[currentLanguage].orderDelivery : translations[currentLanguage].orderPickup}</span>
         </button>
     `;
+
+    applyCheckoutAvailabilityUi();
 }
 
 // Place order
