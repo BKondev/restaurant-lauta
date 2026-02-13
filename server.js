@@ -98,6 +98,26 @@ app.use((req, res, next) => {
     next();
 });
 
+// Compatibility: some clients mistakenly call `${baseUrl}/api/...` while baseUrl already ends with `/api`.
+// Example: `/resturant-website/api/api/login` -> `/resturant-website/api/login`
+app.use((req, res, next) => {
+    const base = (BASE_PATH || '');
+    const legacyPrefix = (base + '/api/api/');
+
+    if (req.url.startsWith(legacyPrefix)) {
+        req.url = (base + '/api/') + req.url.slice(legacyPrefix.length);
+        return next();
+    }
+
+    // Also handle root-mounted proxies that expose `/api` without BASE_PATH.
+    if (req.url.startsWith('/api/api/')) {
+        req.url = '/api/' + req.url.slice('/api/api/'.length);
+        return next();
+    }
+
+    next();
+});
+
 // Static files & uploads served under BASE_PATH if defined
 if (BASE_PATH) {
     app.use(BASE_PATH, express.static(path.join(__dirname, 'public')));
@@ -699,6 +719,16 @@ initDatabase();
 // ==================== API ROUTES ====================
 
 const API_PREFIX = BASE_PATH + '/api';
+
+// Simple health check endpoint (useful for mobile app connectivity debugging)
+app.get(API_PREFIX + '/health', (req, res) => {
+    res.json({
+        ok: true,
+        time: new Date().toISOString(),
+        basePath: BASE_PATH,
+        apiPrefix: API_PREFIX
+    });
+});
 
 // Login endpoint - multi-tenant support
 app.post(API_PREFIX + '/login', (req, res) => {
@@ -1392,6 +1422,34 @@ function requireAuth(req, res, next) {
     req.username = tokenData.username;
     
     next();
+}
+
+// Middleware to allow either Bearer token or x-api-key.
+function requireAuthOrApiKey(req, res, next) {
+    const rawAuth = (req.headers.authorization || '').toString();
+    const bearerToken = rawAuth.startsWith('Bearer ') ? rawAuth.slice('Bearer '.length).trim() : '';
+
+    if (bearerToken && activeTokens.has(bearerToken)) {
+        const tokenData = activeTokens.get(bearerToken);
+        req.restaurantId = tokenData.restaurantId;
+        req.username = tokenData.username;
+        return next();
+    }
+
+    const apiKey = (req.headers['x-api-key'] || '').toString();
+    if (apiKey) {
+        const restaurant = getRestaurantByApiKey(apiKey);
+        if (restaurant && restaurant.active) {
+            req.restaurantId = restaurant.id;
+            req.restaurantName = restaurant.name;
+            return next();
+        }
+    }
+
+    return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Please login (Bearer token) or provide API key'
+    });
 }
 
 // Middleware to check API key authentication (for mobile app)
@@ -2750,6 +2808,8 @@ app.put(API_PREFIX + '/products/category/bulk-assign', requireAuth, (req, res) =
 
 function normalizeOrderStatus(rawStatus) {
     const s = (rawStatus || '').toString().trim().toLowerCase();
+    if (s === 'accepted') return 'approved';
+    if (s === 'accept') return 'approved';
     if (s === 'confirmed') return 'approved';
     if (s === 'done') return 'completed';
     if (s === 'picked_up') return 'completed';
@@ -2845,14 +2905,20 @@ function recomputeOrderTotals(order) {
 }
 
 // Get all orders (admin only - filtered by restaurant)
-app.get(API_PREFIX + '/orders', requireAuth, (req, res) => {
+app.get(API_PREFIX + '/orders', requireAuthOrApiKey, (req, res) => {
     try {
         const data = readDatabase();
         const orders = data.orders || [];
         
         // Filter orders by restaurant
-        const restaurantOrders = orders.filter(order => isOrderForRestaurant(order, req.restaurantId, data));
-        
+        let restaurantOrders = orders.filter(order => isOrderForRestaurant(order, req.restaurantId, data));
+
+        const statusQuery = (req.query.status || '').toString().trim();
+        if (statusQuery) {
+            const normalized = normalizeOrderStatus(statusQuery);
+            restaurantOrders = restaurantOrders.filter(o => normalizeOrderStatus(o.status) === normalized);
+        }
+
         res.json(restaurantOrders);
     } catch (error) {
         res.status(500).json({ error: 'Failed to retrieve orders' });
@@ -2860,7 +2926,7 @@ app.get(API_PREFIX + '/orders', requireAuth, (req, res) => {
 });
 
 // Get pending orders (admin only - filtered by restaurant)
-app.get(API_PREFIX + '/orders/pending', requireAuth, (req, res) => {
+app.get(API_PREFIX + '/orders/pending', requireAuthOrApiKey, (req, res) => {
     try {
         const data = readDatabase();
         const orders = data.orders || [];
@@ -3318,7 +3384,7 @@ app.post(API_PREFIX + '/orders', (req, res) => {
 });
 
 // Update order status (admin only - filtered by restaurant)
-app.put(API_PREFIX + '/orders/:id', requireAuth, async (req, res) => {
+app.put(API_PREFIX + '/orders/:id', requireAuthOrApiKey, async (req, res) => {
     try {
         const orderId = req.params.id; // Keep as string now
         const {
@@ -3335,6 +3401,16 @@ app.put(API_PREFIX + '/orders/:id', requireAuth, async (req, res) => {
             customerInfo,
             items
         } = req.body;
+
+        const isEditOperation = (
+            deliveryMethod !== undefined ||
+            deliveryType !== undefined ||
+            deliveryFee !== undefined ||
+            discount !== undefined ||
+            promoCode !== undefined ||
+            customerInfo !== undefined ||
+            items !== undefined
+        );
 
         const hasStatusUpdate = status !== undefined && status !== null && `${status}`.trim() !== '';
         const normalizedStatus = hasStatusUpdate ? normalizeOrderStatus(status) : null;
@@ -3355,7 +3431,7 @@ app.put(API_PREFIX + '/orders/:id', requireAuth, async (req, res) => {
         const order = data.orders[orderIndex];
         
         // Verify order belongs to this restaurant
-        if (order.restaurantId !== req.restaurantId) {
+        if (!isOrderForRestaurant(order, req.restaurantId, data)) {
             return res.status(403).json({ error: 'Access denied - order belongs to different restaurant' });
         }
         
@@ -3410,13 +3486,14 @@ app.put(API_PREFIX + '/orders/:id', requireAuth, async (req, res) => {
             order.customerInfo = merged;
         }
 
-        // Validate final customer email (required)
-        if (!isValidEmail(order.customerInfo?.email)) {
+        // Validate final customer email (required for edits that touch customer/order fields).
+        // Status-only updates from mobile clients should not fail if legacy orders lack email.
+        if (isEditOperation && !isValidEmail(order.customerInfo?.email)) {
             return res.status(400).json({ error: 'Valid customer email is required' });
         }
 
-        // Validate delivery fields for delivery orders
-        if ((order.deliveryMethod || order.deliveryType) === 'delivery') {
+        // Validate delivery fields for delivery orders (only when editing).
+        if (isEditOperation && (order.deliveryMethod || order.deliveryType) === 'delivery') {
             const city = (order.customerInfo?.city || '').toString().trim();
             const address = (order.customerInfo?.address || '').toString().trim();
             if (!city || !address) {
