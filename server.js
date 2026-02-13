@@ -78,6 +78,26 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// React Native / some HTTP clients may send JSON as text/plain unless Content-Type is set.
+// Accept text bodies and (when possible) parse them into JSON so API endpoints remain robust.
+app.use(express.text({ type: ['text/plain', 'text/*'], limit: '50mb' }));
+app.use((req, res, next) => {
+    if (typeof req.body !== 'string') return next();
+    const trimmed = req.body.trim();
+    if (!trimmed) return next();
+    // Only attempt JSON parse when it looks like JSON.
+    const looksLikeJson = (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
+    if (!looksLikeJson) return next();
+
+    try {
+        req.body = JSON.parse(trimmed);
+    } catch (e) {
+        // Leave req.body as-is; downstream handlers can return a 400 if needed.
+    }
+
+    next();
+});
+
 // Static files & uploads served under BASE_PATH if defined
 if (BASE_PATH) {
     app.use(BASE_PATH, express.static(path.join(__dirname, 'public')));
@@ -682,7 +702,16 @@ const API_PREFIX = BASE_PATH + '/api';
 
 // Login endpoint - multi-tenant support
 app.post(API_PREFIX + '/login', (req, res) => {
-    const { username, password } = req.body;
+    const body = (req.body && typeof req.body === 'object') ? req.body : {};
+    const username = (body.username ?? '').toString();
+    const password = (body.password ?? '').toString();
+
+    if (!username || !password) {
+        return res.status(400).json({
+            success: false,
+            message: 'Missing username or password'
+        });
+    }
     
     console.log('[LOGIN] Attempt for username:', username);
     
