@@ -3552,7 +3552,11 @@ async function scanPrinters() {
         }
 
         fillPrinterScanResults(out.printers || []);
-        alert(`Found ${out.count || 0} printer(s)`);
+        if (out?.message) {
+            alert(out.message);
+        } else {
+            alert(`Found ${out.count || 0} printer(s)`);
+        }
     } catch (e) {
         console.error('scanPrinters failed:', e);
         alert('Printer scan failed');
@@ -3588,7 +3592,7 @@ async function autoDetectPrinter() {
         fillPrinterScanResults(printers);
 
         if (printers.length === 0) {
-            alert('No printers found');
+            alert(out?.message || 'No printers found');
             return;
         }
 

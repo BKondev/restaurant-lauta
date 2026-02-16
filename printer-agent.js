@@ -228,6 +228,89 @@ async function fetchApprovedOrders(apiBaseUrl, apiKey) {
     return Array.isArray(r.json) ? r.json : [];
 }
 
+async function fetchAgentCommands(apiBaseUrl, apiKey) {
+    const url = `${apiBaseUrl}/agent/commands`;
+    const r = await requestJson('GET', url, { 'x-api-key': apiKey });
+    if (r.status !== 200) {
+        console.warn(`[AGENT] Failed to load commands (${r.status})`, r.json || r.raw);
+        return [];
+    }
+    return Array.isArray(r.json?.commands) ? r.json.commands : [];
+}
+
+async function completeAgentCommand(apiBaseUrl, apiKey, commandId, payload) {
+    const url = `${apiBaseUrl}/agent/commands/${encodeURIComponent(commandId)}/complete`;
+    const r = await requestJson('POST', url, { 'x-api-key': apiKey }, payload);
+    if (r.status !== 200) {
+        console.warn(`[AGENT] Failed to complete command ${commandId} (${r.status})`, r.json || r.raw);
+        return false;
+    }
+    return true;
+}
+
+async function handleAgentCommands(apiBaseUrl, apiKey, envOverride) {
+    const commands = await fetchAgentCommands(apiBaseUrl, apiKey);
+    if (!commands || commands.length === 0) return;
+
+    for (const cmd of commands) {
+        const id = (cmd?.id || '').toString();
+        const type = (cmd?.type || '').toString();
+        const payload = (cmd?.payload && typeof cmd.payload === 'object') ? cmd.payload : {};
+
+        if (!id || !type) continue;
+
+        try {
+            if (type === 'printer.scan') {
+                const subnet = (payload.subnet || envOverride?.subnet || getSubnetHint() || '').toString().trim();
+                const port = Number.isFinite(Number(payload.port)) ? Number(payload.port) : 9100;
+                const timeout = Number.isFinite(Number(payload.timeout)) ? Number(payload.timeout) : 350;
+                const concurrency = Number.isFinite(Number(payload.concurrency)) ? Number(payload.concurrency) : 32;
+
+                if (!subnet) {
+                    await completeAgentCommand(apiBaseUrl, apiKey, id, {
+                        success: false,
+                        error: 'Missing subnet. Set AGENT_SUBNET or provide subnet in request.'
+                    });
+                    continue;
+                }
+
+                const printers = await findNetworkPrinters({ subnet, port, timeout, concurrency });
+                await completeAgentCommand(apiBaseUrl, apiKey, id, {
+                    success: true,
+                    result: {
+                        printers: Array.isArray(printers) ? printers : [],
+                        subnetUsed: subnet,
+                        portUsed: port,
+                        timeout,
+                        concurrency
+                    }
+                });
+                continue;
+            }
+
+            if (type === 'printer.test') {
+                const ip = (payload.ip || '').toString().trim();
+                const port = Number.isFinite(Number(payload.port)) ? Number(payload.port) : 9100;
+                if (!ip) {
+                    await completeAgentCommand(apiBaseUrl, apiKey, id, { success: false, error: 'Missing ip' });
+                    continue;
+                }
+
+                const ok = await checkTcpPort(ip, port, 800);
+                await completeAgentCommand(apiBaseUrl, apiKey, id, ok
+                    ? { success: true, result: { ip, port, tested: ip } }
+                    : { success: false, error: `Cannot connect to ${ip}:${port}`, result: { ip, port, tested: ip } }
+                );
+                continue;
+            }
+
+            await completeAgentCommand(apiBaseUrl, apiKey, id, { success: false, error: `Unknown command type: ${type}` });
+        } catch (e) {
+            await completeAgentCommand(apiBaseUrl, apiKey, id, { success: false, error: e?.message || 'Command failed' });
+        }
+    }
+}
+
 async function markOrderPrinted(apiBaseUrl, apiKey, orderId, printerTarget) {
     const url = `${apiBaseUrl}/orders/${encodeURIComponent(orderId)}/printed`;
     const body = {
@@ -319,6 +402,8 @@ async function run() {
 
     while (true) {
         try {
+            await handleAgentCommands(apiBaseUrl, apiKey, { subnet: envSubnet });
+
             const profile = await fetchRestaurantProfile(apiBaseUrl, apiKey);
             const printerCfg = normalizePrinterConfig(profile.printer);
 

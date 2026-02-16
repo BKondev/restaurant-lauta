@@ -3765,41 +3765,222 @@ app.delete(API_PREFIX + '/orders/:id', requireAuth, (req, res) => {
 
 // ==================== PRINTER & DELIVERY ENDPOINTS ====================
 
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isPrivateIPv4(ip) {
+    const s = (ip || '').toString().trim();
+    if (!looksLikeIPv4(s)) return false;
+    if (s.startsWith('10.')) return true;
+    if (s.startsWith('192.168.')) return true;
+    if (s.startsWith('127.')) return true;
+    if (s.startsWith('169.254.')) return true;
+    const parts = s.split('.').map(n => parseInt(n, 10));
+    if (parts.length === 4 && parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    return false;
+}
+
+function ensureAgentStore(data) {
+    if (!data || typeof data !== 'object') return { commands: [], results: {} };
+    if (!data.agent || typeof data.agent !== 'object') data.agent = {};
+    if (!Array.isArray(data.agent.commands)) data.agent.commands = [];
+    if (!data.agent.results || typeof data.agent.results !== 'object') data.agent.results = {};
+    return data.agent;
+}
+
+function generateAgentCommandId() {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function enqueueAgentCommand(data, restaurantId, type, payload) {
+    const agent = ensureAgentStore(data);
+    const now = new Date().toISOString();
+    const cmd = {
+        id: generateAgentCommandId(),
+        restaurantId: String(restaurantId || ''),
+        type: String(type || ''),
+        payload: (payload && typeof payload === 'object') ? payload : {},
+        status: 'queued',
+        createdAt: now,
+        updatedAt: now
+    };
+    agent.commands.push(cmd);
+    return cmd;
+}
+
+function findRecentPendingCommand(data, restaurantId, type, payload, maxAgeMs = 15000) {
+    const agent = ensureAgentStore(data);
+    const rid = String(restaurantId || '');
+    const now = Date.now();
+    const payloadStr = JSON.stringify((payload && typeof payload === 'object') ? payload : {});
+
+    return agent.commands.find(c => {
+        if (!c || c.restaurantId !== rid || c.type !== type) return false;
+        if (c.status !== 'queued' && c.status !== 'dispatched') return false;
+        const createdAt = c.createdAt ? new Date(c.createdAt).getTime() : 0;
+        if (!createdAt || (now - createdAt) > maxAgeMs) return false;
+        try {
+            return JSON.stringify((c.payload && typeof c.payload === 'object') ? c.payload : {}) === payloadStr;
+        } catch {
+            return false;
+        }
+    });
+}
+
+async function waitForAgentCommandCompletion(restaurantId, commandId, timeoutMs = 6000, intervalMs = 300) {
+    const rid = String(restaurantId || '');
+    const started = Date.now();
+    while ((Date.now() - started) < timeoutMs) {
+        const data = readDatabase();
+        const agent = ensureAgentStore(data);
+        const cmd = agent.commands.find(c => c && c.id === commandId && c.restaurantId === rid);
+        if (cmd && (cmd.status === 'completed' || cmd.status === 'failed')) return cmd;
+        await delay(intervalMs);
+    }
+    return null;
+}
+
+// Agent commands (polled by the on-prem printer agent)
+app.get(API_PREFIX + '/agent/commands', requireApiKey, (req, res) => {
+    try {
+        const data = readDatabase();
+        const agent = ensureAgentStore(data);
+        const rid = String(req.restaurantId || '');
+
+        const queued = agent.commands
+            .filter(c => c && c.restaurantId === rid && c.status === 'queued')
+            .slice(0, 5);
+
+        const now = new Date().toISOString();
+        for (const c of queued) {
+            c.status = 'dispatched';
+            c.dispatchedAt = now;
+            c.updatedAt = now;
+        }
+
+        writeDatabase(data);
+
+        return res.json({
+            success: true,
+            commands: queued.map(c => ({
+                id: c.id,
+                type: c.type,
+                payload: c.payload || {},
+                createdAt: c.createdAt
+            }))
+        });
+    } catch (e) {
+        console.error('Error serving agent commands:', e);
+        return res.status(500).json({ error: 'Failed to load agent commands' });
+    }
+});
+
+app.post(API_PREFIX + '/agent/commands/:id/complete', requireApiKey, (req, res) => {
+    try {
+        const rid = String(req.restaurantId || '');
+        const commandId = String(req.params.id || '');
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const ok = body.success === true;
+        const result = (body.result && typeof body.result === 'object') ? body.result : null;
+        const error = (body.error || '').toString();
+
+        const data = readDatabase();
+        const agent = ensureAgentStore(data);
+        const cmd = agent.commands.find(c => c && c.id === commandId && c.restaurantId === rid);
+        if (!cmd) {
+            return res.status(404).json({ error: 'Command not found' });
+        }
+
+        const now = new Date().toISOString();
+        cmd.status = ok ? 'completed' : 'failed';
+        cmd.completedAt = now;
+        cmd.updatedAt = now;
+        if (ok) {
+            cmd.result = result;
+            cmd.error = '';
+        } else {
+            cmd.result = null;
+            cmd.error = error || 'Command failed';
+        }
+
+        if (!agent.results[rid] || typeof agent.results[rid] !== 'object') agent.results[rid] = {};
+
+        if (cmd.type === 'printer.scan' && ok) {
+            const printers = Array.isArray(result?.printers) ? result.printers : [];
+            agent.results[rid].printerScan = {
+                printers,
+                at: now,
+                subnet: (result?.subnet || result?.subnetUsed || '').toString(),
+                port: Number.isFinite(Number(result?.port || result?.portUsed)) ? Number(result.port || result.portUsed) : undefined,
+                commandId
+            };
+        }
+
+        if (cmd.type === 'printer.test') {
+            agent.results[rid].printerTest = {
+                success: ok,
+                at: now,
+                ip: (result?.ip || '').toString(),
+                port: Number.isFinite(Number(result?.port)) ? Number(result.port) : undefined,
+                tested: (result?.tested || result?.ip || '').toString(),
+                error: ok ? '' : (cmd.error || ''),
+                commandId
+            };
+        }
+
+        writeDatabase(data);
+        return res.json({ success: true });
+    } catch (e) {
+        console.error('Error completing agent command:', e);
+        return res.status(500).json({ error: 'Failed to complete command' });
+    }
+});
+
 // Test printer connection (Bearer token or API key)
 app.get(API_PREFIX + '/printer/test', requireAuthOrApiKey, async (req, res) => {
     try {
-        const { testPrinter, findNetworkPrinters } = require('./printer-service');
-
         const ip = (req.query.ip || '').toString().trim();
         const port = Number.isFinite(Number(req.query.port)) ? Number(req.query.port) : 9100;
-        const subnet = (req.query.subnet || '').toString().trim();
-        const timeout = Number.isFinite(Number(req.query.timeout)) ? Number(req.query.timeout) : undefined;
-        const concurrency = Number.isFinite(Number(req.query.concurrency)) ? Number(req.query.concurrency) : undefined;
 
-        if (ip) {
-            const ok = await testPrinter(ip, port);
-            return res.json({ success: ok, printers: [{ ip, port, name: `Network Printer at ${ip}` }], tested: ip, port });
-        }
-        
-        // Намиране на принтери
-        const printers = await findNetworkPrinters({ subnet, port, timeout, concurrency });
-        
-        if (printers.length === 0) {
-            return res.json({ 
-                success: false, 
-                error: 'No printers found on network',
-                printers: []
-            });
+        if (!ip) {
+            return res.status(400).json({ success: false, error: 'IP is required for printer test' });
         }
 
-        // Тестване на първия принтер
-        const testResult = await testPrinter(printers[0].ip, printers[0].port || port);
-        
-        res.json({
-            success: testResult,
-            printers: printers,
-            tested: printers[0].ip
-        });
+        // Private/LAN IPs must be tested from the on-prem agent network.
+        if (isPrivateIPv4(ip)) {
+            const restaurantId = req.restaurantId;
+            const payload = { ip, port };
+
+            let data = readDatabase();
+            const existing = findRecentPendingCommand(data, restaurantId, 'printer.test', payload, 15000);
+            const cmd = existing || enqueueAgentCommand(data, restaurantId, 'printer.test', payload);
+            writeDatabase(data);
+
+            const waitMs = Number.isFinite(Number(req.query.wait)) ? Math.min(15000, Math.max(0, Number(req.query.wait))) : 7000;
+            if (waitMs > 0) {
+                await waitForAgentCommandCompletion(restaurantId, cmd.id, waitMs, 300);
+            }
+
+            data = readDatabase();
+            const agent = ensureAgentStore(data);
+            const rid = String(restaurantId || '');
+            const last = agent.results?.[rid]?.printerTest;
+
+            if (last && last.commandId === cmd.id) {
+                if (last.success) {
+                    return res.json({ success: true, tested: last.tested || ip, port });
+                }
+                return res.json({ success: false, error: last.error || 'Printer test failed', tested: last.tested || ip, port });
+            }
+
+            return res.json({ success: false, error: 'Printer test queued. Please retry in a few seconds.', queued: true, commandId: cmd.id });
+        }
+
+        // Public/non-private IPs can be tested server-side.
+        const { testPrinter } = require('./printer-service');
+        const ok = await testPrinter(ip, port);
+        return res.json({ success: ok, printers: [{ ip, port, name: `Network Printer at ${ip}` }], tested: ip, port });
     } catch (error) {
         console.error('Error testing printer:', error);
         res.status(500).json({ error: 'Failed to test printer', details: error.message });
@@ -3809,18 +3990,45 @@ app.get(API_PREFIX + '/printer/test', requireAuthOrApiKey, async (req, res) => {
 // Find printers on network (Bearer token or API key)
 app.get(API_PREFIX + '/printer/find', requireAuthOrApiKey, async (req, res) => {
     try {
-        const { findNetworkPrinters } = require('./printer-service');
+        const restaurantId = req.restaurantId;
         const subnet = (req.query.subnet || '').toString().trim();
         const port = Number.isFinite(Number(req.query.port)) ? Number(req.query.port) : undefined;
         const timeout = Number.isFinite(Number(req.query.timeout)) ? Number(req.query.timeout) : undefined;
         const concurrency = Number.isFinite(Number(req.query.concurrency)) ? Number(req.query.concurrency) : undefined;
 
-        const printers = await findNetworkPrinters({ subnet, port, timeout, concurrency });
-        
-        res.json({
+        const payload = { subnet, port, timeout, concurrency };
+
+        let data = readDatabase();
+        const agent = ensureAgentStore(data);
+        const rid = String(restaurantId || '');
+        const prev = agent.results?.[rid]?.printerScan;
+
+        const existing = findRecentPendingCommand(data, restaurantId, 'printer.scan', payload, 15000);
+        const cmd = existing || enqueueAgentCommand(data, restaurantId, 'printer.scan', payload);
+        writeDatabase(data);
+
+        const waitMs = Number.isFinite(Number(req.query.wait)) ? Math.min(20000, Math.max(0, Number(req.query.wait))) : 5000;
+        if (waitMs > 0) {
+            await waitForAgentCommandCompletion(restaurantId, cmd.id, waitMs, 300);
+        }
+
+        data = readDatabase();
+        const agent2 = ensureAgentStore(data);
+        const scan = agent2.results?.[rid]?.printerScan;
+        const printers = Array.isArray(scan?.printers)
+            ? scan.printers
+            : (Array.isArray(prev?.printers) ? prev.printers : []);
+
+        return res.json({
             success: true,
-            printers: printers,
-            count: printers.length
+            queued: true,
+            commandId: cmd.id,
+            printers,
+            count: printers.length,
+            scannedAt: scan?.at || prev?.at || null,
+            message: (scan && scan.commandId === cmd.id)
+                ? `Found ${printers.length} printer(s)`
+                : 'Scan requested. Please retry in a few seconds for updated results.'
         });
     } catch (error) {
         console.error('Error finding printers:', error);
