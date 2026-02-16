@@ -5,7 +5,7 @@ This folder contains an **Inno Setup** script that builds a real Windows `setup.
 ## What the installer does
 
 - Installs the agent files to `C:\Program Files\RestaurantPrinterAgent` (default)
-- Prompts for `apiBaseUrl`, `apiKey`, and printer settings during install:
+- Prompts for `apiBaseUrl`, `apiKey`, and printer settings during install (split across two pages so it fits on smaller screens):
   - `printerIp` (optional)
   - `printerPort` (default 9100)
   - `subnet` (optional, for autodiscovery)

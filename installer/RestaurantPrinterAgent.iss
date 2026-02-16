@@ -20,6 +20,8 @@ UninstallDisplayName={#AppName}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+WizardResizable=yes
+WizardSizePercent=120,120
 PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
@@ -50,6 +52,7 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Fil
 [Code]
 var
   ApiPage: TInputQueryWizardPage;
+  NetworkPage: TInputQueryWizardPage;
 
 function StringToBoolDef(const S: string; Default: Boolean): Boolean;
 var
@@ -94,29 +97,38 @@ begin
   ApiPage := CreateInputQueryPage(
     wpSelectDir,
     'Printer Agent Settings',
-    'Enter the API URL, API key, and printer network settings',
+    'Enter the API URL and Restaurant API Key',
     'These values are saved on this PC in a config file. The agent starts automatically on boot.'
   );
 
   ApiPage.Add('API Base URL (must end with /api):', False);
   ApiPage.Add('Restaurant API Key (x-api-key):', True);
-  ApiPage.Add('LAN subnet for autodiscovery (optional, e.g. 192.168.88):', False);
-  ApiPage.Add('Poll interval ms (default 5000):', False);
-  ApiPage.Add('Printer IP (optional, e.g. 192.168.88.253):', False);
-  ApiPage.Add('Printer port (default 9100):', False);
-  ApiPage.Add('Subnet mask (optional, e.g. 255.255.255.0):', False);
-  ApiPage.Add('Gateway (optional, e.g. 192.168.88.1):', False);
-  ApiPage.Add('DHCP enabled? (true/false) (optional):', False);
+
+  NetworkPage := CreateInputQueryPage(
+    ApiPage.ID,
+    'Printer Agent Settings',
+    'Enter printer network settings',
+    'Optional. If you are not sure, leave the defaults. You can edit the config later from the Start Menu shortcut.'
+  );
+
+  NetworkPage.Add('LAN subnet for autodiscovery (optional, e.g. 192.168.88):', False);
+  NetworkPage.Add('Poll interval ms (default 5000):', False);
+  NetworkPage.Add('Printer IP (optional, e.g. 192.168.88.253):', False);
+  NetworkPage.Add('Printer port (default 9100):', False);
+  NetworkPage.Add('Subnet mask (optional, e.g. 255.255.255.0):', False);
+  NetworkPage.Add('Gateway (optional, e.g. 192.168.88.1):', False);
+  NetworkPage.Add('DHCP enabled? (true/false) (optional):', False);
 
   ApiPage.Values[0] := 'https://bojole.bg/api';
   ApiPage.Values[1] := '';
-  ApiPage.Values[2] := '192.168.88';
-  ApiPage.Values[3] := '5000';
-  ApiPage.Values[4] := '192.168.88.253';
-  ApiPage.Values[5] := '9100';
-  ApiPage.Values[6] := '255.255.255.0';
-  ApiPage.Values[7] := '192.168.88.1';
-  ApiPage.Values[8] := 'true';
+
+  NetworkPage.Values[0] := '192.168.88';
+  NetworkPage.Values[1] := '5000';
+  NetworkPage.Values[2] := '192.168.88.253';
+  NetworkPage.Values[3] := '9100';
+  NetworkPage.Values[4] := '255.255.255.0';
+  NetworkPage.Values[5] := '192.168.88.1';
+  NetworkPage.Values[6] := 'true';
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -145,15 +157,17 @@ begin
       Result := False;
       exit;
     end;
+  end;
 
-    Poll := StrToIntDef(Trim(ApiPage.Values[3]), 5000);
+  if CurPageID = NetworkPage.ID then begin
+    Poll := StrToIntDef(Trim(NetworkPage.Values[1]), 5000);
     if Poll < 1000 then begin
       MsgBox('Poll interval is too low. Use at least 1000ms.', mbError, MB_OK);
       Result := False;
       exit;
     end;
 
-    Port := StrToIntDef(Trim(ApiPage.Values[5]), 9100);
+    Port := StrToIntDef(Trim(NetworkPage.Values[3]), 9100);
     if (Port < 1) or (Port > 65535) then begin
       MsgBox('Printer port must be between 1 and 65535.', mbError, MB_OK);
       Result := False;
@@ -176,13 +190,13 @@ var
 begin
   ApiBaseUrl := Trim(ApiPage.Values[0]);
   ApiKey := Trim(ApiPage.Values[1]);
-  Subnet := Trim(ApiPage.Values[2]);
-  PollStr := Trim(ApiPage.Values[3]);
-  PrinterIp := Trim(ApiPage.Values[4]);
-  PrinterPortStr := Trim(ApiPage.Values[5]);
-  SubnetMask := Trim(ApiPage.Values[6]);
-  Gateway := Trim(ApiPage.Values[7]);
-  DhcpStr := Trim(ApiPage.Values[8]);
+  Subnet := Trim(NetworkPage.Values[0]);
+  PollStr := Trim(NetworkPage.Values[1]);
+  PrinterIp := Trim(NetworkPage.Values[2]);
+  PrinterPortStr := Trim(NetworkPage.Values[3]);
+  SubnetMask := Trim(NetworkPage.Values[4]);
+  Gateway := Trim(NetworkPage.Values[5]);
+  DhcpStr := Trim(NetworkPage.Values[6]);
   Poll := StrToIntDef(PollStr, 5000);
   PrinterPort := StrToIntDef(PrinterPortStr, 9100);
   DhcpEnabled := StringToBoolDef(DhcpStr, True);
