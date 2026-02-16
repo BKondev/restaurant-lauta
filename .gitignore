@@ -28,6 +28,13 @@ database_prod_*.orig
 .env
 .env.*
 
+# Local printer agent
+printer-agent.config.json
+printer-agent-state.json
+
 # Local archives/artifacts
 *.zip
 *.tar.gz
+
+# Inno Setup build outputs
+installer/Output/

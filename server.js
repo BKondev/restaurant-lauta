@@ -791,8 +791,8 @@ app.post(API_PREFIX + '/logout', (req, res) => {
     });
 });
 
-// Current restaurant profile (admin only)
-app.get(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
+// Current restaurant profile (Bearer token or API key)
+app.get(API_PREFIX + '/restaurants/me', requireAuthOrApiKey, (req, res) => {
     try {
         const db = readDatabase();
         const restaurant = db.restaurants?.find(r => r.id === req.restaurantId);
@@ -801,12 +801,14 @@ app.get(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
         }
 
         const orderPlacedTpl = restaurant.emailTemplates?.orderPlaced || {};
+        const printerNormalized = normalizePrinterConfig(restaurant.printer);
 
         res.json({
             id: restaurant.id,
             name: restaurant.name,
             email: restaurant.email || '',
             orderNotificationEmail: restaurant.orderNotificationEmail || '',
+            printer: printerNormalized.ok ? printerNormalized.value : { enabled: false, ip: '', port: 9100, autoPrintOnApproved: true, printPickup: true, allowAutoDiscovery: false },
             emailTemplates: {
                 orderPlaced: {
                     subject: (orderPlacedTpl.subject || '').toString(),
@@ -836,9 +838,25 @@ app.get(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
     }
 });
 
+// Restaurant API key (admin only; Bearer token required)
+app.get(API_PREFIX + '/restaurants/me/api-key', requireAuth, (req, res) => {
+    try {
+        const db = readDatabase();
+        const restaurant = db.restaurants?.find(r => r.id === req.restaurantId);
+        if (!restaurant) {
+            return res.status(404).json({ error: 'Restaurant not found' });
+        }
+
+        return res.json({ apiKey: (restaurant.apiKey || '').toString() });
+    } catch (e) {
+        console.error('Error loading restaurant apiKey:', e);
+        return res.status(500).json({ error: 'Failed to load apiKey' });
+    }
+});
+
 app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
     try {
-        const { orderNotificationEmail, borica, emailTemplates } = req.body;
+        const { orderNotificationEmail, borica, emailTemplates, printer } = req.body;
         const db = readDatabase();
 
         const idx = db.restaurants?.findIndex(r => r.id === req.restaurantId);
@@ -955,13 +973,23 @@ app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
             };
         }
 
+        if (printer !== undefined) {
+            const normalized = normalizePrinterConfig(printer);
+            if (!normalized.ok) {
+                return res.status(400).json({ error: normalized.error || 'Invalid printer configuration' });
+            }
+            db.restaurants[idx].printer = normalized.value;
+        }
+
         if (writeDatabase(db)) {
             const orderPlacedTpl = db.restaurants[idx].emailTemplates?.orderPlaced || {};
+            const printerNormalized = normalizePrinterConfig(db.restaurants[idx].printer);
             res.json({
                 id: db.restaurants[idx].id,
                 name: db.restaurants[idx].name,
                 email: db.restaurants[idx].email || '',
                 orderNotificationEmail: db.restaurants[idx].orderNotificationEmail || '',
+                printer: printerNormalized.ok ? printerNormalized.value : { enabled: false, ip: '', port: 9100, autoPrintOnApproved: true, printPickup: true, allowAutoDiscovery: false },
                 emailTemplates: {
                     orderPlaced: {
                         subject: (orderPlacedTpl.subject || '').toString(),
@@ -1450,6 +1478,40 @@ function requireAuthOrApiKey(req, res, next) {
         error: 'Unauthorized',
         message: 'Please login (Bearer token) or provide API key'
     });
+}
+
+function looksLikeIPv4(value) {
+    const s = (value || '').toString().trim();
+    if (!s) return false;
+    if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(s)) return false;
+    const parts = s.split('.').map(n => Number(n));
+    return parts.length === 4 && parts.every(n => Number.isInteger(n) && n >= 0 && n <= 255);
+}
+
+function normalizePrinterConfig(input) {
+    const src = (input && typeof input === 'object') ? input : {};
+    const enabled = src.enabled !== undefined ? !!src.enabled : false;
+    const ip = (src.ip || src.host || src.printerIp || '').toString().trim();
+    const port = Math.max(1, Math.min(65535, parseInt(src.port || 9100, 10) || 9100));
+    const autoPrintOnApproved = src.autoPrintOnApproved !== undefined ? !!src.autoPrintOnApproved : true;
+    const printPickup = src.printPickup !== undefined ? !!src.printPickup : true;
+    const allowAutoDiscovery = src.allowAutoDiscovery !== undefined ? !!src.allowAutoDiscovery : false;
+
+    if (ip && !looksLikeIPv4(ip)) {
+        return { ok: false, error: 'Invalid printer IP address' };
+    }
+
+    return {
+        ok: true,
+        value: {
+            enabled,
+            ip,
+            port,
+            autoPrintOnApproved,
+            printPickup,
+            allowAutoDiscovery
+        }
+    };
 }
 
 // Middleware to check API key authentication (for mobile app)
@@ -2959,6 +3021,44 @@ app.get(API_PREFIX + '/orders/mobile/pending', requireApiKey, (req, res) => {
     }
 });
 
+// Mark order as printed (Bearer token or API key)
+app.post(API_PREFIX + '/orders/:id/printed', requireAuthOrApiKey, (req, res) => {
+    try {
+        const orderId = req.params.id;
+        const { printedAt, printerIp, printerPort, source } = req.body || {};
+
+        const data = readDatabase();
+        if (!data.orders) {
+            return res.status(404).json({ error: 'No orders found' });
+        }
+
+        const idx = data.orders.findIndex(o => o && o.id === orderId);
+        if (idx === -1) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        const order = data.orders[idx];
+        if (!isOrderForRestaurant(order, req.restaurantId, data)) {
+            return res.status(403).json({ error: 'Access denied - order belongs to different restaurant' });
+        }
+
+        const nowIso = new Date().toISOString();
+        order.printerPrintedAt = (printedAt ? new Date(printedAt).toISOString() : nowIso);
+        order.printerPrintedBy = (source || req.username || req.restaurantName || 'printer-agent').toString();
+        if (printerIp) order.printerPrintedIp = String(printerIp).trim();
+        if (printerPort != null) order.printerPrintedPort = parseInt(printerPort, 10) || 9100;
+        order.updatedAt = nowIso;
+
+        data.orders[idx] = order;
+        writeDatabase(data);
+
+        res.json({ success: true, orderId, printerPrintedAt: order.printerPrintedAt });
+    } catch (error) {
+        console.error('Error marking order as printed:', error);
+        res.status(500).json({ error: 'Failed to mark order as printed' });
+    }
+});
+
 // Update order from mobile app (API key auth - filtered by restaurant)
 app.put(API_PREFIX + '/orders/mobile/:id', requireApiKey, async (req, res) => {
     try {
@@ -3003,20 +3103,37 @@ app.put(API_PREFIX + '/orders/mobile/:id', requireApiKey, async (req, res) => {
         // Handle approval actions (print, delivery service)
         if (normalizedStatus === 'approved' && previousStatus !== 'approved') {
             console.log(`Order ${orderId} approved by mobile app (Restaurant: ${req.restaurantName})`);
-            
-            if (order.deliveryMethod === 'delivery') {
-                console.log('Delivery order - printing receipt...');
-                
-                printOrder(order).then(printResult => {
-                    if (printResult.success) {
-                        console.log('Order printed successfully to:', printResult.printer);
-                    } else {
-                        console.error('Printing failed:', printResult.error);
-                    }
-                }).catch(err => {
-                    console.error('Printing error:', err);
-                });
 
+            const restaurant = (data.restaurants || []).find(r => r && r.id === req.restaurantId);
+            const printerNormalized = normalizePrinterConfig(restaurant?.printer);
+            const printerCfg = printerNormalized.ok
+                ? printerNormalized.value
+                : { enabled: false, ip: '', port: 9100, autoPrintOnApproved: true, printPickup: true, allowAutoDiscovery: false };
+
+            const method = (order.deliveryMethod || order.deliveryType || '').toString();
+            const isPickup = method === 'pickup';
+            const hasTargetPrinter = !!printerCfg.ip || printerCfg.allowAutoDiscovery;
+            const shouldPrint = printerCfg.enabled && printerCfg.autoPrintOnApproved && hasTargetPrinter && (!isPickup || printerCfg.printPickup);
+
+            if (shouldPrint) {
+                console.log(`Printing receipt... (configured=${!!printerCfg.ip}, autoDiscovery=${printerCfg.allowAutoDiscovery})`);
+                const printerTarget = printerCfg.ip ? { ip: printerCfg.ip, port: printerCfg.port } : null;
+                printOrder(order, printerTarget)
+                    .then(printResult => {
+                        if (printResult.success) {
+                            console.log('Order printed successfully to:', printResult.printer);
+                        } else {
+                            console.error('Printing failed:', printResult.error);
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Printing error:', err);
+                    });
+            } else {
+                console.log('Printing skipped (printer disabled or settings)');
+            }
+
+            if (method === 'delivery') {
                 try {
                     const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate: data?.currencySettings?.eurToBgnRate });
                     if (deliveryResult.success) {
@@ -3026,8 +3143,6 @@ app.put(API_PREFIX + '/orders/mobile/:id', requireApiKey, async (req, res) => {
                 } catch (err) {
                     console.error('Delivery service error:', err);
                 }
-            } else {
-                console.log('Pickup order - no printing needed');
             }
 
             // Email customer on approval (non-blocking)
@@ -3537,11 +3652,22 @@ app.put(API_PREFIX + '/orders/:id', requireAuthOrApiKey, async (req, res) => {
         // Ако статусът е 'approved'
         if (hasStatusUpdate && normalizedStatus === 'approved' && previousStatus !== 'approved') {
             console.log('Order approved, processing...');
-            
-            // Принтиране САМО ако е за доставка
-            if (order.deliveryMethod === 'delivery') {
-                console.log('Delivery order - printing receipt...');
-                printOrder(order)
+
+            const restaurant = (data.restaurants || []).find(r => r && r.id === req.restaurantId);
+            const printerNormalized = normalizePrinterConfig(restaurant?.printer);
+            const printerCfg = printerNormalized.ok
+                ? printerNormalized.value
+                : { enabled: false, ip: '', port: 9100, autoPrintOnApproved: true, printPickup: true, allowAutoDiscovery: false };
+
+            const method = (order.deliveryMethod || order.deliveryType || '').toString();
+            const isPickup = method === 'pickup';
+            const hasTargetPrinter = !!printerCfg.ip || printerCfg.allowAutoDiscovery;
+            const shouldPrint = printerCfg.enabled && printerCfg.autoPrintOnApproved && hasTargetPrinter && (!isPickup || printerCfg.printPickup);
+
+            if (shouldPrint) {
+                console.log(`Printing receipt... (configured=${!!printerCfg.ip}, autoDiscovery=${printerCfg.allowAutoDiscovery})`);
+                const printerTarget = printerCfg.ip ? { ip: printerCfg.ip, port: printerCfg.port } : null;
+                printOrder(order, printerTarget)
                     .then(printResult => {
                         if (printResult.success) {
                             console.log('Order printed successfully to:', printResult.printer);
@@ -3552,20 +3678,24 @@ app.put(API_PREFIX + '/orders/:id', requireAuthOrApiKey, async (req, res) => {
                     .catch(err => {
                         console.error('Print error:', err);
                     });
-
-                // Изпращане към delivery service
-                const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate: data?.currencySettings?.eurToBgnRate });
-                
-                if (deliveryResult.success) {
-                    console.log('Order sent to delivery service:', deliveryResult.deliveryId);
-                    order.deliveryServiceId = deliveryResult.deliveryId;
-                    order.deliveryClientId = deliveryResult.clientId;
-                } else {
-                    console.error('Failed to send to delivery service:', deliveryResult.error);
-                    // Не спираме процеса, само логваме грешката
-                }
             } else {
-                console.log('Pickup order - no printing needed');
+                console.log('Printing skipped (printer disabled or settings)');
+            }
+
+            if (method === 'delivery') {
+                try {
+                    const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate: data?.currencySettings?.eurToBgnRate });
+
+                    if (deliveryResult.success) {
+                        console.log('Order sent to delivery service:', deliveryResult.deliveryId);
+                        order.deliveryServiceId = deliveryResult.deliveryId;
+                        order.deliveryClientId = deliveryResult.clientId;
+                    } else {
+                        console.error('Failed to send to delivery service:', deliveryResult.error);
+                    }
+                } catch (err) {
+                    console.error('Delivery service error:', err);
+                }
             }
 
             // Email customer on approval (non-blocking)
@@ -3635,13 +3765,24 @@ app.delete(API_PREFIX + '/orders/:id', requireAuth, (req, res) => {
 
 // ==================== PRINTER & DELIVERY ENDPOINTS ====================
 
-// Test printer connection (admin only)
-app.get(API_PREFIX + '/printer/test', requireAuth, async (req, res) => {
+// Test printer connection (Bearer token or API key)
+app.get(API_PREFIX + '/printer/test', requireAuthOrApiKey, async (req, res) => {
     try {
         const { testPrinter, findNetworkPrinters } = require('./printer-service');
+
+        const ip = (req.query.ip || '').toString().trim();
+        const port = Number.isFinite(Number(req.query.port)) ? Number(req.query.port) : 9100;
+        const subnet = (req.query.subnet || '').toString().trim();
+        const timeout = Number.isFinite(Number(req.query.timeout)) ? Number(req.query.timeout) : undefined;
+        const concurrency = Number.isFinite(Number(req.query.concurrency)) ? Number(req.query.concurrency) : undefined;
+
+        if (ip) {
+            const ok = await testPrinter(ip, port);
+            return res.json({ success: ok, printers: [{ ip, port, name: `Network Printer at ${ip}` }], tested: ip, port });
+        }
         
         // Намиране на принтери
-        const printers = await findNetworkPrinters();
+        const printers = await findNetworkPrinters({ subnet, port, timeout, concurrency });
         
         if (printers.length === 0) {
             return res.json({ 
@@ -3652,7 +3793,7 @@ app.get(API_PREFIX + '/printer/test', requireAuth, async (req, res) => {
         }
 
         // Тестване на първия принтер
-        const testResult = await testPrinter(printers[0].ip);
+        const testResult = await testPrinter(printers[0].ip, printers[0].port || port);
         
         res.json({
             success: testResult,
@@ -3665,11 +3806,16 @@ app.get(API_PREFIX + '/printer/test', requireAuth, async (req, res) => {
     }
 });
 
-// Find printers on network (admin only)
-app.get(API_PREFIX + '/printer/find', requireAuth, async (req, res) => {
+// Find printers on network (Bearer token or API key)
+app.get(API_PREFIX + '/printer/find', requireAuthOrApiKey, async (req, res) => {
     try {
         const { findNetworkPrinters } = require('./printer-service');
-        const printers = await findNetworkPrinters();
+        const subnet = (req.query.subnet || '').toString().trim();
+        const port = Number.isFinite(Number(req.query.port)) ? Number(req.query.port) : undefined;
+        const timeout = Number.isFinite(Number(req.query.timeout)) ? Number(req.query.timeout) : undefined;
+        const concurrency = Number.isFinite(Number(req.query.concurrency)) ? Number(req.query.concurrency) : undefined;
+
+        const printers = await findNetworkPrinters({ subnet, port, timeout, concurrency });
         
         res.json({
             success: true,
@@ -3682,11 +3828,11 @@ app.get(API_PREFIX + '/printer/find', requireAuth, async (req, res) => {
     }
 });
 
-// Print specific order (admin only)
-app.post(API_PREFIX + '/printer/print/:orderId', requireAuth, async (req, res) => {
+// Print specific order (Bearer token or API key)
+app.post(API_PREFIX + '/printer/print/:orderId', requireAuthOrApiKey, async (req, res) => {
     try {
         const orderId = req.params.orderId;
-        const { printerIp } = req.body;
+        const { printerIp, port } = req.body || {};
 
         const data = readDatabase();
         const order = data.orders?.find(o => o.id === orderId);
@@ -3701,7 +3847,24 @@ app.post(API_PREFIX + '/printer/print/:orderId', requireAuth, async (req, res) =
         }
 
         const { printOrder } = require('./printer-service');
-        const result = await printOrder(order, printerIp);
+
+        let printerTarget = null;
+        if (printerIp) {
+            printerTarget = { ip: printerIp, port: Number.isFinite(Number(port)) ? Number(port) : 9100 };
+        } else {
+            const restaurant = (data.restaurants || []).find(r => r && r.id === req.restaurantId);
+            const printerNormalized = normalizePrinterConfig(restaurant?.printer);
+            const printerCfg = printerNormalized.ok
+                ? printerNormalized.value
+                : { enabled: false, ip: '', port: 9100, autoPrintOnApproved: true, printPickup: true, allowAutoDiscovery: false };
+
+            const hasTargetPrinter = !!printerCfg.ip || printerCfg.allowAutoDiscovery;
+            if (printerCfg.enabled && hasTargetPrinter) {
+                printerTarget = printerCfg.ip ? { ip: printerCfg.ip, port: printerCfg.port } : null;
+            }
+        }
+
+        const result = await printOrder(order, printerTarget);
 
         res.json(result);
     } catch (error) {

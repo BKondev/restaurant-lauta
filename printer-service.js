@@ -5,38 +5,52 @@ const os = require('os');
  * Търсене на ESC/POS принтери в локалната мрежа
  * Сканира порт 9100 (стандартен за мрежови принтери)
  */
-async function findNetworkPrinters() {
+async function findNetworkPrinters(options = {}) {
     const printers = [];
     const localIp = getLocalIP();
     
-    if (!localIp) {
+    const port = Number.isFinite(Number(options.port)) ? Number(options.port) : 9100;
+    const timeout = Number.isFinite(Number(options.timeout)) ? Number(options.timeout) : 500;
+    const concurrency = Math.max(1, Math.min(100, Number.isFinite(Number(options.concurrency)) ? Number(options.concurrency) : 50));
+
+    // Allow passing explicit subnet like "192.168.88" (preferred for testing)
+    const requestedSubnet = (options.subnet || '').toString().trim();
+
+    const seedIp = requestedSubnet ? (requestedSubnet.includes('.') ? requestedSubnet + '.1' : '') : localIp;
+
+    if (!seedIp) {
         console.log('Could not determine local IP');
         return printers;
     }
 
-    const subnet = localIp.substring(0, localIp.lastIndexOf('.'));
-    const scanPromises = [];
+    const subnet = seedIp.substring(0, seedIp.lastIndexOf('.'));
 
-    console.log(`Scanning network ${subnet}.0/24 for printers...`);
+    console.log(`Scanning network ${subnet}.0/24 for printers (port ${port}, timeout ${timeout}ms, concurrency ${concurrency})...`);
 
-    // Сканиране на IP адреси от 1 до 254
+    // Build scan list 1..254
+    const ips = [];
     for (let i = 1; i <= 254; i++) {
-        const ip = `${subnet}.${i}`;
-        scanPromises.push(checkPrinterPort(ip, 9100));
+        ips.push(`${subnet}.${i}`);
     }
 
-    const results = await Promise.allSettled(scanPromises);
-    
-    results.forEach((result, index) => {
-        if (result.status === 'fulfilled' && result.value) {
-            const ip = `${subnet}.${index + 1}`;
-            printers.push({
-                ip: ip,
-                port: 9100,
-                name: `Network Printer at ${ip}`
-            });
+    // Concurrency-limited scan
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(concurrency, ips.length) }, async () => {
+        while (cursor < ips.length) {
+            const ip = ips[cursor++];
+            // eslint-disable-next-line no-await-in-loop
+            const ok = await checkPrinterPort(ip, port, timeout);
+            if (ok) {
+                printers.push({
+                    ip,
+                    port,
+                    name: `Network Printer at ${ip}`
+                });
+            }
         }
     });
+
+    await Promise.all(workers);
 
     console.log(`Found ${printers.length} printer(s)`);
     return printers;
@@ -101,13 +115,22 @@ function getLocalIP() {
 /**
  * Принтиране на поръчка
  */
-async function printOrder(order, printerIp = null) {
+async function printOrder(order, printerTarget = null) {
     try {
         let printer = null;
 
-        if (printerIp) {
+        if (printerTarget) {
             // Използване на конкретен принтер
-            printer = { ip: printerIp, port: 9100 };
+            if (typeof printerTarget === 'string') {
+                printer = { ip: printerTarget, port: 9100 };
+            } else if (typeof printerTarget === 'object' && printerTarget.ip) {
+                printer = {
+                    ip: String(printerTarget.ip).trim(),
+                    port: Number.isFinite(Number(printerTarget.port)) ? Number(printerTarget.port) : 9100
+                };
+            } else {
+                return { success: false, error: 'Invalid printer target' };
+            }
         } else {
             // Автоматично търсене на принтер
             const printers = await findNetworkPrinters();
@@ -284,7 +307,7 @@ function sendToPrinter(ip, port, data) {
 /**
  * Тестване на принтер
  */
-async function testPrinter(ip = null) {
+async function testPrinter(ip = null, port = 9100) {
     try {
         let printerIp = ip;
 
@@ -298,7 +321,8 @@ async function testPrinter(ip = null) {
         }
 
         const testData = '\x1B@Test Print\n\n\n\x1DVA';
-        const result = await sendToPrinter(printerIp, 9100, testData);
+        const p = Number.isFinite(Number(port)) ? Number(port) : 9100;
+        const result = await sendToPrinter(printerIp, p, testData);
         
         return result;
     } catch (error) {

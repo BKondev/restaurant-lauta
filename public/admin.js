@@ -1376,6 +1376,7 @@ document.addEventListener('DOMContentLoaded', function() {
         loadProductsForCombo();
         startOrdersPolling();
         loadWorkingHours();
+        loadPrinterSettings();
         loadSlideshowSettings();
         maybeEnableEmailDiagnosticsPanel();
         initializeZonesMap();
@@ -3346,6 +3347,302 @@ async function loadWorkingHours() {
         document.getElementById('closing-time').value = settings.closingTime || '22:00';
     } catch (error) {
         console.error('Error loading working hours:', error);
+    }
+}
+
+// ========== PRINTER SETTINGS FUNCTIONS ==========
+
+function getPrinterFormValue() {
+    const enabled = !!document.getElementById('printer-enabled')?.checked;
+    const ip = (document.getElementById('printer-ip')?.value || '').toString().trim();
+    const port = Number(document.getElementById('printer-port')?.value || 9100);
+    const autoPrintOnApproved = !!document.getElementById('printer-auto-print-approved')?.checked;
+    const printPickup = !!document.getElementById('printer-print-pickup')?.checked;
+    const allowAutoDiscovery = !!document.getElementById('printer-allow-auto-discovery')?.checked;
+
+    return {
+        enabled,
+        ip,
+        port: Number.isFinite(port) ? port : 9100,
+        autoPrintOnApproved,
+        printPickup,
+        allowAutoDiscovery
+    };
+}
+
+function applyPrinterToForm(printer) {
+    const cfg = printer || {};
+    const enabledEl = document.getElementById('printer-enabled');
+    const ipEl = document.getElementById('printer-ip');
+    const portEl = document.getElementById('printer-port');
+    const autoEl = document.getElementById('printer-auto-print-approved');
+    const pickupEl = document.getElementById('printer-print-pickup');
+    const discoveryEl = document.getElementById('printer-allow-auto-discovery');
+
+    if (enabledEl) enabledEl.checked = !!cfg.enabled;
+    if (ipEl) ipEl.value = (cfg.ip || '').toString();
+    if (portEl) portEl.value = (cfg.port != null ? String(cfg.port) : '9100');
+    if (autoEl) autoEl.checked = cfg.autoPrintOnApproved !== false;
+    if (pickupEl) pickupEl.checked = cfg.printPickup !== false;
+    if (discoveryEl) discoveryEl.checked = !!cfg.allowAutoDiscovery;
+}
+
+function fillPrinterScanResults(printers) {
+    const select = document.getElementById('printer-scan-results');
+    if (!select) return;
+    const list = Array.isArray(printers) ? printers : [];
+
+    if (list.length === 0) {
+        select.innerHTML = '<option value="">No printers found</option>';
+        return;
+    }
+
+    select.innerHTML = ['<option value="">-- Select printer --</option>', ...list.map(p => {
+        const ip = (p?.ip || '').toString();
+        const name = (p?.name || `Network Printer at ${ip}`).toString();
+        const port = (p?.port != null ? p.port : 9100);
+        return `<option value="${escapeHtml(ip)}" data-port="${escapeHtml(String(port))}">${escapeHtml(name)} (${escapeHtml(ip)}:${escapeHtml(String(port))})</option>`;
+    })].join('');
+
+    select.onchange = () => {
+        const ip = (select.value || '').toString().trim();
+        if (!ip) return;
+        const opt = select.options[select.selectedIndex];
+        const port = opt?.getAttribute('data-port') || '9100';
+        const ipEl = document.getElementById('printer-ip');
+        const portEl = document.getElementById('printer-port');
+        if (ipEl) ipEl.value = ip;
+        if (portEl) portEl.value = port;
+    };
+}
+
+async function loadPrinterSettings() {
+    try {
+        const token = getAdminToken();
+        if (!token) return;
+
+        const res = await fetch(`${API_URL}/restaurants/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+
+        const profile = await res.json().catch(() => ({}));
+        applyPrinterToForm(profile?.printer || null);
+    } catch (e) {
+        console.error('Error loading printer settings:', e);
+    }
+}
+
+async function revealRestaurantApiKey() {
+    try {
+        const token = getAdminToken();
+        if (!token) {
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        const input = document.getElementById('restaurant-api-key');
+        if (!input) return;
+
+        const res = await fetch(`${API_URL}/restaurants/me/api-key`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            alert(out?.error || 'Failed to load API key');
+            return;
+        }
+
+        input.type = 'text';
+        input.value = (out?.apiKey || '').toString();
+
+        // auto-hide after 30s
+        setTimeout(() => {
+            try {
+                if (input.type === 'text') input.type = 'password';
+            } catch {}
+        }, 30000);
+    } catch (e) {
+        console.error('revealRestaurantApiKey failed:', e);
+        alert('Failed to load API key');
+    }
+}
+
+async function copyRestaurantApiKey() {
+    const input = document.getElementById('restaurant-api-key');
+    const value = (input?.value || '').toString().trim();
+    if (!value) {
+        alert('Click Show first');
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(value);
+        alert('API key copied');
+    } catch {
+        try {
+            input.type = 'text';
+            input.focus();
+            input.select();
+            document.execCommand('copy');
+            input.type = 'password';
+            alert('API key copied');
+        } catch {
+            alert('Copy failed');
+        }
+    }
+}
+
+async function savePrinterSettings() {
+    try {
+        const token = getAdminToken();
+        if (!token) {
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        const payload = { printer: getPrinterFormValue() };
+
+        const res = await fetch(`${API_URL}/restaurants/me`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            alert(out?.error || 'Failed to save printer settings');
+            return;
+        }
+
+        applyPrinterToForm(out?.printer || payload.printer);
+        alert(t('printerSaved', 'Printer settings saved.'));
+    } catch (e) {
+        console.error('savePrinterSettings failed:', e);
+        alert('Failed to save printer settings');
+    }
+}
+
+async function scanPrinters() {
+    try {
+        const token = getAdminToken();
+        if (!token) {
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        const subnet = (document.getElementById('printer-subnet')?.value || '').toString().trim();
+        const port = (document.getElementById('printer-port')?.value || '').toString().trim();
+
+        const qs = new URLSearchParams();
+        if (subnet) qs.set('subnet', subnet);
+        if (port) qs.set('port', port);
+
+        const res = await fetch(`${API_URL}/printer/find?${qs.toString()}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok || !out?.success) {
+            alert(out?.error || 'Printer scan failed');
+            return;
+        }
+
+        fillPrinterScanResults(out.printers || []);
+        alert(`Found ${out.count || 0} printer(s)`);
+    } catch (e) {
+        console.error('scanPrinters failed:', e);
+        alert('Printer scan failed');
+    }
+}
+
+async function autoDetectPrinter() {
+    try {
+        const token = getAdminToken();
+        if (!token) {
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        const subnet = (document.getElementById('printer-subnet')?.value || '').toString().trim();
+        const port = (document.getElementById('printer-port')?.value || '').toString().trim();
+
+        const qs = new URLSearchParams();
+        if (subnet) qs.set('subnet', subnet);
+        if (port) qs.set('port', port);
+
+        const res = await fetch(`${API_URL}/printer/find?${qs.toString()}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok || !out?.success) {
+            alert(out?.error || 'Printer auto-detect failed');
+            return;
+        }
+
+        const printers = Array.isArray(out.printers) ? out.printers : [];
+        fillPrinterScanResults(printers);
+
+        if (printers.length === 0) {
+            alert('No printers found');
+            return;
+        }
+
+        // Prefer the first discovered printer.
+        const first = printers[0];
+        const ipEl = document.getElementById('printer-ip');
+        const portEl = document.getElementById('printer-port');
+        if (ipEl) ipEl.value = (first.ip || '').toString();
+        if (portEl && first.port != null) portEl.value = String(first.port);
+
+        // If printer is enabled, auto-save to persist immediately.
+        const enabled = !!document.getElementById('printer-enabled')?.checked;
+        if (enabled) {
+            await savePrinterSettings();
+        } else {
+            alert(`Detected: ${(first.name || 'Printer')} (${first.ip}:${first.port || 9100}). Enable + Save to use it.`);
+        }
+    } catch (e) {
+        console.error('autoDetectPrinter failed:', e);
+        alert('Printer auto-detect failed');
+    }
+}
+
+async function testPrinterConfig() {
+    try {
+        const token = getAdminToken();
+        if (!token) {
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        const cfg = getPrinterFormValue();
+        const qs = new URLSearchParams();
+        if (cfg.ip) qs.set('ip', cfg.ip);
+        if (cfg.port) qs.set('port', String(cfg.port));
+
+        const res = await fetch(`${API_URL}/printer/test?${qs.toString()}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const out = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+            alert(out?.error || 'Printer test failed');
+            return;
+        }
+
+        if (out?.success) {
+            alert(`Printer OK: ${out?.tested || cfg.ip || ''}`);
+        } else {
+            alert(out?.error || 'Printer test failed');
+        }
+    } catch (e) {
+        console.error('testPrinterConfig failed:', e);
+        alert('Printer test failed');
     }
 }
 

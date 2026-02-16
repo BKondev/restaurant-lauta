@@ -1,0 +1,15 @@
+{
+  "apiBaseUrl": "https://bojole.bg/api",
+  "apiKey": "PUT_YOUR_RESTAURANT_API_KEY_HERE",
+  "pollIntervalMs": 5000,
+  "stateFile": "./printer-agent-state.json",
+  "logFile": "./printer-agent.log",
+  "printerIp": "",
+  "printerPort": 9100,
+  "subnet": "192.168.88",
+  "subnetMask": "255.255.255.0",
+  "gateway": "192.168.88.1",
+  "dhcpEnabled": true,
+  "dryRun": false,
+  "nodePath": "C:/Program Files/nodejs/node.exe"
+}
