@@ -187,6 +187,33 @@ function generateReceiptText(order) {
     receipt += `${ESC}a\x00`; // Left align
     receipt += `Поръчка #${order.id}\n`;
     receipt += `Дата: ${new Date(order.createdAt).toLocaleString('bg-BG')}\n`;
+
+    // Плащане
+    const payMethod = (order?.payment?.method || '').toString().trim().toLowerCase();
+    const payStatus = (order?.payment?.status || '').toString().trim().toLowerCase();
+    const isCard = payMethod === 'card';
+    const isCardPaid = isCard && payStatus === 'paid';
+
+    if (isCardPaid) {
+        receipt += `${ESC}!\x08`; // Bold
+        receipt += 'ПЛАЩАНЕ: ПЛАТЕНО (КАРТА)\n';
+        receipt += `${ESC}!\x00`; // Normal
+    } else if (isCard) {
+        const statusBg = payStatus === 'pending'
+            ? 'ЧАКА ПЛАЩАНЕ'
+            : (payStatus === 'failed' || payStatus === 'cancelled' || payStatus === 'canceled')
+                ? 'НЕУСПЕШНО'
+                : 'НЕ Е ПЛАТЕНО';
+        receipt += `${ESC}!\x08`; // Bold
+        receipt += `ПЛАЩАНЕ: НЕ Е ПЛАТЕНО (КАРТА: ${statusBg})\n`;
+        receipt += `${ESC}!\x00`; // Normal
+    } else {
+        // Cash (or unknown) is considered NOT PAID at order time
+        receipt += `${ESC}!\x08`; // Bold
+        receipt += 'ПЛАЩАНЕ: НЕ Е ПЛАТЕНО (В БРОЙ)\n';
+        receipt += `${ESC}!\x00`; // Normal
+    }
+
     receipt += '--------------------------------\n';
     
     // Информация за клиента
