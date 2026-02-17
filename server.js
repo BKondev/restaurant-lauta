@@ -33,6 +33,67 @@ const BASE_PATH = (process.env.BASE_PATH ?? '/resturant-website');
 // Token storage: Map of token -> { restaurantId, username, expiresAt }
 const activeTokens = new Map();
 
+function ensureAuthTokensStore(db) {
+    if (!db || typeof db !== 'object') return {};
+    if (!db.authTokens || typeof db.authTokens !== 'object') db.authTokens = {};
+    return db.authTokens;
+}
+
+function persistToken(token, tokenData) {
+    try {
+        const db = readDatabase();
+        const store = ensureAuthTokensStore(db);
+        store[String(token)] = {
+            restaurantId: String(tokenData.restaurantId || ''),
+            username: String(tokenData.username || ''),
+            expiresAt: Number(tokenData.expiresAt) || (Date.now() + 86400000)
+        };
+        writeDatabase(db);
+    } catch (e) {
+        console.error('[AUTH] Failed to persist token:', e?.message || e);
+    }
+}
+
+function deletePersistedToken(token) {
+    try {
+        const db = readDatabase();
+        const store = ensureAuthTokensStore(db);
+        delete store[String(token)];
+        writeDatabase(db);
+    } catch (e) {
+        console.error('[AUTH] Failed to delete persisted token:', e?.message || e);
+    }
+}
+
+function hydrateTokensFromDb() {
+    try {
+        const db = readDatabase();
+        const store = ensureAuthTokensStore(db);
+        const now = Date.now();
+        let changed = false;
+
+        for (const [token, data] of Object.entries(store)) {
+            const expiresAt = Number(data?.expiresAt) || 0;
+            if (!expiresAt || expiresAt < now) {
+                delete store[token];
+                changed = true;
+                continue;
+            }
+            if (!activeTokens.has(token)) {
+                activeTokens.set(token, {
+                    restaurantId: String(data?.restaurantId || ''),
+                    username: String(data?.username || ''),
+                    expiresAt
+                });
+            }
+        }
+
+        if (changed) writeDatabase(db);
+    } catch (e) {
+        console.error('[AUTH] Failed to hydrate tokens:', e?.message || e);
+    }
+}
+
 // Generate simple token
 function generateToken() {
     return Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -66,6 +127,7 @@ function getRestaurantFromToken(token) {
     // Check if token expired
     if (tokenData.expiresAt < Date.now()) {
         activeTokens.delete(token);
+        deletePersistedToken(token);
         return null;
     }
     
@@ -219,7 +281,8 @@ function initDatabase() {
             ],
             products: [],
             orders: [],
-            promoCodes: []
+            promoCodes: [],
+            authTokens: {}
         };
         fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), 'utf8');
     }
@@ -715,6 +778,7 @@ function isOrderForRestaurant(order, restaurantId, db) {
 
 // Initialize database on startup
 initDatabase();
+hydrateTokensFromDb();
 
 // ==================== API ROUTES ====================
 
@@ -751,13 +815,16 @@ app.post(API_PREFIX + '/login', (req, res) => {
     
     if (restaurant && restaurant.active) {
         const token = generateToken();
-        
-        // Store token with restaurant info and expiration (24 hours)
-        activeTokens.set(token, {
+
+        // Store token with restaurant info and long expiration (~1 year)
+        const tokenData = {
             restaurantId: restaurant.id,
             username: restaurant.username,
-            expiresAt: Date.now() + (24 * 60 * 60 * 1000)
-        });
+            expiresAt: Date.now() + (365 * 24 * 60 * 60 * 1000)
+        };
+
+        activeTokens.set(token, tokenData);
+        persistToken(token, tokenData);
         
         res.json({
             success: true,
@@ -783,6 +850,7 @@ app.post(API_PREFIX + '/logout', (req, res) => {
     
     if (token) {
         activeTokens.delete(token);
+        deletePersistedToken(token);
     }
     
     res.json({
@@ -1321,6 +1389,8 @@ function handleBoricaReturn(req, res) {
             if (success) {
                 order.payment.status = 'paid';
                 order.payment.paidAt = new Date().toISOString();
+                order.paymentMethod = 'card';
+                order.paymentStatus = 'paid';
                 if (order.status === 'pending_payment') {
                     order.status = 'pending';
                 }
@@ -1338,6 +1408,8 @@ function handleBoricaReturn(req, res) {
                 const actionLower = ACTION.toString().trim().toLowerCase();
                 const cancelled = RC === '17' || actionLower === 'cancel' || actionLower === 'canceled' || actionLower === 'cancelled';
                 order.payment.status = cancelled ? 'cancelled' : 'failed';
+                order.paymentMethod = 'card';
+                order.paymentStatus = order.payment.status;
                 if (order.status === 'pending_payment') {
                     order.status = 'cancelled';
                 }
@@ -2966,6 +3038,72 @@ function recomputeOrderTotals(order) {
     }
 }
 
+function decorateOrderPayment(order) {
+    const src = (order && typeof order === 'object') ? order : {};
+    const paymentObj = (src.payment && typeof src.payment === 'object') ? src.payment : {};
+
+    const method = (paymentObj.method || src.paymentMethod || src.payment_method || '').toString().trim().toLowerCase() || 'cash';
+    const status = (paymentObj.status || src.paymentStatus || src.payment_status || '').toString().trim().toLowerCase() || (method === 'card' ? 'pending' : 'unpaid');
+
+    return {
+        ...src,
+        payment: {
+            ...paymentObj,
+            method,
+            status
+        },
+        paymentMethod: method,
+        paymentStatus: status
+    };
+}
+
+function getOrderTimestampMs(order) {
+    const ts = order?.timestamp || order?.createdAt || order?.updatedAt;
+    const ms = ts ? new Date(ts).getTime() : NaN;
+    return Number.isFinite(ms) ? ms : NaN;
+}
+
+function parseYmdDateString(value) {
+    const str = (value || '').toString().trim();
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+    if (!m) return null;
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+    if (month < 1 || month > 12) return null;
+    if (day < 1 || day > 31) return null;
+    return { year, month, day };
+}
+
+function parseDateOrYmdToMs(value, tzOffsetMinutes, endOfDay) {
+    const raw = (value || '').toString().trim();
+    if (!raw) return null;
+
+    const ymd = parseYmdDateString(raw);
+    if (ymd) {
+        const offsetMs = (Number(tzOffsetMinutes) || 0) * 60 * 1000;
+        const h = endOfDay ? 23 : 0;
+        const mi = endOfDay ? 59 : 0;
+        const s = endOfDay ? 59 : 0;
+        const ms = endOfDay ? 999 : 0;
+        return Date.UTC(ymd.year, ymd.month - 1, ymd.day, h, mi, s, ms) + offsetMs;
+    }
+
+    const parsed = new Date(raw);
+    const t = parsed.getTime();
+    return Number.isFinite(t) ? t : null;
+}
+
+function computeTodayYmdForOffset(tzOffsetMinutes) {
+    const offsetMs = (Number(tzOffsetMinutes) || 0) * 60 * 1000;
+    const shifted = new Date(Date.now() - offsetMs);
+    const year = shifted.getUTCFullYear();
+    const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(shifted.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 // Get all orders (admin only - filtered by restaurant)
 app.get(API_PREFIX + '/orders', requireAuthOrApiKey, (req, res) => {
     try {
@@ -2981,9 +3119,73 @@ app.get(API_PREFIX + '/orders', requireAuthOrApiKey, (req, res) => {
             restaurantOrders = restaurantOrders.filter(o => normalizeOrderStatus(o.status) === normalized);
         }
 
-        res.json(restaurantOrders);
+        const tzOffsetMinutes = Number.isFinite(Number(req.query.tzOffsetMinutes))
+            ? Number(req.query.tzOffsetMinutes)
+            : 0;
+
+        let fromRaw = (req.query.from || '').toString().trim();
+        let toRaw = (req.query.to || '').toString().trim();
+        const dateRaw = (req.query.date || '').toString().trim();
+
+        if (dateRaw && !fromRaw && !toRaw) {
+            fromRaw = dateRaw;
+            toRaw = dateRaw;
+        }
+        if (fromRaw && !toRaw) toRaw = fromRaw;
+        if (!fromRaw && toRaw) fromRaw = toRaw;
+
+        const fromMs = parseDateOrYmdToMs(fromRaw, tzOffsetMinutes, false);
+        const toMs = parseDateOrYmdToMs(toRaw, tzOffsetMinutes, true);
+        if (fromMs != null || toMs != null) {
+            restaurantOrders = restaurantOrders.filter(o => {
+                const t = getOrderTimestampMs(o);
+                if (!Number.isFinite(t)) return false;
+                if (fromMs != null && t < fromMs) return false;
+                if (toMs != null && t > toMs) return false;
+                return true;
+            });
+        }
+
+        res.json(restaurantOrders.map(decorateOrderPayment));
     } catch (error) {
         res.status(500).json({ error: 'Failed to retrieve orders' });
+    }
+});
+
+// Get today's orders (filtered by restaurant)
+// Optional query: tzOffsetMinutes (from JS Date.getTimezoneOffset())
+// Optional query: status
+app.get(API_PREFIX + '/orders/today', requireAuthOrApiKey, (req, res) => {
+    try {
+        const tzOffsetMinutes = Number.isFinite(Number(req.query.tzOffsetMinutes))
+            ? Number(req.query.tzOffsetMinutes)
+            : 0;
+
+        const todayYmd = computeTodayYmdForOffset(tzOffsetMinutes);
+        const fromMs = parseDateOrYmdToMs(todayYmd, tzOffsetMinutes, false);
+        const toMs = parseDateOrYmdToMs(todayYmd, tzOffsetMinutes, true);
+
+        const data = readDatabase();
+        const orders = data.orders || [];
+        let restaurantOrders = orders.filter(order => isOrderForRestaurant(order, req.restaurantId, data));
+
+        const statusQuery = (req.query.status || '').toString().trim();
+        if (statusQuery) {
+            const normalized = normalizeOrderStatus(statusQuery);
+            restaurantOrders = restaurantOrders.filter(o => normalizeOrderStatus(o.status) === normalized);
+        }
+
+        restaurantOrders = restaurantOrders
+            .filter(o => {
+                const t = getOrderTimestampMs(o);
+                if (!Number.isFinite(t)) return false;
+                return t >= fromMs && t <= toMs;
+            })
+            .sort((a, b) => getOrderTimestampMs(b) - getOrderTimestampMs(a));
+
+        res.json(restaurantOrders.map(decorateOrderPayment));
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to retrieve today\'s orders' });
     }
 });
 
@@ -2997,7 +3199,7 @@ app.get(API_PREFIX + '/orders/pending', requireAuthOrApiKey, (req, res) => {
         const pendingOrders = orders.filter(order => 
             isOrderForRestaurant(order, req.restaurantId, data) && order.status === 'pending'
         );
-        res.json(pendingOrders);
+        res.json(pendingOrders.map(decorateOrderPayment));
     } catch (error) {
         res.status(500).json({ error: 'Failed to retrieve pending orders' });
     }
@@ -3014,7 +3216,7 @@ app.get(API_PREFIX + '/orders/mobile/pending', requireApiKey, (req, res) => {
             isOrderForRestaurant(order, req.restaurantId, data) && order.status === 'pending'
         );
         
-        res.json(pendingOrders);
+        res.json(pendingOrders.map(decorateOrderPayment));
     } catch (error) {
         console.error('Error retrieving mobile pending orders:', error);
         res.status(500).json({ error: 'Failed to retrieve pending orders' });
@@ -3472,6 +3674,14 @@ app.post(API_PREFIX + '/orders', (req, res) => {
                 }
             });
         }
+
+        // Cash (or non-card) orders: store explicit payment metadata for printing/UI.
+        newOrder.payment = {
+            method: normalizedPaymentMethod || 'cash',
+            status: 'unpaid'
+        };
+        newOrder.paymentMethod = newOrder.payment.method;
+        newOrder.paymentStatus = newOrder.payment.status;
 
         data.orders.push(newOrder);
         writeDatabase(data);

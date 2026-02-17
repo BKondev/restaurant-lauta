@@ -708,6 +708,12 @@ Authorization: Bearer {token}
 
 **Authentication:** Required
 
+**Query Parameters (optional):**
+- `status` - Filter by status (`pending`, `approved`, `rejected`, etc.)
+- `date` - Filter by date (`YYYY-MM-DD`) in the client timezone (requires `tzOffsetMinutes`)
+- `from` / `to` - Filter by date range. Accepts `YYYY-MM-DD` (uses `tzOffsetMinutes`) or full ISO timestamps
+- `tzOffsetMinutes` - Timezone offset in minutes (use JS `new Date().getTimezoneOffset()`)
+
 **Response (200 OK):**
 ```json
 [
@@ -732,6 +738,19 @@ Authorization: Bearer {token}
   }
 ]
 ```
+
+---
+
+### Get Today's Orders
+**GET** `/api/orders/today`
+
+**Authentication:** Required
+
+**Query Parameters (optional):**
+- `status` - Filter by status
+- `tzOffsetMinutes` - Timezone offset in minutes (use JS `new Date().getTimezoneOffset()`)
+
+**Response (200 OK):** Same shape as **Get All Orders**
 
 ---
 
