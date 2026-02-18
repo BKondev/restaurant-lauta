@@ -56,6 +56,29 @@ let workingHours = {
     closingTime: '22:00'
 };
 
+let isPlacingOrder = false;
+
+function setPlaceOrderLoading(isLoading) {
+    isPlacingOrder = !!isLoading;
+    const buttons = document.querySelectorAll('.checkout-btn');
+    const text = currentLanguage === 'bg' ? 'Изпращане…' : 'Sending…';
+
+    buttons.forEach((btn) => {
+        if (!btn) return;
+        // Only lock while the request is in-flight.
+        btn.disabled = isPlacingOrder;
+        btn.setAttribute('data-loading', isPlacingOrder ? '1' : '0');
+        if (isPlacingOrder) {
+            btn.setAttribute('data-orig-html', btn.innerHTML);
+            btn.innerHTML = text;
+        } else {
+            const orig = btn.getAttribute('data-orig-html');
+            if (orig) btn.innerHTML = orig;
+            btn.removeAttribute('data-orig-html');
+        }
+    });
+}
+
 const CHECKOUT_STATE_KEY = 'checkoutState_v1';
 
 function captureCustomerInfoFromDom() {
@@ -1071,7 +1094,7 @@ function renderCheckout() {
             ${currentLanguage === 'bg' ? 'Текуща сума' : 'Current amount'}: ${formatPrice(total)}
         </div>
         ` : ''}
-        <button class="checkout-btn" onclick="placeOrder()" ${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'disabled' : ''}>
+        <button class="checkout-btn" type="button" onclick="placeOrder()" aria-disabled="${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'true' : 'false'}">
             ${deliveryMethod === 'delivery' 
                 ? (currentLanguage === 'bg' ? 'Поръчай с Доставка' : 'Order with Delivery')
                 : (currentLanguage === 'bg' ? 'Поръчай и Вземи' : 'Order and Pickup')}
@@ -1712,6 +1735,10 @@ function removePromoCode() {
 
 // Place order
 async function placeOrder() {
+    if (isPlacingOrder) {
+        return;
+    }
+
     if (orderSettings?.temporarilyClosed === true) {
         showRestaurantClosedModal({ type: 'manual' });
         return;
@@ -1720,8 +1747,23 @@ async function placeOrder() {
     // Checkout is accessible even when closed, but ordering is not.
     const restaurantClosedReason = getRestaurantClosedReason();
     if (restaurantClosedReason) {
-        renderCheckout();
-        applyCheckoutStepVisibility();
+        if (restaurantClosedReason.type === 'manual') {
+            showRestaurantClosedModal({ type: 'manual' });
+        } else {
+            showWorkingHoursModal();
+        }
+        return;
+    }
+
+    // Minimum order amount feedback (avoid a disabled button doing "nothing")
+    const totalsNow = calculateTotals();
+    const minAmount = Number(orderSettings?.minimumOrderAmount) || 0;
+    if (minAmount > 0 && (totalsNow?.total || 0) < minAmount) {
+        alert(
+            currentLanguage === 'bg'
+                ? `Минимална сума за поръчка: ${formatPrice(minAmount)}`
+                : `Minimum order amount: ${formatPrice(minAmount)}`
+        );
         return;
     }
 
@@ -1794,12 +1836,12 @@ async function placeOrder() {
     }
 
     // Validate customer info
-    const name = document.getElementById('customer-name').value.trim();
-    const phone = document.getElementById('customer-phone').value.trim();
-    const email = document.getElementById('customer-email').value.trim();
-    const city = deliveryMethod === 'delivery' ? document.getElementById('customer-city').value.trim() : '';
-    const address = deliveryMethod === 'delivery' ? document.getElementById('customer-address').value.trim() : '';
-    const notes = document.getElementById('customer-notes').value.trim();
+    const name = document.getElementById('customer-name')?.value?.trim() || '';
+    const phone = document.getElementById('customer-phone')?.value?.trim() || '';
+    const email = document.getElementById('customer-email')?.value?.trim() || '';
+    const city = deliveryMethod === 'delivery' ? (document.getElementById('customer-city')?.value?.trim() || '') : '';
+    const address = deliveryMethod === 'delivery' ? (document.getElementById('customer-address')?.value?.trim() || '') : '';
+    const notes = document.getElementById('customer-notes')?.value?.trim() || '';
 
     if (!name || !phone || !email || (deliveryMethod === 'delivery' && (!city || !address))) {
         alert(translations[currentLanguage].fillAllFields);
@@ -1829,7 +1871,11 @@ async function placeOrder() {
         paymentMethod: paymentMethod
     };
 
+    let didNavigate = false;
+
     try {
+        setPlaceOrderLoading(true);
+
         // Send order to backend
         const response = await fetch(`${API_URL}/orders`, {
             method: 'POST',
@@ -1841,9 +1887,13 @@ async function placeOrder() {
 
         if (!response.ok) {
             const errPayload = await response.json().catch(() => ({}));
+            const errTextAny = (errPayload && (errPayload.error || errPayload.message))
+                ? String(errPayload.error || errPayload.message)
+                : '';
             if (response.status === 423) {
-                const errText = (errPayload && (errPayload.error || errPayload.message)) ? String(errPayload.error || errPayload.message) : '';
+                const errText = errTextAny;
                 if (/temporarily\s+closed/i.test(errText)) {
+                    setPlaceOrderLoading(false);
                     showRestaurantClosedModal({ type: 'manual' });
                     return;
                 }
@@ -1855,39 +1905,54 @@ async function placeOrder() {
                         const delivery = getDeliveryWindowMinutes();
                         const outOfDelivery = nowMins < delivery.open || nowMins >= delivery.close;
                         if (outOfDelivery) {
+                            setPlaceOrderLoading(false);
                             showDeliveryHoursModal();
                             return;
                         }
                     }
+                    setPlaceOrderLoading(false);
                     showWorkingHoursModal();
                     return;
                 }
             }
-            throw new Error(errText || 'Failed to place order');
+            throw new Error(errTextAny || 'Failed to place order');
         }
 
         const result = await response.json();
         console.log('Order placed:', result);
 
+        const createdOrderId = result?.order?.id || result?.orderId || '';
+
         if (result?.payment?.redirectUrl) {
+            // Card payment flow: redirect to the provider. Keep cart for now (user might need it if payment fails).
+            // We still prevent double-submit by keeping the button locked.
+            didNavigate = true;
             window.location.href = result.payment.redirectUrl;
             return;
         }
 
-        // Clear cart and show success message
+        // Cash (or non-card) flow: clear cart and redirect immediately to thank-you.
         cart = [];
         appliedPromo = null;
         customerInfo = { name: '', phone: '', email: '', city: '', address: '', notes: '' };
         saveCart();
 
-        // Show success notification
-        alert(translations[currentLanguage].orderSuccess);
+        try {
+            localStorage.removeItem(CHECKOUT_STATE_KEY);
+        } catch (e) {}
 
-        // Redirect to menu
-        navigateTo(BASE_PATH + '/');
+        const orderParam = createdOrderId ? `order=${encodeURIComponent(createdOrderId)}&` : '';
+        didNavigate = true;
+        window.location.href = `${BASE_PATH}/thank-you?${orderParam}status=success`;
     } catch (error) {
         console.error('Error placing order:', error);
-        alert(translations[currentLanguage].orderError);
+        const msg = (error && error.message) ? String(error.message) : '';
+        alert(msg || translations[currentLanguage].orderError);
+        setPlaceOrderLoading(false);
+    } finally {
+        if (!didNavigate) {
+            setPlaceOrderLoading(false);
+        }
     }
 }
 
@@ -2096,7 +2161,7 @@ function updateOrderSummary() {
             <span>${currentLanguage === 'bg' ? 'Ресторантът е временно затворен.' : 'The restaurant is temporarily closed.'}</span>
         </div>
         ` : ''}
-        <button class="checkout-btn" onclick="placeOrder()" ${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'disabled' : ''}>
+        <button class="checkout-btn" type="button" onclick="placeOrder()" aria-disabled="${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'true' : 'false'}">
             <i class="fas fa-${deliveryMethod === 'delivery' ? 'truck' : 'shopping-bag'}"></i>
             <span data-translate="placeOrder">${deliveryMethod === 'delivery' ? translations[currentLanguage].orderDelivery : translations[currentLanguage].orderPickup}</span>
         </button>
