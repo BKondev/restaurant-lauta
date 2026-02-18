@@ -1943,7 +1943,7 @@ async function placeOrder() {
 
         const orderParam = createdOrderId ? `order=${encodeURIComponent(createdOrderId)}&` : '';
         didNavigate = true;
-        window.location.href = `${BASE_PATH}/thank-you?${orderParam}status=success`;
+        window.location.href = `${BASE_PATH}/thank-you?${orderParam}status=success&payment=cash`;
     } catch (error) {
         console.error('Error placing order:', error);
         const msg = (error && error.message) ? String(error.message) : '';
