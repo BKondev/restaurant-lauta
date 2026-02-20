@@ -405,7 +405,19 @@
     </main>
 
     <script>
-        const BASE_PATH = window.location.pathname.includes('/resturant-website') ? '/resturant-website' : '';
+        function getBasePath() {
+            try {
+                const path = (window.location.pathname || '').toString();
+                // '/track-order.html' -> ''
+                // '/some/base/track-order.html' -> '/some/base'
+                const dir = path.replace(/\/[^/]*$/, '');
+                return dir === '/' ? '' : dir;
+            } catch (e) {
+                return '';
+            }
+        }
+
+        const BASE_PATH = getBasePath();
         const API_URL = `${BASE_PATH}/api`;
 
         // Top-bar logo should lead to menu
