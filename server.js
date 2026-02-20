@@ -3408,6 +3408,26 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
 
         const items = sanitizeOrderItems(order.items) || [];
 
+        function extractHHMM(value) {
+            if (value == null) return '';
+            const s = String(value).trim();
+            if (!s) return '';
+            const m = s.match(/(\d{1,2}):(\d{2})/);
+            if (!m) return '';
+            const hh = m[1].padStart(2, '0');
+            const mm = m[2];
+            return `${hh}:${mm}`;
+        }
+
+        const scheduledTimeRaw =
+            order.scheduledTime ??
+            order.scheduled_time ??
+            order.scheduleTime ??
+            order.scheduledAt ??
+            order.scheduled_for;
+        const scheduledTime = extractHHMM(scheduledTimeRaw);
+        const inferredOrderTime = scheduledTime ? 'later' : undefined;
+
         // Return limited order info (hide sensitive data)
         const publicOrderInfo = {
             id: order.id,
@@ -3417,8 +3437,8 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
             estimatedTime: order.estimatedTime || 60,
             createdAt: order.createdAt,
             trackingExpiry: order.trackingExpiry,
-            orderTime: (order.orderTime === 'now' || order.orderTime === 'later') ? order.orderTime : undefined,
-            scheduledTime: (typeof order.scheduledTime === 'string' && order.scheduledTime.trim()) ? order.scheduledTime.trim() : undefined,
+            orderTime: (order.orderTime === 'now' || order.orderTime === 'later') ? order.orderTime : inferredOrderTime,
+            scheduledTime: scheduledTime || undefined,
             items,
             customerInfo: order.deliveryMethod === 'delivery' ? {
                 city: order.customerInfo?.city,
