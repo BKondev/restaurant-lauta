@@ -182,12 +182,24 @@ app.use((req, res, next) => {
 
 // Static files & uploads served under BASE_PATH if defined
 if (BASE_PATH) {
-    app.use(BASE_PATH, express.static(path.join(__dirname, 'public')));
+    app.use(BASE_PATH, express.static(path.join(__dirname, 'public'), {
+        setHeaders: (res, servedPath) => {
+            if (typeof servedPath === 'string' && servedPath.toLowerCase().endsWith('.html')) {
+                res.setHeader('Cache-Control', 'no-store');
+            }
+        }
+    }));
     app.use(BASE_PATH + '/uploads', express.static(path.join(__dirname, 'uploads')));
     // Minimal vendor assets (served from node_modules)
     app.use(BASE_PATH + '/vendor', express.static(path.join(__dirname, 'node_modules', 'jszip', 'dist')));
 } else {
-    app.use(express.static(path.join(__dirname, 'public')));
+    app.use(express.static(path.join(__dirname, 'public'), {
+        setHeaders: (res, servedPath) => {
+            if (typeof servedPath === 'string' && servedPath.toLowerCase().endsWith('.html')) {
+                res.setHeader('Cache-Control', 'no-store');
+            }
+        }
+    }));
     app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
     app.use('/vendor', express.static(path.join(__dirname, 'node_modules', 'jszip', 'dist')));
 }
