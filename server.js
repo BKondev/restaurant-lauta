@@ -177,6 +177,12 @@ app.use((req, res, next) => {
         return next();
     }
 
+    // Root /api -> BASE_PATH /api (common nginx setup: public /api, internal app at /resturant-website).
+    if (base && base !== '/' && (req.url === '/api' || req.url.startsWith('/api/'))) {
+        req.url = base + req.url;
+        return next();
+    }
+
     next();
 });
 
