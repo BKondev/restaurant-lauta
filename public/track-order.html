@@ -2,7 +2,7 @@
 <html lang="bg">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Проследяване на поръчка - BOJOLE</title>
     <link rel="stylesheet" href="styles.css?v=20260204a">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -91,9 +91,13 @@
         }
 
         .order-id {
-            font-size: 24px;
+            font-size: 16px;
             color: var(--highlight-color);
             font-weight: bold;
+            max-width: 65%;
+            text-align: right;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .status-container {
@@ -462,6 +466,21 @@
                     <p class="subtitle">${normalizedStatus === 'cancelled' ? 'За повече информация, свържете се с ресторанта.' : 'Вашата поръчка беше приета успешно'}</p>
                 </div>
 
+                <div class="status-container">
+                    <div class="status-text">
+                        ${normalizedStatus === 'cancelled' ? 'Поръчката е отказана' : (timeRemaining.total > 0 ? 'Очаквано време за изпълнение:' : 'Вашата поръчка е готова!')}
+                    </div>
+                    <div class="time-remaining" id="time-display">
+                        ${normalizedStatus === 'cancelled' ? '--:--' : (timeRemaining.total > 0 ? formatTime(timeRemaining.minutes, timeRemaining.seconds) : 'Готово!')}
+                    </div>
+                    <div class="estimated-time">
+                        ${normalizedStatus === 'cancelled' ? '' : (order.estimatedTime ? `Приблизително ${order.estimatedTime} минути` : 'Приблизително 60 минути')}
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progress-bar" style="width: ${progressPercent}%"></div>
+                    </div>
+                </div>
+
                 <div class="order-info">
                     <div class="order-row">
                         <span class="order-label">Номер на поръчка:</span>
@@ -511,21 +530,6 @@
                         </div>
                     </div>
                     <div class="stepper-hint">${statusText}</div>
-                </div>
-
-                <div class="status-container">
-                    <div class="status-text">
-                        ${normalizedStatus === 'cancelled' ? 'Поръчката е отказана' : (timeRemaining.total > 0 ? 'Очаквано време за изпълнение:' : 'Вашата поръчка е готова!')}
-                    </div>
-                    <div class="time-remaining" id="time-display">
-                        ${normalizedStatus === 'cancelled' ? '--:--' : (timeRemaining.total > 0 ? formatTime(timeRemaining.minutes, timeRemaining.seconds) : 'Готово!')}
-                    </div>
-                    <div class="estimated-time">
-                        ${normalizedStatus === 'cancelled' ? '' : (order.estimatedTime ? `Приблизително ${order.estimatedTime} минути` : 'Приблизително 60 минути')}
-                    </div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" id="progress-bar" style="width: ${progressPercent}%"></div>
-                    </div>
                 </div>
 
                 <div class="actions">
