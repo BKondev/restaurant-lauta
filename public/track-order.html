@@ -286,7 +286,7 @@
 
         .steps {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 10px;
         }
 
@@ -441,13 +441,14 @@
                 total: 'Total:',
                 delivery: '🚚 Delivery',
                 pickup: '🛍 Pickup',
+                pickupLater: 'Pickup later',
+                deliveryLater: 'Delivery later',
                 deliveryAddress: 'Delivery address:',
                 pickupAddress: 'Pickup address:',
                 phone: 'Phone:',
                 received: 'Received',
                 approved: 'Approved',
-                delivering: 'Delivering',
-                ready: 'Ready',
+                finished: 'Finished',
                 done: 'Done',
                 status_pending: 'Order received',
                 status_approved: 'Order approved',
@@ -485,13 +486,14 @@
                 total: 'Обща сума:',
                 delivery: '🚚 Доставка',
                 pickup: '🛍 Вземане от място',
+                pickupLater: 'За взимане по-късно',
+                deliveryLater: 'Доставка за по-късно',
                 deliveryAddress: 'Адрес за доставка:',
                 pickupAddress: 'Адрес за взимане:',
                 phone: 'Телефон:',
                 received: 'Получена',
                 approved: 'Одобрена',
-                delivering: 'Доставка',
-                ready: 'Готова',
+                finished: 'Завършено',
                 done: 'Готово',
                 status_pending: 'Поръчката е получена',
                 status_approved: 'Поръчката е одобрена',
@@ -618,7 +620,7 @@
 
             const orderTime = (order.orderTime || '').toString().toLowerCase();
             const scheduledTime = (order.scheduledTime || '').toString().trim();
-            const isLater = orderTime === 'later' && !!scheduledTime;
+            const isLater = orderTime === 'later';
 
             const timeRemaining = isLater ? null : calculateTimeRemaining(order.createdAt, order.estimatedTime);
             const totalEstimatedMs = (order.estimatedTime || 60) * 60000;
@@ -647,19 +649,18 @@
                                     : t('status_default');
 
             function getStepIndex() {
-                // Step index: 0 received, 1 approved, 2 delivering/ready, 3 done
+                // Step index: 0 received, 1 approved, 2 finished
                 if (normalizedStatus === 'cancelled') return -1;
                 if (normalizedStatus === 'pending') return 0;
                 if (normalizedStatus === 'approved') return 1;
-                if (normalizedStatus === 'delivering' || normalizedStatus === 'ready_for_pickup') return 2;
-                if (normalizedStatus === 'completed') return 3;
-                return 0;
+                if (normalizedStatus === 'completed') return 2;
+                // Any other in-progress state maps to "approved" step
+                return 1;
             }
 
             const stepIdx = getStepIndex();
             const isDelivery = order.deliveryMethod === 'delivery';
-            const step3Label = isDelivery ? t('delivering') : t('ready');
-            const step3Icon = isDelivery ? 'fa-truck' : 'fa-box';
+            const laterLabel = isDelivery ? t('deliveryLater') : t('pickupLater');
 
             const contactsPhone = (siteSettings && siteSettings.footer && siteSettings.footer.contacts && siteSettings.footer.contacts.phone) ? String(siteSettings.footer.contacts.phone).trim() : '';
             const contactsAddress = (siteSettings && siteSettings.footer && siteSettings.footer.contacts && siteSettings.footer.contacts.address) ? String(siteSettings.footer.contacts.address).trim() : '';
@@ -703,10 +704,10 @@
 
                 <div class="status-container">
                     <div class="status-text">
-                        ${normalizedStatus === 'cancelled' ? t('status_cancelled') : (isLater ? t('scheduledFor') : ((timeRemaining && timeRemaining.total > 0) ? t('statusHeaderEta') : t('statusHeaderReady')))}
+                        ${normalizedStatus === 'cancelled' ? t('status_cancelled') : (isLater ? laterLabel : ((timeRemaining && timeRemaining.total > 0) ? t('statusHeaderEta') : t('statusHeaderReady')))}
                     </div>
                     <div class="time-remaining" id="time-display">
-                        ${normalizedStatus === 'cancelled' ? '--:--' : (isLater ? scheduledTime : ((timeRemaining && timeRemaining.total > 0) ? formatTime(timeRemaining.minutes, timeRemaining.seconds) : t('done')))}
+                        ${normalizedStatus === 'cancelled' ? '--:--' : (isLater ? (scheduledTime || '--:--') : ((timeRemaining && timeRemaining.total > 0) ? formatTime(timeRemaining.minutes, timeRemaining.seconds) : t('done')))}
                     </div>
                     <div class="estimated-time">
                         ${normalizedStatus === 'cancelled' ? '' : (isLater ? '' : (order.estimatedTime ? `${t('approx')} ${order.estimatedTime} ${t('minutes')}` : `${t('approx')} 60 ${t('minutes')}`))}
@@ -773,13 +774,9 @@
                             <div class="step-icon"><i class="fas fa-check"></i></div>
                             <div class="step-label">${t('approved')}</div>
                         </div>
-                        <div class="step ${stepIdx > 2 ? 'done' : (stepIdx === 2 ? 'active' : '')}">
-                            <div class="step-icon"><i class="fas ${step3Icon}"></i></div>
-                            <div class="step-label">${step3Label}</div>
-                        </div>
-                        <div class="step ${stepIdx === 3 ? 'done active' : ''}">
+                        <div class="step ${stepIdx === 2 ? 'done active' : ''}">
                             <div class="step-icon"><i class="fas fa-check-circle"></i></div>
-                            <div class="step-label">${t('done')}</div>
+                            <div class="step-label">${t('finished')}</div>
                         </div>
                     </div>
                     <div class="stepper-hint">${statusText}</div>
@@ -808,8 +805,7 @@
             if (!order) return;
 
             const orderTime = (order.orderTime || '').toString().toLowerCase();
-            const scheduledTime = (order.scheduledTime || '').toString().trim();
-            if (orderTime === 'later' && scheduledTime) return;
+            if (orderTime === 'later') return;
 
             const timeRemaining = calculateTimeRemaining(order.createdAt, order.estimatedTime);
             const timeDisplay = document.getElementById('time-display');
