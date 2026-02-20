@@ -1854,12 +1854,27 @@ async function placeOrder() {
     const { total, deliveryFee } = calculateTotals();
 
     // Scheduled ("order later") time robustness:
-    // Some flows may end up with orderTime not set even though a time was selected.
-    // If we have a valid HH:MM time, treat it as a scheduled order.
+    // The UI can display a fallback time even if selectedTimeSlot is empty.
+    // Always send a real HH:MM scheduledTime for "later" orders.
     const pickedTimeRaw = (selectedTimeSlot || scheduledTime || '').toString().trim();
-    const pickedTimeIsHHMM = /^\d{1,2}:\d{2}$/.test(pickedTimeRaw);
+    const pickedTimeMatch = pickedTimeRaw.match(/(\d{1,2}:\d{2})/);
+    const pickedTimeHHMM = pickedTimeMatch ? pickedTimeMatch[1] : '';
+    const pickedTimeIsHHMM = /^\d{1,2}:\d{2}$/.test(pickedTimeHHMM);
     const effectiveOrderTime = (orderTime === 'later' || pickedTimeIsHHMM) ? 'later' : orderTime;
-    const effectiveScheduledTime = effectiveOrderTime === 'later' ? pickedTimeRaw : '';
+
+    let effectiveScheduledTime = '';
+    if (effectiveOrderTime === 'later') {
+        effectiveScheduledTime = pickedTimeIsHHMM ? pickedTimeHHMM : '';
+
+        // Final fallback: if the time picker never initialized, derive the earliest allowed time.
+        if (!effectiveScheduledTime) {
+            try {
+                effectiveScheduledTime = minutesToHHMM(getMinAllowedTimeMinutes());
+            } catch (e) {
+                effectiveScheduledTime = '';
+            }
+        }
+    }
     
     // Prepare order data
     const orderData = {

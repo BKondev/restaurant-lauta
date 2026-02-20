@@ -4425,30 +4425,37 @@ if (BASE_PATH) {
 }
 
 app.get(BASE_PATH + '/', (req, res) => {
+    res.set('Cache-Control', 'no-store');
     res.sendFile(INDEX_PATH);
 });
 
 app.get(BASE_PATH + '/admin', (req, res) => {
+    res.set('Cache-Control', 'no-store');
     res.sendFile(ADMIN_PATH);
 });
 
 app.get(BASE_PATH + '/login', (req, res) => {
+    res.set('Cache-Control', 'no-store');
     res.sendFile(LOGIN_PATH);
 });
 
 app.get(BASE_PATH + '/checkout', (req, res) => {
+    res.set('Cache-Control', 'no-store');
     res.sendFile(path.join(__dirname, 'public', 'checkout.html'));
 });
 
 app.get(BASE_PATH + '/thank-you', (req, res) => {
+    res.set('Cache-Control', 'no-store');
     res.sendFile(THANK_YOU_PATH);
 });
 
 app.get(BASE_PATH + '/privacy', (req, res) => {
+    res.set('Cache-Control', 'no-store');
     res.sendFile(PRIVACY_PATH);
 });
 
 app.get(BASE_PATH + '/terms', (req, res) => {
+    res.set('Cache-Control', 'no-store');
     res.sendFile(TERMS_PATH);
 });
 
