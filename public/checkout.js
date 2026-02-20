@@ -1852,6 +1852,14 @@ async function placeOrder() {
     customerInfo = { name, phone, email, city, address, notes };
 
     const { total, deliveryFee } = calculateTotals();
+
+    // Scheduled ("order later") time robustness:
+    // Some flows may end up with orderTime not set even though a time was selected.
+    // If we have a valid HH:MM time, treat it as a scheduled order.
+    const pickedTimeRaw = (selectedTimeSlot || scheduledTime || '').toString().trim();
+    const pickedTimeIsHHMM = /^\d{1,2}:\d{2}$/.test(pickedTimeRaw);
+    const effectiveOrderTime = (orderTime === 'later' || pickedTimeIsHHMM) ? 'later' : orderTime;
+    const effectiveScheduledTime = effectiveOrderTime === 'later' ? pickedTimeRaw : '';
     
     // Prepare order data
     const orderData = {
@@ -1863,8 +1871,8 @@ async function placeOrder() {
         deliveryMethod: deliveryMethod,
         // Normalized alias (server will persist deliveryType for future flows)
         deliveryType: deliveryMethod,
-        orderTime: orderTime,
-        scheduledTime: orderTime === 'later' ? (selectedTimeSlot || '') : '',
+        orderTime: effectiveOrderTime,
+        scheduledTime: effectiveScheduledTime,
         customerInfo: customerInfo,
         timestamp: new Date().toISOString(),
         status: 'pending',
