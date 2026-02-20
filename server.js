@@ -3406,6 +3406,8 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
             });
         }
 
+        const items = sanitizeOrderItems(order.items) || [];
+
         // Return limited order info (hide sensitive data)
         const publicOrderInfo = {
             id: order.id,
@@ -3415,6 +3417,9 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
             estimatedTime: order.estimatedTime || 60,
             createdAt: order.createdAt,
             trackingExpiry: order.trackingExpiry,
+            orderTime: (order.orderTime === 'now' || order.orderTime === 'later') ? order.orderTime : undefined,
+            scheduledTime: (typeof order.scheduledTime === 'string' && order.scheduledTime.trim()) ? order.scheduledTime.trim() : undefined,
+            items,
             customerInfo: order.deliveryMethod === 'delivery' ? {
                 city: order.customerInfo?.city,
                 address: order.customerInfo?.address

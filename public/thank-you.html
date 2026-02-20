@@ -18,6 +18,15 @@
     .btn-primary { background: var(--highlight-color); color: #fff; }
     .btn-secondary { background: #ecf0f1; color: #2c3e50; }
     code { background: #f0f0f0; padding: 2px 6px; border-radius: 6px; }
+    .items-box { margin-top: 16px; background: #f8f9fa; border-radius: 12px; padding: 14px; }
+    .items-title { margin: 0 0 10px; font-size: 15px; font-weight: 800; color: #2c3e50; }
+    .items-row { display:flex; justify-content:space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+    .items-row:last-child { border-bottom: none; }
+    .items-name { font-weight: 700; color:#333; }
+    .items-sub { color:#666; font-size: 13px; margin-top: 2px; }
+    .items-price { font-weight: 800; color:#111; white-space: nowrap; }
+    .contact-box { margin-top: 14px; color:#444; }
+    .contact-box a { color: var(--highlight-color); text-decoration: none; font-weight: 800; }
   </style>
 </head>
 <body>
@@ -36,6 +45,10 @@
         <div>Order: <code id="ty-order">—</code></div>
         <div id="ty-code-row">Code: <code id="ty-code">—</code></div>
       </div>
+
+      <div id="ty-items" class="items-box" style="display:none;"></div>
+      <div id="ty-contact" class="contact-box" style="display:none;"></div>
+
       <div class="thankyou-actions">
         <a id="ty-menu" class="btn-primary" href="/">Back to menu</a>
         <a id="ty-track" class="btn-secondary" href="#">Track order</a>
@@ -45,8 +58,168 @@
 
   <script>
     (function () {
+      const LANGUAGE_STORAGE_KEY = 'language';
+      const LANGUAGE_USER_SELECTED_KEY = 'language_user_selected_v1';
+
       function getBasePath() {
         return window.location.pathname.includes('/resturant-website') ? '/resturant-website' : '';
+      }
+
+      function getInitialLanguage() {
+        try {
+          const stored = (localStorage.getItem(LANGUAGE_STORAGE_KEY) || '').toString().trim().toLowerCase();
+          const storedValid = (stored === 'en' || stored === 'bg') ? stored : '';
+          const userSelected = localStorage.getItem(LANGUAGE_USER_SELECTED_KEY) === '1';
+          if (!userSelected) return 'bg';
+          return storedValid || 'bg';
+        } catch (e) {
+          return 'bg';
+        }
+      }
+
+      const lang = getInitialLanguage();
+      document.documentElement.lang = lang;
+
+      let eurToBgnRate = null;
+      let currencyPromise = null;
+
+      const i18n = {
+        en: {
+          thankYou: 'Thank you!',
+          thankYouOrderPlaced: 'Thank you! Order placed',
+          thankYouPaymentOk: 'Thank you! Payment successful',
+          paymentFailed: 'Payment failed',
+          orderFailed: 'Order failed',
+          processingPayment: 'Your payment is being processed.',
+          processingOrder: 'Your order is being processed.',
+          placedOk: 'Your order has been placed successfully.',
+          failedCard: 'Your payment was not completed. You can try again from checkout.',
+          failedCash: 'Your order could not be completed. You can try again from checkout.',
+          orderLabel: 'Order',
+          codeLabel: 'Code',
+          backToMenu: 'Back to menu',
+          trackOrder: 'Track order',
+          itemsTitle: 'Ordered items',
+          total: 'Total',
+          phone: 'Phone'
+        },
+        bg: {
+          thankYou: 'Благодарим!',
+          thankYouOrderPlaced: 'Благодарим! Поръчката е приета',
+          thankYouPaymentOk: 'Благодарим! Плащането е успешно',
+          paymentFailed: 'Неуспешно плащане',
+          orderFailed: 'Неуспешна поръчка',
+          processingPayment: 'Плащането се обработва.',
+          processingOrder: 'Поръчката се обработва.',
+          placedOk: 'Поръчката е приета успешно.',
+          failedCard: 'Плащането не беше завършено. Можете да опитате отново от плащането.',
+          failedCash: 'Поръчката не можа да бъде завършена. Можете да опитате отново.',
+          orderLabel: 'Поръчка',
+          codeLabel: 'Код',
+          backToMenu: 'Обратно към менюто',
+          trackOrder: 'Проследи поръчка',
+          itemsTitle: 'Поръчани продукти',
+          total: 'Общо',
+          phone: 'Телефон'
+        }
+      };
+
+      function t(key) {
+        return (i18n[lang] && i18n[lang][key]) || (i18n.en && i18n.en[key]) || key;
+      }
+
+      function toNumber(val) {
+        const n = Number(val);
+        return Number.isFinite(n) ? n : 0;
+      }
+
+      function convertBgnToEur(amountBgn) {
+        const rate = toNumber(eurToBgnRate);
+        if (rate > 0) return toNumber(amountBgn) / rate;
+        // Fallback: assume already in EUR if rate missing
+        return toNumber(amountBgn);
+      }
+
+      function formatEurFromBgn(n) {
+        return `${convertBgnToEur(n).toFixed(2)} €`;
+      }
+
+      async function fetchJson(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Request failed');
+        return await res.json();
+      }
+
+      function loadCurrency() {
+        if (currencyPromise) return currencyPromise;
+        currencyPromise = (async () => {
+          try {
+            const base = getBasePath();
+            const cur = await fetchJson(`${base}/api/settings/currency`);
+            eurToBgnRate = cur && (cur.eurToBgnRate != null ? cur.eurToBgnRate : null);
+          } catch (e) {
+            eurToBgnRate = null;
+          }
+        })();
+        return currencyPromise;
+      }
+
+      async function loadContacts() {
+        try {
+          const base = getBasePath();
+          const settings = await fetchJson(`${base}/api/settings/site`);
+          const phone = (settings?.footer?.contacts?.phone || '').toString().trim();
+          if (!phone) return;
+          const mount = document.getElementById('ty-contact');
+          if (!mount) return;
+          mount.style.display = '';
+          mount.innerHTML = `${t('phone')}: <a href="tel:${encodeURIComponent(phone)}">${phone}</a>`;
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      async function loadItems(orderId) {
+        try {
+          await loadCurrency();
+          const base = getBasePath();
+          const data = await fetchJson(`${base}/api/orders/track/${encodeURIComponent(orderId)}`);
+          const o = data?.order;
+          const items = Array.isArray(o?.items) ? o.items : [];
+          if (!items.length) return;
+
+          const mount = document.getElementById('ty-items');
+          if (!mount) return;
+
+          const rows = items.map((it) => {
+            const name = (it?.name || '').toString();
+            const qty = Number(it?.quantity || 0);
+            const price = Number(it?.price || 0);
+            const lineTotal = price * qty;
+            return `
+              <div class="items-row">
+                <div>
+                  <div class="items-name">${name}</div>
+                  <div class="items-sub">${qty} × ${formatEurFromBgn(price)}</div>
+                </div>
+                <div class="items-price">${formatEurFromBgn(lineTotal)}</div>
+              </div>
+            `;
+          }).join('');
+
+          const total = o?.total;
+          mount.style.display = '';
+          mount.innerHTML = `
+            <div class="items-title">${t('itemsTitle')}</div>
+            ${rows}
+            <div class="items-row">
+              <div class="items-name">${t('total')}</div>
+              <div class="items-price">${formatEurFromBgn(total)}</div>
+            </div>
+          `;
+        } catch (e) {
+          // ignore
+        }
       }
 
       const base = getBasePath();
@@ -60,13 +233,18 @@
       const isCard = payment === 'card' || !!code;
 
       document.getElementById('ty-menu').setAttribute('href', base + '/');
+      document.getElementById('ty-menu').textContent = t('backToMenu');
+      document.getElementById('ty-track').textContent = t('trackOrder');
 
       if (order) {
         document.getElementById('ty-order').textContent = order;
         document.getElementById('ty-track').setAttribute('href', base + '/track-order.html?id=' + encodeURIComponent(order));
+        loadItems(order);
       } else {
         document.getElementById('ty-track').style.display = 'none';
       }
+
+      loadContacts();
 
       const codeRow = document.getElementById('ty-code-row');
       if (isCash) {
@@ -76,27 +254,36 @@
         document.getElementById('ty-code').textContent = code || '—';
       }
 
+      // Translate static labels
+      try {
+        const meta = document.querySelector('.thankyou-meta');
+        if (meta) {
+          meta.querySelector('div:nth-child(1)').childNodes[0].textContent = t('orderLabel') + ': ';
+          if (codeRow) codeRow.childNodes[0].textContent = t('codeLabel') + ': ';
+        }
+      } catch (e) {}
+
       const title = document.getElementById('ty-title');
       const text = document.getElementById('ty-text');
 
       if (status === 'success') {
-        title.textContent = isCash ? 'Thank you! Order placed' : 'Thank you! Payment successful';
+        title.textContent = isCash ? t('thankYouOrderPlaced') : t('thankYouPaymentOk');
         title.classList.add('ok');
-        text.textContent = 'Your order has been placed successfully.';
+        text.textContent = t('placedOk');
         try {
           localStorage.removeItem('cart');
           localStorage.removeItem('checkoutState_v1');
         } catch (e) {}
       } else if (status === 'failed') {
-        title.textContent = isCard ? 'Payment failed' : 'Order failed';
+        title.textContent = isCard ? t('paymentFailed') : t('orderFailed');
         title.classList.add('bad');
-        text.textContent = isCard
-          ? 'Your payment was not completed. You can try again from checkout.'
-          : 'Your order could not be completed. You can try again from checkout.';
+        text.textContent = isCard ? t('failedCard') : t('failedCash');
       } else {
-        title.textContent = 'Thank you!';
-        text.textContent = isCash ? 'Your order is being processed.' : 'Your payment is being processed.';
+        title.textContent = t('thankYou');
+        text.textContent = isCash ? t('processingOrder') : t('processingPayment');
       }
+
+      document.title = title.textContent || 'Thank you';
     })();
   </script>
 </body>

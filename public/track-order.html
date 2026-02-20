@@ -66,6 +66,49 @@
             margin: 25px 0;
         }
 
+        .items-info {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .items-title {
+            color: #333;
+            font-size: 16px;
+            font-weight: 700;
+            margin: 0 0 10px;
+        }
+
+        .item-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .item-row:last-child {
+            border-bottom: none;
+        }
+
+        .item-name {
+            font-weight: 700;
+            color: #333;
+        }
+
+        .item-sub {
+            color: #666;
+            font-size: 13px;
+            margin-top: 2px;
+        }
+
+        .item-price {
+            font-weight: 800;
+            color: #111;
+            white-space: nowrap;
+        }
+
         .order-row {
             display: flex;
             justify-content: space-between;
@@ -354,15 +397,167 @@
     <script>
         const BASE_PATH = window.location.pathname.includes('/resturant-website') ? '/resturant-website' : '';
         const API_URL = `${BASE_PATH}/api`;
+
+        const LANGUAGE_STORAGE_KEY = 'language';
+        const LANGUAGE_USER_SELECTED_KEY = 'language_user_selected_v1';
         
         let updateInterval = null;
         let order = null;
         let startTime = null;
 
+        let siteSettings = null;
+        let eurToBgnRate = null;
+
+        function getInitialLanguage() {
+            try {
+                const stored = (localStorage.getItem(LANGUAGE_STORAGE_KEY) || '').toString().trim().toLowerCase();
+                const storedValid = (stored === 'en' || stored === 'bg') ? stored : '';
+                const userSelected = localStorage.getItem(LANGUAGE_USER_SELECTED_KEY) === '1';
+                if (!userSelected) return 'bg';
+                return storedValid || 'bg';
+            } catch (e) {
+                return 'bg';
+            }
+        }
+
+        const LANG = getInitialLanguage();
+        document.documentElement.lang = LANG;
+
+        const I18N = {
+            en: {
+                loading: 'Loading order...',
+                thanks: 'Thank you for your order!',
+                cancelledTitle: 'Order cancelled',
+                cancelledSubtitle: 'For more information, contact the restaurant.',
+                okSubtitle: 'Your order was received successfully',
+                statusHeaderEta: 'Estimated time to complete:',
+                statusHeaderReady: 'Your order is ready!',
+                scheduledFor: 'Scheduled for:',
+                approx: 'Approximately',
+                minutes: 'minutes',
+                orderNo: 'Order number:',
+                status: 'Status:',
+                type: 'Type:',
+                total: 'Total:',
+                delivery: '🚚 Delivery',
+                pickup: '🛍 Pickup',
+                deliveryAddress: 'Delivery address:',
+                pickupAddress: 'Pickup address:',
+                phone: 'Phone:',
+                received: 'Received',
+                approved: 'Approved',
+                delivering: 'Delivering',
+                ready: 'Ready',
+                done: 'Done',
+                status_pending: 'Order received',
+                status_approved: 'Order approved',
+                status_delivering: 'Out for delivery',
+                status_ready_for_pickup: 'Ready for pickup',
+                status_completed: 'Order completed',
+                status_cancelled: 'Order cancelled',
+                status_default: 'In progress',
+                itemsTitle: 'Ordered items',
+                home: 'Home',
+                newOrder: 'New order',
+                error: 'Error',
+                errorLoadTitle: 'Could not load the order',
+                errorMissingId: 'Order number is missing.',
+                errorGeneric: 'An error occurred while loading the order.',
+                expiredTitle: 'Tracking expired',
+                expiredLead: 'The tracking link is no longer active',
+                expiredBody: 'You can track your order only within 2 hours after it is created. For more information, please contact the restaurant.',
+                backHome: 'Back to home'
+            },
+            bg: {
+                loading: 'Зареждане на поръчка...',
+                thanks: 'Благодарим за поръчката!',
+                cancelledTitle: 'Поръчката е отказана',
+                cancelledSubtitle: 'За повече информация, свържете се с ресторанта.',
+                okSubtitle: 'Вашата поръчка беше приета успешно',
+                statusHeaderEta: 'Очаквано време за изпълнение:',
+                statusHeaderReady: 'Вашата поръчка е готова!',
+                scheduledFor: 'Планирано за:',
+                approx: 'Приблизително',
+                minutes: 'минути',
+                orderNo: 'Номер на поръчка:',
+                status: 'Статус:',
+                type: 'Тип:',
+                total: 'Обща сума:',
+                delivery: '🚚 Доставка',
+                pickup: '🛍 Вземане от място',
+                deliveryAddress: 'Адрес за доставка:',
+                pickupAddress: 'Адрес за взимане:',
+                phone: 'Телефон:',
+                received: 'Получена',
+                approved: 'Одобрена',
+                delivering: 'Доставка',
+                ready: 'Готова',
+                done: 'Готово',
+                status_pending: 'Поръчката е получена',
+                status_approved: 'Поръчката е одобрена',
+                status_delivering: 'Поръчката е за доставка',
+                status_ready_for_pickup: 'Поръчката е готова за взимане',
+                status_completed: 'Поръчката е завършена',
+                status_cancelled: 'Поръчката е отказана',
+                status_default: 'В процес на изпълнение',
+                itemsTitle: 'Поръчани продукти',
+                home: 'Начало',
+                newOrder: 'Нова поръчка',
+                error: 'Грешка',
+                errorLoadTitle: 'Не можахме да заредим поръчката',
+                errorMissingId: 'Не е посочен номер на поръчка.',
+                errorGeneric: 'Възникна грешка при зареждане на поръчката.',
+                expiredTitle: 'Проследяването изтече',
+                expiredLead: 'Линкът за проследяване не е повече активен',
+                expiredBody: 'Можете да проследявате вашата поръчка само в рамките на 2 часа след създаването ѝ. За повече информация, моля свържете се с ресторанта.',
+                backHome: 'Обратно към началото'
+            }
+        };
+
+        function t(key) {
+            return (I18N[LANG] && I18N[LANG][key]) || (I18N.en && I18N.en[key]) || key;
+        }
+
+        function toNumber(val) {
+            const n = Number(val);
+            return Number.isFinite(n) ? n : 0;
+        }
+
+        function convertBgnToEur(amountBgn) {
+            const rate = toNumber(eurToBgnRate);
+            if (rate > 0) return toNumber(amountBgn) / rate;
+            // Fallback: assume already in EUR if rate missing
+            return toNumber(amountBgn);
+        }
+
+        function formatEurFromBgn(amountBgn) {
+            return `${convertBgnToEur(amountBgn).toFixed(2)} €`;
+        }
+
         // Get order ID from URL
         function getOrderId() {
             const urlParams = new URLSearchParams(window.location.search);
             return urlParams.get('id');
+        }
+
+        async function fetchSiteSettings() {
+            try {
+                const response = await fetch(`${API_URL}/settings/site`);
+                if (!response.ok) return null;
+                return await response.json();
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function fetchCurrencySettings() {
+            try {
+                const response = await fetch(`${API_URL}/settings/currency`);
+                if (!response.ok) return null;
+                return await response.json();
+            } catch (e) {
+                return null;
+            }
         }
 
         // Fetch order details
@@ -413,10 +608,19 @@
 
         // Render order tracking page
         function renderOrderTracking(orderData) {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+            }
+
             order = orderData;
             startTime = new Date(order.createdAt);
 
-            const timeRemaining = calculateTimeRemaining(order.createdAt, order.estimatedTime);
+            const orderTime = (order.orderTime || '').toString().toLowerCase();
+            const scheduledTime = (order.scheduledTime || '').toString().trim();
+            const isLater = orderTime === 'later' && !!scheduledTime;
+
+            const timeRemaining = isLater ? null : calculateTimeRemaining(order.createdAt, order.estimatedTime);
             const totalEstimatedMs = (order.estimatedTime || 60) * 60000;
             const elapsedMs = Date.now() - startTime.getTime();
             const progressPercent = Math.min(100, (elapsedMs / totalEstimatedMs) * 100);
@@ -429,18 +633,18 @@
             const normalizedStatus = normalizeStatus(order.status);
 
             const statusText = normalizedStatus === 'pending'
-                ? 'Поръчката е получена'
+                ? t('status_pending')
                 : normalizedStatus === 'approved'
-                    ? 'Поръчката е одобрена'
+                    ? t('status_approved')
                     : normalizedStatus === 'delivering'
-                        ? 'Поръчката е за доставка'
+                        ? t('status_delivering')
                         : normalizedStatus === 'ready_for_pickup'
-                            ? 'Поръчката е готова за взимане'
+                            ? t('status_ready_for_pickup')
                             : normalizedStatus === 'completed'
-                                ? 'Поръчката е завършена'
+                                ? t('status_completed')
                                 : normalizedStatus === 'cancelled'
-                                    ? 'Поръчката е отказана'
-                                    : 'В процес на изпълнение';
+                                    ? t('status_cancelled')
+                                    : t('status_default');
 
             function getStepIndex() {
                 // Step index: 0 received, 1 approved, 2 delivering/ready, 3 done
@@ -454,59 +658,108 @@
 
             const stepIdx = getStepIndex();
             const isDelivery = order.deliveryMethod === 'delivery';
-            const step3Label = isDelivery ? 'Delivering' : 'Ready';
+            const step3Label = isDelivery ? t('delivering') : t('ready');
             const step3Icon = isDelivery ? 'fa-truck' : 'fa-box';
+
+            const contactsPhone = (siteSettings && siteSettings.footer && siteSettings.footer.contacts && siteSettings.footer.contacts.phone) ? String(siteSettings.footer.contacts.phone).trim() : '';
+            const contactsAddress = (siteSettings && siteSettings.footer && siteSettings.footer.contacts && siteSettings.footer.contacts.address) ? String(siteSettings.footer.contacts.address).trim() : '';
+            const contactsMapsUrl = (siteSettings && siteSettings.footer && siteSettings.footer.contacts && siteSettings.footer.contacts.addressMapsUrl) ? String(siteSettings.footer.contacts.addressMapsUrl).trim() : '';
+            const pickupMapsUrl = contactsMapsUrl || (contactsAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contactsAddress)}` : '');
+
+            const items = Array.isArray(order.items) ? order.items : [];
+            const itemsHtml = items.length ? `
+                <div class="items-info">
+                    <div class="items-title">${t('itemsTitle')}</div>
+                    ${items.map((it) => {
+                        const name = (it && it.name) ? String(it.name) : '';
+                        const qty = toNumber(it && it.quantity);
+                        const priceBgn = toNumber(it && it.price);
+                        const lineBgn = priceBgn * qty;
+                        return `
+                            <div class="item-row">
+                                <div>
+                                    <div class="item-name">${name}</div>
+                                    <div class="item-sub">${qty} × ${formatEurFromBgn(priceBgn)}</div>
+                                </div>
+                                <div class="item-price">${formatEurFromBgn(lineBgn)}</div>
+                            </div>
+                        `;
+                    }).join('')}
+                    <div class="item-row">
+                        <div class="item-name">${t('total')}</div>
+                        <div class="item-price">${formatEurFromBgn(order.total)}</div>
+                    </div>
+                </div>
+            ` : '';
 
             const html = `
                 <div class="header">
                     <div class="success-icon" style="background: ${normalizedStatus === 'cancelled' ? '#f44336' : (normalizedStatus === 'completed' ? '#4caf50' : '#667eea')};">
                         <i class="fas ${normalizedStatus === 'cancelled' ? 'fa-times' : (normalizedStatus === 'completed' ? 'fa-check' : 'fa-receipt')}"></i>
                     </div>
-                    <h1>${normalizedStatus === 'cancelled' ? 'Поръчката е отказана' : 'Благодарим за поръчката!'}</h1>
-                    <p class="subtitle">${normalizedStatus === 'cancelled' ? 'За повече информация, свържете се с ресторанта.' : 'Вашата поръчка беше приета успешно'}</p>
+                    <h1>${normalizedStatus === 'cancelled' ? t('cancelledTitle') : t('thanks')}</h1>
+                    <p class="subtitle">${normalizedStatus === 'cancelled' ? t('cancelledSubtitle') : t('okSubtitle')}</p>
                 </div>
 
                 <div class="status-container">
                     <div class="status-text">
-                        ${normalizedStatus === 'cancelled' ? 'Поръчката е отказана' : (timeRemaining.total > 0 ? 'Очаквано време за изпълнение:' : 'Вашата поръчка е готова!')}
+                        ${normalizedStatus === 'cancelled' ? t('status_cancelled') : (isLater ? t('scheduledFor') : ((timeRemaining && timeRemaining.total > 0) ? t('statusHeaderEta') : t('statusHeaderReady')))}
                     </div>
                     <div class="time-remaining" id="time-display">
-                        ${normalizedStatus === 'cancelled' ? '--:--' : (timeRemaining.total > 0 ? formatTime(timeRemaining.minutes, timeRemaining.seconds) : 'Готово!')}
+                        ${normalizedStatus === 'cancelled' ? '--:--' : (isLater ? scheduledTime : ((timeRemaining && timeRemaining.total > 0) ? formatTime(timeRemaining.minutes, timeRemaining.seconds) : t('done')))}
                     </div>
                     <div class="estimated-time">
-                        ${normalizedStatus === 'cancelled' ? '' : (order.estimatedTime ? `Приблизително ${order.estimatedTime} минути` : 'Приблизително 60 минути')}
+                        ${normalizedStatus === 'cancelled' ? '' : (isLater ? '' : (order.estimatedTime ? `${t('approx')} ${order.estimatedTime} ${t('minutes')}` : `${t('approx')} 60 ${t('minutes')}`))}
                     </div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" id="progress-bar" style="width: ${progressPercent}%"></div>
-                    </div>
+                    ${isLater ? '' : `
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="progress-bar" style="width: ${progressPercent}%"></div>
+                        </div>
+                    `}
                 </div>
+
+                ${itemsHtml}
 
                 <div class="order-info">
                     <div class="order-row">
-                        <span class="order-label">Номер на поръчка:</span>
+                        <span class="order-label">${t('orderNo')}</span>
                         <span class="order-id">#${order.id}</span>
                     </div>
                     <div class="order-row">
-                        <span class="order-label">Статус:</span>
+                        <span class="order-label">${t('status')}</span>
                         <span class="order-value">${statusText}</span>
                     </div>
                     <div class="order-row">
-                        <span class="order-label">Тип:</span>
+                        <span class="order-label">${t('type')}</span>
                         <span class="order-value">
-                            ${order.deliveryMethod === 'delivery' ? '🚚 Доставка' : '🛍 Вземане от място'}
+                            ${order.deliveryMethod === 'delivery' ? t('delivery') : t('pickup')}
                         </span>
                     </div>
                     <div class="order-row">
-                        <span class="order-label">Обща сума:</span>
-                        <span class="order-value">${order.total.toFixed(2)} лв</span>
+                        <span class="order-label">${t('total')}</span>
+                        <span class="order-value">${formatEurFromBgn(order.total)}</span>
                     </div>
+                    ${contactsPhone ? `
+                        <div class="order-row">
+                            <span class="order-label">${t('phone')}</span>
+                            <span class="order-value"><a href="tel:${encodeURIComponent(contactsPhone)}" style="color: var(--highlight-color); font-weight: 800; text-decoration: none;">${contactsPhone}</a></span>
+                        </div>
+                    ` : ''}
                 </div>
 
                 ${order.deliveryMethod === 'delivery' && order.customerInfo ? `
                     <div class="delivery-info">
                         <i class="fas fa-map-marker-alt"></i>
-                        <strong>Адрес за доставка:</strong><br>
+                        <strong>${t('deliveryAddress')}</strong><br>
                         ${order.customerInfo.address}, ${order.customerInfo.city}
+                    </div>
+                ` : ''}
+
+                ${order.deliveryMethod !== 'delivery' && contactsAddress ? `
+                    <div class="delivery-info">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <strong>${t('pickupAddress')}</strong><br>
+                        ${pickupMapsUrl ? `<a href="${pickupMapsUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--highlight-color); font-weight: 800; text-decoration: none;">${contactsAddress}</a>` : contactsAddress}
                     </div>
                 ` : ''}
 
@@ -514,11 +767,11 @@
                     <div class="steps">
                         <div class="step ${stepIdx > 0 ? 'done' : (stepIdx === 0 ? 'active' : '')}">
                             <div class="step-icon"><i class="fas fa-inbox"></i></div>
-                            <div class="step-label">Received</div>
+                            <div class="step-label">${t('received')}</div>
                         </div>
                         <div class="step ${stepIdx > 1 ? 'done' : (stepIdx === 1 ? 'active' : '')}">
                             <div class="step-icon"><i class="fas fa-check"></i></div>
-                            <div class="step-label">Approved</div>
+                            <div class="step-label">${t('approved')}</div>
                         </div>
                         <div class="step ${stepIdx > 2 ? 'done' : (stepIdx === 2 ? 'active' : '')}">
                             <div class="step-icon"><i class="fas ${step3Icon}"></i></div>
@@ -526,7 +779,7 @@
                         </div>
                         <div class="step ${stepIdx === 3 ? 'done active' : ''}">
                             <div class="step-icon"><i class="fas fa-check-circle"></i></div>
-                            <div class="step-label">Done</div>
+                            <div class="step-label">${t('done')}</div>
                         </div>
                     </div>
                     <div class="stepper-hint">${statusText}</div>
@@ -534,18 +787,18 @@
 
                 <div class="actions">
                     <a href="${BASE_PATH}/" class="btn btn-secondary">
-                        <i class="fas fa-home"></i> Начало
+                        <i class="fas fa-home"></i> ${t('home')}
                     </a>
                     <a href="${BASE_PATH}/" class="btn btn-primary">
-                        <i class="fas fa-utensils"></i> Нова поръчка
+                        <i class="fas fa-utensils"></i> ${t('newOrder')}
                     </a>
                 </div>
             `;
 
             document.getElementById('app').innerHTML = html;
 
-            // Start countdown
-            if (normalizedStatus !== 'cancelled' && timeRemaining.total > 0) {
+            // Start countdown (not for scheduled orders)
+            if (!isLater && normalizedStatus !== 'cancelled' && timeRemaining && timeRemaining.total > 0) {
                 updateInterval = setInterval(updateCountdown, 1000);
             }
         }
@@ -553,6 +806,10 @@
         // Update countdown
         function updateCountdown() {
             if (!order) return;
+
+            const orderTime = (order.orderTime || '').toString().toLowerCase();
+            const scheduledTime = (order.scheduledTime || '').toString().trim();
+            if (orderTime === 'later' && scheduledTime) return;
 
             const timeRemaining = calculateTimeRemaining(order.createdAt, order.estimatedTime);
             const timeDisplay = document.getElementById('time-display');
@@ -570,7 +827,7 @@
                         progressBar.style.width = progressPercent + '%';
                     }
                 } else {
-                    timeDisplay.textContent = 'Готово!';
+                    timeDisplay.textContent = t('done');
                     if (progressBar) {
                         progressBar.style.width = '100%';
                     }
@@ -586,17 +843,17 @@
                     <div class="success-icon" style="background: #f44336;">
                         <i class="fas fa-exclamation-triangle"></i>
                     </div>
-                    <h1>Грешка</h1>
+                    <h1>${t('error')}</h1>
                 </div>
 
                 <div class="error-container">
-                    <div class="error-title">Не можахме да заредим поръчката</div>
+                    <div class="error-title">${t('errorLoadTitle')}</div>
                     <div class="error-message">${message}</div>
                 </div>
 
                 <div class="actions">
                     <a href="${BASE_PATH}/" class="btn btn-primary" style="flex: initial; width: 100%;">
-                        <i class="fas fa-home"></i> Обратно към началото
+                        <i class="fas fa-home"></i> ${t('backHome')}
                     </a>
                 </div>
             `;
@@ -611,20 +868,19 @@
                     <div class="success-icon" style="background: #ff9800;">
                         <i class="fas fa-clock"></i>
                     </div>
-                    <h1>Проследяването изтече</h1>
+                    <h1>${t('expiredTitle')}</h1>
                 </div>
 
                 <div class="error-container">
-                    <div class="error-title">Линкът за проследяване не е повече активен</div>
+                    <div class="error-title">${t('expiredLead')}</div>
                     <div class="error-message">
-                        Можете да проследявате вашата поръчка само в рамките на 2 часа след създаването ѝ.
-                        За повече информация, моля свържете се с ресторанта.
+                        ${t('expiredBody')}
                     </div>
                 </div>
 
                 <div class="actions">
                     <a href="${BASE_PATH}/" class="btn btn-primary" style="flex: initial; width: 100%;">
-                        <i class="fas fa-home"></i> Обратно към началото
+                        <i class="fas fa-home"></i> ${t('backHome')}
                     </a>
                 </div>
             `;
@@ -636,17 +892,29 @@
         async function init() {
             const orderId = getOrderId();
 
+            // Update initial loading text
+            try {
+                const loadingP = document.querySelector('.loading p');
+                if (loadingP) loadingP.textContent = t('loading');
+                document.title = (LANG === 'bg') ? 'Проследяване на поръчка - BOJOLE' : 'Track order - BOJOLE';
+            } catch (e) {}
+
             if (!orderId) {
-                renderError('Не е посочен номер на поръчка.');
+                renderError(t('errorMissingId'));
                 return;
             }
+
+            // Fetch public settings (best-effort)
+            const [s, c] = await Promise.all([fetchSiteSettings(), fetchCurrencySettings()]);
+            siteSettings = s;
+            eurToBgnRate = c && (c.eurToBgnRate != null ? c.eurToBgnRate : null);
 
             const result = await fetchOrderDetails(orderId);
 
             if (result.expired) {
                 renderExpired();
             } else if (result.error) {
-                renderError(result.message || 'Възникна грешка при зареждане на поръчката.');
+                renderError(result.message || t('errorGeneric'));
             } else if (result.order) {
                 renderOrderTracking(result.order);
 
@@ -655,13 +923,12 @@
                     const updated = await fetchOrderDetails(orderId);
                     if (updated.order && !updated.error && !updated.expired) {
                         // Update status silently
-                        order.status = updated.order.status;
-                        order.estimatedTime = updated.order.estimatedTime;
+                        order = Object.assign({}, order, updated.order);
                         renderOrderTracking(order);
                     }
                 }, 30000);
             } else {
-                renderError('Поръчката не беше намерена.');
+                renderError(t('errorLoadTitle'));
             }
         }
 
