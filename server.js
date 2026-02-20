@@ -3397,6 +3397,9 @@ app.put(API_PREFIX + '/orders/mobile/:id', requireApiKey, async (req, res) => {
 // Track order by ID (public endpoint - no auth required)
 app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
     try {
+        // Prevent intermediary/proxy caching of tracking responses.
+        res.set('Cache-Control', 'no-store');
+
         const orderId = req.params.id;
         const data = readDatabase();
         const orders = data.orders || [];
@@ -3440,6 +3443,8 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
         const scheduledTime = extractHHMM(scheduledTimeRaw);
         const inferredOrderTime = scheduledTime ? 'later' : undefined;
 
+        const apiVersion = '2026-02-20-track-v2';
+
         // Return limited order info (hide sensitive data)
         const publicOrderInfo = {
             id: order.id,
@@ -3449,8 +3454,8 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
             estimatedTime: order.estimatedTime || 60,
             createdAt: order.createdAt,
             trackingExpiry: order.trackingExpiry,
-            orderTime: (order.orderTime === 'now' || order.orderTime === 'later') ? order.orderTime : inferredOrderTime,
-            scheduledTime: scheduledTime || undefined,
+            orderTime: ((order.orderTime === 'now' || order.orderTime === 'later') ? order.orderTime : inferredOrderTime) || null,
+            scheduledTime: scheduledTime || null,
             items,
             customerInfo: order.deliveryMethod === 'delivery' ? {
                 city: order.customerInfo?.city,
@@ -3458,7 +3463,7 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
             } : null
         };
 
-        res.json({ success: true, order: publicOrderInfo });
+        res.json({ success: true, apiVersion, order: publicOrderInfo });
     } catch (error) {
         console.error('Error tracking order:', error);
         res.status(500).json({ error: 'Failed to track order' });
