@@ -418,13 +418,51 @@
         }
 
         const BASE_PATH = getBasePath();
-        const API_URL = `${BASE_PATH}/api`;
+
+        function normalizeBasePath(p) {
+            const s = (p || '').toString().trim();
+            if (!s || s === '/') return '';
+            return s.endsWith('/') ? s.slice(0, -1) : s;
+        }
+
+        async function resolveApiBasePath() {
+            // Server default BASE_PATH is usually '/resturant-website'.
+            const candidates = [
+                normalizeBasePath(BASE_PATH),
+                '/resturant-website',
+                ''
+            ];
+
+            const unique = Array.from(new Set(candidates));
+
+            for (const base of unique) {
+                const api = `${base}/api`;
+                try {
+                    const resp = await fetch(`${api}/settings/site`, { cache: 'no-store' });
+                    if (resp.ok) {
+                        return { basePath: base, apiUrl: api };
+                    }
+                } catch (e) {
+                    // try next
+                }
+            }
+
+            const fallbackBase = normalizeBasePath(BASE_PATH);
+            return { basePath: fallbackBase, apiUrl: `${fallbackBase}/api` };
+        }
+
+        let PUBLIC_BASE_PATH = BASE_PATH;
+        let API_URL = `${BASE_PATH}/api`;
+
+        function setLogoHref() {
+            try {
+                const logoLink = document.getElementById('top-logo-link');
+                if (logoLink) logoLink.setAttribute('href', `${PUBLIC_BASE_PATH}/`);
+            } catch (e) {}
+        }
 
         // Top-bar logo should lead to menu
-        try {
-            const logoLink = document.getElementById('top-logo-link');
-            if (logoLink) logoLink.setAttribute('href', `${BASE_PATH}/`);
-        } catch (e) {}
+        setLogoHref();
 
         const LANGUAGE_STORAGE_KEY = 'language';
         const LANGUAGE_USER_SELECTED_KEY = 'language_user_selected_v1';
@@ -601,7 +639,11 @@
                 }
 
                 if (!response.ok) {
-                    throw new Error('Failed to fetch order');
+                    let details = '';
+                    try {
+                        details = (await response.text() || '').toString().slice(0, 200);
+                    } catch (e) {}
+                    throw new Error(`Failed to fetch order (HTTP ${response.status}${details ? `: ${details}` : ''})`);
                 }
 
                 const data = await response.json();
@@ -930,6 +972,12 @@
         // Initialize
         async function init() {
             const orderId = getOrderId();
+
+            // Resolve the correct API base path (handles nginx/base-path changes)
+            const resolved = await resolveApiBasePath();
+            PUBLIC_BASE_PATH = resolved.basePath;
+            API_URL = resolved.apiUrl;
+            setLogoHref();
 
             // Update initial loading text
             try {
