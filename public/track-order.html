@@ -619,8 +619,16 @@
             startTime = new Date(order.createdAt);
 
             const orderTime = (order.orderTime || '').toString().toLowerCase();
-            const scheduledTime = (order.scheduledTime || '').toString().trim();
-            const isLater = orderTime === 'later';
+            // Be tolerant: some older/newer orders may not store orderTime consistently,
+            // but scheduledTime being present means the customer chose "later".
+            const scheduledTime = (
+                order.scheduledTime ??
+                order.scheduled_time ??
+                order.scheduleTime ??
+                order.scheduledAt
+            );
+            const scheduledTimeText = (scheduledTime || '').toString().trim();
+            const isLater = orderTime === 'later' || !!scheduledTimeText;
 
             const timeRemaining = isLater ? null : calculateTimeRemaining(order.createdAt, order.estimatedTime);
             const totalEstimatedMs = (order.estimatedTime || 60) * 60000;
@@ -707,7 +715,7 @@
                         ${normalizedStatus === 'cancelled' ? t('status_cancelled') : (isLater ? laterLabel : ((timeRemaining && timeRemaining.total > 0) ? t('statusHeaderEta') : t('statusHeaderReady')))}
                     </div>
                     <div class="time-remaining" id="time-display">
-                        ${normalizedStatus === 'cancelled' ? '--:--' : (isLater ? (scheduledTime || '--:--') : ((timeRemaining && timeRemaining.total > 0) ? formatTime(timeRemaining.minutes, timeRemaining.seconds) : t('done')))}
+                        ${normalizedStatus === 'cancelled' ? '--:--' : (isLater ? (scheduledTimeText || '--:--') : ((timeRemaining && timeRemaining.total > 0) ? formatTime(timeRemaining.minutes, timeRemaining.seconds) : t('done')))}
                     </div>
                     <div class="estimated-time">
                         ${normalizedStatus === 'cancelled' ? '' : (isLater ? '' : (order.estimatedTime ? `${t('approx')} ${order.estimatedTime} ${t('minutes')}` : `${t('approx')} 60 ${t('minutes')}`))}
@@ -805,7 +813,14 @@
             if (!order) return;
 
             const orderTime = (order.orderTime || '').toString().toLowerCase();
-            if (orderTime === 'later') return;
+            const scheduledTime = (
+                order.scheduledTime ??
+                order.scheduled_time ??
+                order.scheduleTime ??
+                order.scheduledAt
+            );
+            const scheduledTimeText = (scheduledTime || '').toString().trim();
+            if (orderTime === 'later' || scheduledTimeText) return;
 
             const timeRemaining = calculateTimeRemaining(order.createdAt, order.estimatedTime);
             const timeDisplay = document.getElementById('time-display');
