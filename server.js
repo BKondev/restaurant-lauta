@@ -3406,11 +3406,14 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
         // Prevent intermediary/proxy caching of tracking responses.
         res.set('Cache-Control', 'no-store');
 
-        const orderId = req.params.id;
+        const orderId = (req.params.id ?? '').toString().trim();
         const data = readDatabase();
         const orders = data.orders || [];
         
-        const order = orders.find(o => o.id === orderId);
+        const order = orders.find(o => {
+            const candidate = (o?.id ?? '').toString().trim();
+            return candidate && candidate === orderId;
+        });
         
         if (!order) {
             return res.status(404).json({ error: 'Order not found' });
