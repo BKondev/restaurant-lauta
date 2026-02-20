@@ -3411,8 +3411,20 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
         const orders = data.orders || [];
         
         const order = orders.find(o => {
-            const candidate = (o?.id ?? '').toString().trim();
-            return candidate && candidate === orderId;
+            const candidates = [
+                o?.id,
+                o?.orderId,
+                o?.order_id,
+                o?.payment?.order6,
+                o?.payment?.providerOrderId,
+                o?.payment?.provider_order_id,
+                o?.providerOrderId,
+            ]
+                .filter((v) => v != null)
+                .map((v) => String(v).trim())
+                .filter(Boolean);
+
+            return candidates.some((c) => c === orderId);
         });
         
         if (!order) {
