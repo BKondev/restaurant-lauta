@@ -1856,11 +1856,21 @@ async function placeOrder() {
     // Scheduled ("order later") time robustness:
     // The UI can display a fallback time even if selectedTimeSlot is empty.
     // Always send a real HH:MM scheduledTime for "later" orders.
+    let uiOrderTime = orderTime;
+    try {
+        const selected = document.querySelector('input[name="orderTime"]:checked');
+        if (selected && typeof selected.value === 'string' && selected.value.trim()) {
+            uiOrderTime = selected.value.trim();
+        }
+    } catch (e) {
+        // Ignore DOM lookup errors
+    }
+
     const pickedTimeRaw = (selectedTimeSlot || scheduledTime || '').toString().trim();
     const pickedTimeMatch = pickedTimeRaw.match(/(\d{1,2}:\d{2})/);
     const pickedTimeHHMM = pickedTimeMatch ? pickedTimeMatch[1] : '';
     const pickedTimeIsHHMM = /^\d{1,2}:\d{2}$/.test(pickedTimeHHMM);
-    const effectiveOrderTime = (orderTime === 'later' || pickedTimeIsHHMM) ? 'later' : orderTime;
+    const effectiveOrderTime = (uiOrderTime === 'later' || pickedTimeIsHHMM) ? 'later' : uiOrderTime;
 
     let effectiveScheduledTime = '';
     if (effectiveOrderTime === 'later') {
