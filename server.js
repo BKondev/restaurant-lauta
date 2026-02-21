@@ -948,7 +948,7 @@ app.get(API_PREFIX + '/restaurants/me', requireAuthOrApiKey, (req, res) => {
             return res.status(404).json({ error: 'Restaurant not found' });
         }
 
-        const orderPlacedTpl = restaurant.emailTemplates?.orderPlaced || {};
+        const orderPlacedTpl = getEffectiveOrderPlacedTemplate(restaurant);
         const printerNormalized = normalizePrinterConfig(restaurant.printer);
 
         res.json({
@@ -1140,7 +1140,7 @@ app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
         }
 
         if (writeDatabase(db)) {
-            const orderPlacedTpl = db.restaurants[idx].emailTemplates?.orderPlaced || {};
+            const orderPlacedTpl = getEffectiveOrderPlacedTemplate(db.restaurants[idx]);
             const printerNormalized = normalizePrinterConfig(db.restaurants[idx].printer);
             res.json({
                 id: db.restaurants[idx].id,
@@ -2141,6 +2141,138 @@ function formatOrderItemsText(order) {
         .join('\n');
 }
 
+function looksLikePlaceholderEmailTemplateText(text) {
+    const t = (text || '').toString().trim().toLowerCase();
+    if (!t) return true;
+    if (t === 'assdasdasdasd' || t === 'asdasdasdasd' || t === 'asdasd' || t === 'asd') return true;
+    // Common keyboard-smash placeholders (kept conservative to avoid overriding real templates).
+    if (t.length <= 40 && /^[asd]+$/.test(t)) return true;
+    return false;
+}
+
+function getDefaultOrderPlacedTemplate() {
+    return {
+        subject: 'Поръчка №{{orderId}} е получена',
+        body: [
+            'Здравейте {{customerName}},',
+            '',
+            'Получихме Вашата поръчка.',
+            'Номер: {{orderId}}',
+            '{{deliveryText}}',
+            '',
+            'Артикули:',
+            '{{itemsText}}',
+            '',
+            '{{totalText}}',
+            '{{trackUrlLine}}',
+            '',
+            'Благодарим Ви!'
+        ].join('\n')
+    };
+}
+
+function getEffectiveOrderPlacedTemplate(restaurant) {
+    const tpl = restaurant?.emailTemplates?.orderPlaced || {};
+    const subject = (tpl.subject || '').toString().trim();
+    const body = (tpl.body || '').toString().trim();
+
+    const defaults = getDefaultOrderPlacedTemplate();
+    const effectiveSubject = subject || defaults.subject;
+    const effectiveBody = looksLikePlaceholderEmailTemplateText(body) ? defaults.body : body;
+
+    return {
+        subject: effectiveSubject,
+        body: effectiveBody
+    };
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function formatMoneyBGN(value) {
+    return `${parseNumber(value, 0).toFixed(2)} лв`;
+}
+
+function getDeliverySummaryText(order) {
+    return order?.deliveryMethod === 'delivery'
+        ? `Доставка до: ${(order?.customerInfo?.city || '').toString().trim()} ${(order?.customerInfo?.address || '').toString().trim()}`.trim()
+        : 'Взимане от място';
+}
+
+function formatOrderItemsHtml(order) {
+    const items = Array.isArray(order?.items) ? order.items : [];
+    if (items.length === 0) return '<p>(Няма артикули)</p>';
+
+    const rows = items.map((it) => {
+        const name = escapeHtml(it?.name || '');
+        const qty = parseNumber(it?.quantity, 0);
+        const price = parseNumber(it?.price, 0);
+        const lineTotal = price * qty;
+        return `
+            <tr>
+                <td style="padding:6px 0;">${name}</td>
+                <td style="padding:6px 0; text-align:right; white-space:nowrap;">x${escapeHtml(qty)}</td>
+                <td style="padding:6px 0; text-align:right; white-space:nowrap;">${escapeHtml(formatMoneyBGN(price))}</td>
+                <td style="padding:6px 0; text-align:right; white-space:nowrap;">${escapeHtml(formatMoneyBGN(lineTotal))}</td>
+            </tr>`;
+    }).join('');
+
+    return `
+        <table style="width:100%; border-collapse:collapse;">
+            <thead>
+                <tr>
+                    <th style="text-align:left; padding:6px 0;">Артикул</th>
+                    <th style="text-align:right; padding:6px 0;">Брой</th>
+                    <th style="text-align:right; padding:6px 0;">Ед. цена</th>
+                    <th style="text-align:right; padding:6px 0;">Общо</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+}
+
+function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl) {
+    const restaurantName = escapeHtml(restaurant?.name || order?.restaurantName || 'Ресторант');
+    const orderId = escapeHtml(order?.id || '');
+    const customerName = escapeHtml(order?.customerInfo?.name || '');
+    const deliverySummary = escapeHtml(getDeliverySummaryText(order));
+    const total = escapeHtml(formatMoneyBGN(order?.total));
+    const paymentMethod = escapeHtml((order?.payment?.method || order?.paymentMethod || '').toString());
+
+    const trackBlock = trackUrl
+        ? `<p style="margin:16px 0;">Проследяване: <a href="${escapeHtml(trackUrl)}">${escapeHtml(trackUrl)}</a></p>`
+        : '';
+
+    const paymentBlock = paymentMethod
+        ? `<p style="margin:6px 0;">Начин на плащане: <strong>${paymentMethod}</strong></p>`
+        : '';
+
+    return `
+        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+            <h2 style="margin:0 0 12px 0;">${restaurantName}</h2>
+            <p style="margin:0 0 12px 0;">Здравейте${customerName ? `, <strong>${customerName}</strong>` : ''},</p>
+            <p style="margin:0 0 12px 0;">Получихме Вашата поръчка.</p>
+
+            <p style="margin:6px 0;">Номер: <strong>${orderId}</strong></p>
+            <p style="margin:6px 0;">${deliverySummary}</p>
+            ${paymentBlock}
+
+            <h3 style="margin:18px 0 8px 0;">Артикули</h3>
+            ${formatOrderItemsHtml(order)}
+
+            <p style="margin:16px 0 0 0; font-size: 16px;">Общо: <strong>${total}</strong></p>
+            ${trackBlock}
+
+            <p style="margin:20px 0 0 0;">Благодарим Ви!</p>
+        </div>`;
+}
+
 function getPublicOrderTrackUrl(orderId) {
     const base = (process.env.PUBLIC_BASE_URL || '').toString().trim().replace(/\/$/, '');
     if (!base) return '';
@@ -2164,13 +2296,11 @@ async function sendOrderPlacedEmails(order, restaurant) {
     const restaurantTo = getRestaurantNotificationEmail(restaurant);
     const customerTo = (order.customerInfo?.email || '').toString().trim();
 
-    const subjectRestaurant = `New order ${order.id} (${order.deliveryMethod})`;
+    const subjectRestaurant = `Нова поръчка ${order.id} (${order.deliveryMethod})`;
 
     const itemsText = formatOrderItemsText(order);
-    const totalText = `Total: ${parseNumber(order.total, 0).toFixed(2)} лв`;
-    const deliveryText = order.deliveryMethod === 'delivery'
-        ? `Delivery to: ${order.customerInfo?.city || ''}, ${order.customerInfo?.address || ''}`
-        : 'Pickup';
+    const totalText = `Общо: ${formatMoneyBGN(order.total)}`;
+    const deliveryText = getDeliverySummaryText(order);
 
     const templateVars = {
         orderId: order.id,
@@ -2185,33 +2315,42 @@ async function sendOrderPlacedEmails(order, restaurant) {
         trackUrlLine: trackUrl ? `Track your order: ${trackUrl}` : ''
     };
 
-    const tpl = restaurant?.emailTemplates?.orderPlaced || {};
-    const subjectCustomer = (tpl.subject || '').toString().trim() || `Order successfully placed: ${order.id}`;
-    const bodyCustomer = (tpl.body || '').toString().trim() || [
-        'Order successfully placed.',
-        `Order ID: {{orderId}}`,
-        '{{deliveryText}}',
-        '{{itemsText}}',
-        '{{totalText}}',
-        '{{trackUrlLine}}'
-    ].join('\n');
+    const tpl = getEffectiveOrderPlacedTemplate(restaurant);
+    const subjectCustomer = (tpl.subject || '').toString().trim() || `Поръчка №${order.id} е получена`;
+    const bodyCustomer = (tpl.body || '').toString().trim() || getDefaultOrderPlacedTemplate().body;
 
     const customerText = renderTemplateText(bodyCustomer, templateVars);
     const finalSubjectCustomer = renderTemplateText(subjectCustomer, templateVars);
 
+    const customerHtml = buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl);
+
     const restaurantText = [
-        `New order received: ${order.id}`,
-        `Customer: ${order.customerInfo?.name || ''} / ${order.customerInfo?.phone || ''} / ${order.customerInfo?.email || ''}`,
+        `Нова поръчка: ${order.id}`,
+        `Клиент: ${order.customerInfo?.name || ''} / ${order.customerInfo?.phone || ''} / ${order.customerInfo?.email || ''}`,
         deliveryText,
         itemsText,
         totalText
     ].filter(Boolean).join('\n');
 
+    const restaurantHtml = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+            <h2 style="margin:0 0 12px 0;">Нова поръчка</h2>
+            <p style="margin:6px 0;">Номер: <strong>${escapeHtml(order.id)}</strong></p>
+            <p style="margin:6px 0;">${escapeHtml(deliveryText)}</p>
+            <p style="margin:6px 0;">Клиент: <strong>${escapeHtml(order.customerInfo?.name || '')}</strong></p>
+            <p style="margin:6px 0;">Телефон: ${escapeHtml(order.customerInfo?.phone || '')}</p>
+            <p style="margin:6px 0;">Имейл: ${escapeHtml(order.customerInfo?.email || '')}</p>
+            <h3 style="margin:18px 0 8px 0;">Артикули</h3>
+            ${formatOrderItemsHtml(order)}
+            <p style="margin:16px 0 0 0;">${escapeHtml(totalText)}</p>
+        </div>`;
+
     // Customer email
     await sendEmail({
         to: customerTo,
         subject: finalSubjectCustomer,
-        text: customerText
+        text: customerText,
+        html: customerHtml
     });
 
     // Restaurant notification email
@@ -2220,6 +2359,7 @@ async function sendOrderPlacedEmails(order, restaurant) {
             to: restaurantTo,
             subject: subjectRestaurant,
             text: restaurantText,
+            html: restaurantHtml,
             replyTo: customerTo
         });
     }
@@ -2236,7 +2376,14 @@ async function sendOrderApprovedEmail(order) {
         trackUrl ? `Проследяване: ${trackUrl}` : ''
     ].filter(Boolean).join('\n');
 
-    await sendEmail({ to: customerTo, subject, text });
+    const html = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+            <p>Поръчката Ви <strong>${escapeHtml(order.id)}</strong> е одобрена.</p>
+            <p>${escapeHtml(order.deliveryMethod === 'delivery' ? 'Очаквайте доставка скоро.' : 'Поръчката ще бъде готова за взимане.')}</p>
+            ${trackUrl ? `<p>Проследяване: <a href="${escapeHtml(trackUrl)}">${escapeHtml(trackUrl)}</a></p>` : ''}
+        </div>`;
+
+    await sendEmail({ to: customerTo, subject, text, html });
 }
 
 async function sendOrderStatusEmail(order, status) {
@@ -2268,7 +2415,13 @@ async function sendOrderStatusEmail(order, status) {
         trackUrl ? `Проследяване: ${trackUrl}` : ''
     ].filter(Boolean).join('\n');
 
-    await sendEmail({ to: customerTo, subject, text });
+    const html = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+            <p>${escapeHtml(firstLine)}</p>
+            ${trackUrl ? `<p>Проследяване: <a href="${escapeHtml(trackUrl)}">${escapeHtml(trackUrl)}</a></p>` : ''}
+        </div>`;
+
+    await sendEmail({ to: customerTo, subject, text, html });
 }
 
 // Get all products (public route)
