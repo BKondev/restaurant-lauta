@@ -2075,8 +2075,21 @@ async function updateRestaurantSettings() {
             });
 
             if (!profileRes.ok) {
-                const err = await profileRes.json().catch(() => ({}));
-                alert(err.error || 'Settings saved, but failed to update notification email');
+                let errText = '';
+                try {
+                    const ct = (profileRes.headers.get('content-type') || '').toLowerCase();
+                    if (ct.includes('application/json')) {
+                        const err = await profileRes.json().catch(() => ({}));
+                        errText = (err && (err.error || err.message)) ? String(err.error || err.message) : '';
+                    } else {
+                        errText = ((await profileRes.text()) || '').toString().trim();
+                    }
+                } catch (e) {
+                    // ignore
+                }
+
+                const fallback = `Failed to update card payment settings (HTTP ${profileRes.status})`;
+                alert(errText || fallback);
                 return;
             }
         }

@@ -1021,10 +1021,20 @@ app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
         }
 
         if (borica !== undefined) {
-            const enabled = !!borica.enabled;
+            const parseLooseBoolean = (value, defaultValue = false) => {
+                if (value === true || value === false) return value;
+                if (value === 1 || value === 0) return value === 1;
+                const s = (value ?? '').toString().trim().toLowerCase();
+                if (s === '') return false;
+                if (['1', 'true', 'yes', 'y', 'on', 'enabled'].includes(s)) return true;
+                if (['0', 'false', 'no', 'n', 'off', 'disabled'].includes(s)) return false;
+                return defaultValue;
+            };
+
+            const enabled = parseLooseBoolean(borica.enabled, false);
             const modeRaw = (borica.mode || '').toString().trim().toLowerCase();
             const mode = (modeRaw === 'prod' || modeRaw === 'production') ? 'prod' : 'test';
-            const debugMode = borica.debugMode !== undefined ? !!borica.debugMode : (mode === 'test');
+            const debugMode = borica.debugMode !== undefined ? parseLooseBoolean(borica.debugMode, (mode === 'test')) : (mode === 'test');
             const integration = (borica.integration || borica.integrationType || '').toString().trim();
             const currencyRaw = (borica.currency || '').toString().trim().toUpperCase();
             const currency = (currencyRaw === 'BGN' || currencyRaw === 'EUR') ? currencyRaw : '';
