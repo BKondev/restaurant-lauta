@@ -24,16 +24,22 @@
     .items-row:last-child { border-bottom: none; }
     .items-name { font-weight: 700; color:#333; }
     .items-sub { color:#666; font-size: 13px; margin-top: 2px; }
+    .items-note { color:#444; font-size: 13px; margin-top: 6px; white-space: pre-line; }
     .items-price { font-weight: 800; color:#111; white-space: nowrap; }
     .contact-box { margin-top: 14px; color:#444; }
     .contact-box a { color: var(--highlight-color); text-decoration: none; font-weight: 800; }
+
+    .top-actions { display:flex; align-items:center; justify-content:flex-end; gap: 10px; }
+    .top-actions a { display:inline-flex; align-items:center; justify-content:center; padding: 8px 12px; border-radius: 10px; text-decoration:none; font-weight: 800; }
   </style>
 </head>
 <body>
   <div class="top-bar">
     <div class="container" style="display:flex; align-items:center; justify-content:space-between;">
       <div class="logo"><h1 style="margin:0;">Bojole</h1></div>
-      <div></div>
+      <div class="top-actions">
+        <a id="ty-track-top" class="btn-secondary" href="#" style="display:none;">Track order</a>
+      </div>
     </div>
   </div>
 
@@ -41,6 +47,7 @@
     <div class="thankyou-card">
       <h1 id="ty-title" class="thankyou-title">Thank you!</h1>
       <div id="ty-text">Your payment is being processed.</div>
+      <div id="ty-summary" class="thankyou-meta" style="display:none;"></div>
       <div class="thankyou-meta">
         <div>Order: <code id="ty-order">—</code></div>
         <div id="ty-code-row">Code: <code id="ty-code">—</code></div>
@@ -51,7 +58,7 @@
 
       <div class="thankyou-actions">
         <a id="ty-menu" class="btn-primary" href="/">Back to menu</a>
-        <a id="ty-track" class="btn-secondary" href="#">Track order</a>
+        <a id="ty-track" class="btn-secondary" href="#" style="display:none;">Track order</a>
       </div>
     </div>
   </div>
@@ -99,6 +106,9 @@
           codeLabel: 'Code',
           backToMenu: 'Back to menu',
           trackOrder: 'Track order',
+          hello: 'Hello',
+          deliveryTo: 'Delivery to',
+          pickup: 'Pickup',
           itemsTitle: 'Ordered items',
           total: 'Total',
           phone: 'Phone'
@@ -118,6 +128,9 @@
           codeLabel: 'Код',
           backToMenu: 'Обратно към менюто',
           trackOrder: 'Проследи поръчка',
+          hello: 'Здравейте',
+          deliveryTo: 'Доставка до',
+          pickup: 'Взимане от място',
           itemsTitle: 'Поръчани продукти',
           total: 'Общо',
           phone: 'Телефон'
@@ -131,6 +144,15 @@
       function toNumber(val) {
         const n = Number(val);
         return Number.isFinite(n) ? n : 0;
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
       }
 
       function convertBgnToEur(amountBgn) {
@@ -192,7 +214,9 @@
           if (!mount) return;
 
           const rows = items.map((it) => {
-            const name = (it?.name || '').toString();
+            const name = escapeHtml((it?.name || '').toString());
+            const note = ((it?.note || '').toString().replace(/\r/g, '').trim());
+            const noteHtml = note ? `<div class="items-note">${escapeHtml(note)}</div>` : '';
             const qty = Number(it?.quantity || 0);
             const price = Number(it?.price || 0);
             const lineTotal = price * qty;
@@ -201,6 +225,7 @@
                 <div>
                   <div class="items-name">${name}</div>
                   <div class="items-sub">${qty} × ${formatEurFromBgn(price)}</div>
+                  ${noteHtml}
                 </div>
                 <div class="items-price">${formatEurFromBgn(lineTotal)}</div>
               </div>
@@ -217,6 +242,23 @@
               <div class="items-price">${formatEurFromBgn(total)}</div>
             </div>
           `;
+
+          // Email-like summary (customer + delivery)
+          const summary = document.getElementById('ty-summary');
+          if (summary) {
+            const customerName = (o?.customerInfo?.name || '').toString().trim();
+            const address = (o?.customerInfo?.address || '').toString().trim();
+            const city = (o?.customerInfo?.city || '').toString().trim();
+            const place = [address, city].filter(Boolean).join(', ');
+            const deliveryText = (o?.deliveryMethod === 'delivery')
+              ? `${t('deliveryTo')}: ${place || '—'}`
+              : t('pickup');
+            summary.style.display = '';
+            summary.innerHTML = `
+              <div>${customerName ? `${t('hello')}, <strong>${escapeHtml(customerName)}</strong>` : `${t('hello')},`}</div>
+              <div style="margin-top:6px; color:#555;">${escapeHtml(deliveryText)}</div>
+            `;
+          }
         } catch (e) {
           // ignore
         }
@@ -235,13 +277,25 @@
       document.getElementById('ty-menu').setAttribute('href', base + '/');
       document.getElementById('ty-menu').textContent = t('backToMenu');
       document.getElementById('ty-track').textContent = t('trackOrder');
+      document.getElementById('ty-track-top').textContent = t('trackOrder');
 
       if (order) {
         document.getElementById('ty-order').textContent = order;
-        document.getElementById('ty-track').setAttribute('href', base + '/track-order.html?id=' + encodeURIComponent(order));
+        const trackHref = base + '/track-order.html?id=' + encodeURIComponent(order);
+        const trackBtn = document.getElementById('ty-track');
+        const trackTop = document.getElementById('ty-track-top');
+        if (trackBtn) {
+          trackBtn.style.display = '';
+          trackBtn.setAttribute('href', trackHref);
+        }
+        if (trackTop) {
+          trackTop.style.display = '';
+          trackTop.setAttribute('href', trackHref);
+        }
         loadItems(order);
       } else {
         document.getElementById('ty-track').style.display = 'none';
+        document.getElementById('ty-track-top').style.display = 'none';
       }
 
       loadContacts();

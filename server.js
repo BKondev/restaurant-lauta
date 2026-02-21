@@ -3492,7 +3492,8 @@ function parseDateOrYmdToMs(value, tzOffsetMinutes, endOfDay) {
     if (ymd) {
         const offsetMs = (Number(tzOffsetMinutes) || 0) * 60 * 1000;
         const h = endOfDay ? 23 : 0;
-        const mi = endOfDay ? 59 : 0;
+            const noteRaw = (it?.note || it?.notes || '').toString();
+            const note = noteRaw.replace(/\r/g, '').trim();
         const s = endOfDay ? 59 : 0;
         const ms = endOfDay ? 999 : 0;
         return Date.UTC(ymd.year, ymd.month - 1, ymd.day, h, mi, s, ms) + offsetMs;
@@ -3501,6 +3502,7 @@ function parseDateOrYmdToMs(value, tzOffsetMinutes, endOfDay) {
     const parsed = new Date(raw);
     const t = parsed.getTime();
     return Number.isFinite(t) ? t : null;
+                ...(note ? { note: note.slice(0, 500) } : {}),
 }
 
 function computeTodayYmdForOffset(tzOffsetMinutes) {
@@ -3510,7 +3512,12 @@ function computeTodayYmdForOffset(tzOffsetMinutes) {
     const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
     const day = String(shifted.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
-}
+        .map(it => {
+            const base = `- ${it.name} x${it.quantity} = ${(parseNumber(it.price, 0) * parseNumber(it.quantity, 0)).toFixed(2)} лв`;
+            const note = (it?.note || '').toString().replace(/\r/g, '').trim();
+            if (!note) return base;
+            return `${base}\n  Бележка: ${note}`;
+        })
 
 // Get all orders (admin only - filtered by restaurant)
 app.get(API_PREFIX + '/orders', requireAuthOrApiKey, (req, res) => {
@@ -3520,13 +3527,16 @@ app.get(API_PREFIX + '/orders', requireAuthOrApiKey, (req, res) => {
         
         // Filter orders by restaurant
         let restaurantOrders = orders.filter(order => isOrderForRestaurant(order, req.restaurantId, data));
-
+        const note = (it?.note || '').toString().replace(/\r/g, '').trim();
         const statusQuery = (req.query.status || '').toString().trim();
         if (statusQuery) {
             const normalized = normalizeOrderStatus(statusQuery);
             restaurantOrders = restaurantOrders.filter(o => normalizeOrderStatus(o.status) === normalized);
         }
-
+                <td style="padding:6px 0;">
+                    <div>${name}</div>
+                    ${note ? `<div style="margin-top:2px; color:#555; font-size:12px;">Бележка: ${escapeHtml(note)}</div>` : ''}
+                </td>
         const tzOffsetMinutes = Number.isFinite(Number(req.query.tzOffsetMinutes))
             ? Number(req.query.tzOffsetMinutes)
             : 0;
@@ -3538,7 +3548,7 @@ app.get(API_PREFIX + '/orders', requireAuthOrApiKey, (req, res) => {
         if (dateRaw && !fromRaw && !toRaw) {
             fromRaw = dateRaw;
             toRaw = dateRaw;
-        }
+        trackUrlLine: trackUrl ? `Проследяване: ${trackUrl}` : ''
         if (fromRaw && !toRaw) toRaw = fromRaw;
         if (!fromRaw && toRaw) fromRaw = toRaw;
 

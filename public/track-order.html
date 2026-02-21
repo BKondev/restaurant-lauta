@@ -103,6 +103,13 @@
             margin-top: 2px;
         }
 
+        .item-note {
+            color: #444;
+            font-size: 13px;
+            margin-top: 6px;
+            white-space: pre-line;
+        }
+
         .item-price {
             font-weight: 800;
             color: #111;
@@ -591,6 +598,15 @@
             return Number.isFinite(n) ? n : 0;
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function convertBgnToEur(amountBgn) {
             const rate = toNumber(eurToBgnRate);
             if (rate > 0) return toNumber(amountBgn) / rate;
@@ -750,7 +766,9 @@
                 <div class="items-info">
                     <div class="items-title">${t('itemsTitle')}</div>
                     ${items.map((it) => {
-                        const name = (it && it.name) ? String(it.name) : '';
+                        const name = escapeHtml((it && it.name) ? String(it.name) : '');
+                        const note = ((it && (it.note || it.notes)) ? String(it.note || it.notes) : '').replace(/\r/g, '').trim();
+                        const noteHtml = note ? `<div class="item-note">${escapeHtml(note)}</div>` : '';
                         const qty = toNumber(it && it.quantity);
                         const priceBgn = toNumber(it && it.price);
                         const lineBgn = priceBgn * qty;
@@ -759,6 +777,7 @@
                                 <div>
                                     <div class="item-name">${name}</div>
                                     <div class="item-sub">${qty} × ${formatEurFromBgn(priceBgn)}</div>
+                                    ${noteHtml}
                                 </div>
                                 <div class="item-price">${formatEurFromBgn(lineBgn)}</div>
                             </div>
@@ -802,7 +821,7 @@
                 <div class="order-info">
                     <div class="order-row">
                         <span class="order-label">${t('orderNo')}</span>
-                        <span class="order-id">#${order.id}</span>
+                        <span class="order-id">#${escapeHtml(order.id)}</span>
                     </div>
                     <div class="order-row">
                         <span class="order-label">${t('status')}</span>
@@ -830,7 +849,7 @@
                     <div class="delivery-info">
                         <i class="fas fa-map-marker-alt"></i>
                         <strong>${t('deliveryAddress')}</strong><br>
-                        ${order.customerInfo.address}, ${order.customerInfo.city}
+                        ${escapeHtml(order.customerInfo.address)}, ${escapeHtml(order.customerInfo.city)}
                     </div>
                 ` : ''}
 
