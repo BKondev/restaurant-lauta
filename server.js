@@ -1705,9 +1705,65 @@ function requireApiKey(req, res, next) {
 
 // ==================== EMAIL (SMTP) ====================
 
+// Supports either:
+// - Resend (preferred): RESEND_API_KEY + RESEND_FROM
+// - SMTP fallback: SMTP_* env vars (nodemailer)
+
 let mailTransport = null;
 
 let cachedSmtpCreds = null;
+
+let cachedResendClient = null;
+let cachedResendClientLoadAttempted = false;
+let cachedResendClientLoadError = null;
+
+const RESEND_MIN_NODE_MAJOR = 20;
+
+function getNodeMajorVersion() {
+    const raw = (process.versions && process.versions.node) ? String(process.versions.node) : '';
+    const major = parseInt(raw.split('.')[0] || '0', 10);
+    return Number.isFinite(major) ? major : 0;
+}
+
+function isNodeAtLeast(major) {
+    return getNodeMajorVersion() >= major;
+}
+
+function isResendEmailEnabled() {
+    const apiKey = (process.env.RESEND_API_KEY || '').toString().trim();
+    const from = (process.env.RESEND_FROM || '').toString().trim();
+    return !!(apiKey && from);
+}
+
+function getResendClient() {
+    if (!isResendEmailEnabled()) return null;
+    if (cachedResendClient) return cachedResendClient;
+
+    // Avoid spamming logs by retrying on every request.
+    if (cachedResendClientLoadAttempted) return null;
+
+    cachedResendClientLoadAttempted = true;
+
+    // Resend SDK requires Node >= 20 (per package.json engines).
+    if (!isNodeAtLeast(RESEND_MIN_NODE_MAJOR)) {
+        cachedResendClientLoadError = `Resend requires Node >= ${RESEND_MIN_NODE_MAJOR} (current: ${process.versions.node})`;
+        console.warn('[EMAIL] Resend disabled:', cachedResendClientLoadError);
+        return null;
+    }
+
+    // Lazy-require so environments without Resend (or older Node) don't crash at startup.
+    try {
+        const { Resend } = require('resend');
+        const apiKey = (process.env.RESEND_API_KEY || '').toString().trim();
+        cachedResendClient = new Resend(apiKey);
+        cachedResendClientLoadError = null;
+        return cachedResendClient;
+    } catch (e) {
+        cachedResendClientLoadError = e?.message || String(e);
+        console.error('[EMAIL] Resend SDK not available:', cachedResendClientLoadError);
+        return null;
+    }
+}
 
 function loadSmtpCredentials() {
     if (cachedSmtpCreds) return cachedSmtpCreds;
@@ -1756,14 +1812,30 @@ function loadSmtpCredentials() {
     }
 }
 
-function isEmailEnabled() {
+function isSmtpEmailEnabled() {
     const host = (process.env.SMTP_HOST || '').toString().trim();
     const from = (process.env.SMTP_FROM || '').toString().trim();
     const creds = loadSmtpCredentials();
     return !!(nodemailer && host && from && creds.user && creds.pass);
 }
 
+function isEmailEnabled() {
+    return isResendEmailEnabled() || isSmtpEmailEnabled();
+}
+
+function getEmailProvider() {
+    // Prefer Resend when configured.
+    if (isResendEmailEnabled() && getResendClient()) return 'resend';
+    if (isSmtpEmailEnabled()) return 'smtp';
+    return null;
+}
+
 function getEmailDiagnostics() {
+    const resendApiKey = (process.env.RESEND_API_KEY || '').toString().trim();
+    const resendFrom = (process.env.RESEND_FROM || '').toString().trim();
+    const resendReplyTo = (process.env.RESEND_REPLY_TO || '').toString().trim();
+    const resendRegion = (process.env.RESEND_REGION || '').toString().trim();
+
     const host = (process.env.SMTP_HOST || '').toString().trim();
     const port = parseInt(process.env.SMTP_PORT || '587', 10);
     const secure = (process.env.SMTP_SECURE || '').toString().toLowerCase() === 'true';
@@ -1775,20 +1847,53 @@ function getEmailDiagnostics() {
     const credsFileExists = credsFile ? fs.existsSync(credsFile) : false;
     const creds = loadSmtpCredentials();
 
-    const missing = [];
-    if (!nodemailer) missing.push('nodemailer');
-    if (!host) missing.push('SMTP_HOST');
-    if (!from) missing.push('SMTP_FROM');
-    if (!creds.user) missing.push('SMTP_USER (or credentials file user=)');
-    if (!creds.pass) missing.push('SMTP_PASS (or credentials file pass=)');
+    const missingSmtp = [];
+    if (!nodemailer) missingSmtp.push('nodemailer');
+    if (!host) missingSmtp.push('SMTP_HOST');
+    if (!from) missingSmtp.push('SMTP_FROM');
+    if (!creds.user) missingSmtp.push('SMTP_USER (or credentials file user=)');
+    if (!creds.pass) missingSmtp.push('SMTP_PASS (or credentials file pass=)');
+
+    const missingResend = [];
+    if (!resendApiKey) missingResend.push('RESEND_API_KEY');
+    if (!resendFrom) missingResend.push('RESEND_FROM');
+
+    const resendConfigured = !!(resendApiKey && resendFrom);
+    const resendNodeOk = isNodeAtLeast(RESEND_MIN_NODE_MAJOR);
+    const resendSdkLoaded = !!getResendClient();
+
+    if (resendConfigured && !resendNodeOk) {
+        missingResend.push(`Node >= ${RESEND_MIN_NODE_MAJOR} (required for Resend SDK)`);
+    }
+    if (resendConfigured && resendNodeOk && !resendSdkLoaded) {
+        missingResend.push('Resend SDK load failed');
+    }
 
     const credsSource = (directUser && directPass)
         ? 'env'
         : (credsFile ? (credsFileExists ? 'file' : 'file_missing') : 'missing');
 
+    const provider = getEmailProvider() || 'disabled';
+    const enabled = provider !== 'disabled';
+    const missing = enabled ? [] : Array.from(new Set([...missingResend, ...missingSmtp]));
+
     return {
-        enabled: isEmailEnabled(),
+        enabled,
+        provider,
         missing,
+
+        resend: {
+            apiKeyPresent: !!resendApiKey,
+            from: resendFrom || null,
+            replyTo: resendReplyTo || null,
+            region: resendRegion || null,
+            sdkLoaded: resendSdkLoaded,
+            sdkError: cachedResendClientLoadError,
+            nodeVersion: (process.versions && process.versions.node) ? String(process.versions.node) : null,
+            minNodeMajor: RESEND_MIN_NODE_MAJOR,
+            nodeVersionOk: resendNodeOk
+        },
+
         nodemailerLoaded: !!nodemailer,
         smtp: {
             host: host || null,
@@ -1806,7 +1911,7 @@ function getEmailDiagnostics() {
 }
 
 function getMailTransport() {
-    if (!isEmailEnabled()) return null;
+    if (!isSmtpEmailEnabled()) return null;
     if (mailTransport) return mailTransport;
 
     // Credentials may have changed between restarts.
@@ -1831,15 +1936,67 @@ function getMailTransport() {
 }
 
 async function sendEmail({ to, subject, text, html, replyTo }) {
-    const transport = getMailTransport();
-    if (!transport) {
+    const provider = getEmailProvider();
+    if (!provider) {
         const diag = getEmailDiagnostics();
-        console.log('[EMAIL] Disabled or missing SMTP config; skipping email to:', to, 'missing:', diag.missing);
+        console.log('[EMAIL] Disabled or missing email config; skipping email to:', to, 'missing:', diag.missing);
         return { skipped: true };
     }
 
     if (!to || !isValidEmail(to)) {
         console.log('[EMAIL] Invalid recipient; skipping email to:', to);
+        return { skipped: true };
+    }
+
+    if (provider === 'resend') {
+        const resend = getResendClient();
+        if (!resend) {
+            console.log('[EMAIL] Resend not available; skipping email to:', to);
+            return { skipped: true };
+        }
+
+        const from = (process.env.RESEND_FROM || '').toString().trim();
+        const finalReplyTo = (replyTo || process.env.RESEND_REPLY_TO || '').toString().trim();
+        const region = (process.env.RESEND_REGION || '').toString().trim();
+
+        try {
+            const { data, error } = await resend.emails.send({
+                from,
+                to,
+                subject: (subject || '').toString(),
+                ...(text ? { text: String(text) } : {}),
+                ...(html ? { html: String(html) } : {}),
+                ...(finalReplyTo ? { replyTo: finalReplyTo } : {}),
+                ...(region ? { region } : {})
+            });
+
+            if (error) {
+                return {
+                    success: false,
+                    error: error?.message || 'Resend error',
+                    code: error?.name,
+                    response: error
+                };
+            }
+
+            return {
+                success: true,
+                provider: 'resend',
+                messageId: data?.id
+            };
+        } catch (err) {
+            console.error('[EMAIL] Resend send failed:', err);
+            return {
+                success: false,
+                error: err?.message || String(err)
+            };
+        }
+    }
+
+    const transport = getMailTransport();
+    if (!transport) {
+        const diag = getEmailDiagnostics();
+        console.log('[EMAIL] SMTP disabled or missing config; skipping email to:', to, 'missing:', diag.missing);
         return { skipped: true };
     }
 
@@ -1857,6 +2014,7 @@ async function sendEmail({ to, subject, text, html, replyTo }) {
         });
         return {
             success: true,
+            provider: 'smtp',
             messageId: info?.messageId,
             accepted: info?.accepted,
             rejected: info?.rejected,
@@ -1867,6 +2025,7 @@ async function sendEmail({ to, subject, text, html, replyTo }) {
         console.error('[EMAIL] sendMail failed:', err);
         return {
             success: false,
+            provider: 'smtp',
             error: err?.message || String(err),
             code: err?.code,
             command: err?.command,
@@ -1889,7 +2048,7 @@ app.post(API_PREFIX + '/email/test', requireAuth, async (req, res) => {
     try {
         const diag = getEmailDiagnostics();
         if (!diag.enabled) {
-            return res.status(400).json({ success: false, diagnostics: diag, error: 'Email is not enabled (missing SMTP config)' });
+            return res.status(400).json({ success: false, diagnostics: diag, error: 'Email is not enabled (missing provider config)' });
         }
 
         const to = (req.body?.to || req.restaurantEmail || '').toString().trim();
@@ -1897,18 +2056,21 @@ app.post(API_PREFIX + '/email/test', requireAuth, async (req, res) => {
             return res.status(400).json({ success: false, diagnostics: diag, error: 'Valid "to" email is required' });
         }
 
-        const transport = getMailTransport();
+        const provider = diag.provider || getEmailProvider() || 'disabled';
         let verifyResult = null;
-        try {
-            verifyResult = await transport.verify();
-        } catch (e) {
-            return res.status(500).json({ success: false, diagnostics: diag, stage: 'verify', error: e?.message || String(e), code: e?.code, response: e?.response });
+        if (provider === 'smtp') {
+            const transport = getMailTransport();
+            try {
+                verifyResult = await transport.verify();
+            } catch (e) {
+                return res.status(500).json({ success: false, diagnostics: diag, stage: 'verify', error: e?.message || String(e), code: e?.code, response: e?.response });
+            }
         }
 
         const sendResult = await sendEmail({
             to,
-            subject: `SMTP test (${new Date().toISOString()})`,
-            text: `This is a test email from ${req.restaurantName || 'restaurant-backend'}\nHost: ${diag.smtp.host}:${diag.smtp.port}\nSecure: ${diag.smtp.secure}`
+            subject: `${provider === 'resend' ? 'Resend' : 'SMTP'} test (${new Date().toISOString()})`,
+            text: `This is a test email from ${req.restaurantName || 'restaurant-backend'}\nProvider: ${provider}`
         });
 
         res.json({ success: !!sendResult?.success, verify: verifyResult, send: sendResult, diagnostics: diag });
@@ -1922,7 +2084,7 @@ app.post(API_PREFIX + '/email/send', requireAuth, async (req, res) => {
     try {
         const diag = getEmailDiagnostics();
         if (!diag.enabled) {
-            return res.status(400).json({ success: false, diagnostics: diag, error: 'Email is not enabled (missing SMTP config)' });
+            return res.status(400).json({ success: false, diagnostics: diag, error: 'Email is not enabled (missing provider config)' });
         }
 
         const to = (req.body?.to || '').toString().trim();
@@ -1941,12 +2103,15 @@ app.post(API_PREFIX + '/email/send', requireAuth, async (req, res) => {
             return res.status(400).json({ success: false, diagnostics: diag, error: 'Message body is required' });
         }
 
-        // Verify transport once (catches auth/TLS issues early)
-        const transport = getMailTransport();
-        try {
-            await transport.verify();
-        } catch (e) {
-            return res.status(500).json({ success: false, diagnostics: diag, stage: 'verify', error: e?.message || String(e), code: e?.code, response: e?.response });
+        // Verify SMTP transport once (catches auth/TLS issues early). Not applicable for Resend.
+        const provider = diag.provider || getEmailProvider() || 'disabled';
+        if (provider === 'smtp') {
+            const transport = getMailTransport();
+            try {
+                await transport.verify();
+            } catch (e) {
+                return res.status(500).json({ success: false, diagnostics: diag, stage: 'verify', error: e?.message || String(e), code: e?.code, response: e?.response });
+            }
         }
 
         const sendResult = await sendEmail({
@@ -1959,7 +2124,7 @@ app.post(API_PREFIX + '/email/send', requireAuth, async (req, res) => {
             return res.status(500).json({ success: false, diagnostics: diag, ...sendResult });
         }
 
-        return res.json({ success: true, messageId: sendResult.messageId, accepted: sendResult.accepted, rejected: sendResult.rejected, diagnostics: diag });
+        return res.json({ success: true, provider: sendResult.provider || provider, messageId: sendResult.messageId, accepted: sendResult.accepted, rejected: sendResult.rejected, diagnostics: diag });
     } catch (e) {
         return res.status(500).json({ success: false, error: e?.message || 'Failed to send email' });
     }
