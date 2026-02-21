@@ -308,34 +308,96 @@ function initDatabase() {
 
 // Read database
 function readDatabase() {
+    const debugLogs = process.env.DEBUG_DB_LOGS === '1' || process.env.DEBUG_DB_LOGS === 'true';
+    const bakFile = `${DB_FILE}.bak`;
+
+    const normalizeDbShape = (db) => {
+        const parsed = (db && typeof db === 'object') ? db : {};
+        if (!Array.isArray(parsed.restaurants)) parsed.restaurants = [];
+        if (!Array.isArray(parsed.products)) parsed.products = [];
+        if (!Array.isArray(parsed.orders)) parsed.orders = [];
+        if (!Array.isArray(parsed.promoCodes)) parsed.promoCodes = [];
+        if (!parsed.authTokens || typeof parsed.authTokens !== 'object') parsed.authTokens = {};
+        if (!parsed.restaurantName) parsed.restaurantName = "Restaurant Name";
+        return parsed;
+    };
+
+    const tryReadJson = (filePath) => {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        return JSON.parse(raw);
+    };
+
     try {
-        const data = fs.readFileSync(DB_FILE, 'utf8');
-        const parsed = JSON.parse(data);
-        console.log('[READ DB] Keys in database:', Object.keys(parsed));
-        console.log('[READ DB] Has restaurants?', parsed.restaurants ? `YES (${parsed.restaurants.length})` : 'NO');
-        // Ensure promoCodes array exists
-        if (!parsed.promoCodes) {
-            parsed.promoCodes = [];
+        const parsed = normalizeDbShape(tryReadJson(DB_FILE));
+        if (debugLogs) {
+            console.log('[READ DB] file:', DB_FILE);
+            console.log('[READ DB] Keys in database:', Object.keys(parsed));
+            console.log('[READ DB] Has restaurants?', parsed.restaurants ? `YES (${parsed.restaurants.length})` : 'NO');
         }
         return parsed;
     } catch (error) {
+        // If the main DB file is missing/corrupted (e.g. partial write), try the last known good backup.
+        try {
+            if (fs.existsSync(bakFile)) {
+                const parsedBak = normalizeDbShape(tryReadJson(bakFile));
+                console.warn('[DB] Falling back to backup DB due to read/parse error:', error?.message || error);
+                if (debugLogs) console.warn('[DB] Using backup file:', bakFile);
+                return parsedBak;
+            }
+        } catch (bakErr) {
+            console.error('[DB] Backup DB read also failed:', bakErr);
+        }
+
         console.error('Error reading database:', error);
-        return { restaurantName: "Restaurant Name", products: [], promoCodes: [] };
+        return normalizeDbShape({});
     }
 }
 
 // Write database
 function writeDatabase(data) {
+    const dir = path.dirname(DB_FILE);
+    const bakFile = `${DB_FILE}.bak`;
+    const tmpFile = `${DB_FILE}.tmp`;
+
     try {
         try {
-            fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+            fs.mkdirSync(dir, { recursive: true });
         } catch (e) {
             // ignore
         }
-        fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+
+        const payload = JSON.stringify(data, null, 2);
+        fs.writeFileSync(tmpFile, payload, 'utf8');
+
+        // Best-effort: keep a last-known-good backup.
+        try {
+            if (fs.existsSync(DB_FILE)) {
+                try { fs.unlinkSync(bakFile); } catch (e) {}
+                try {
+                    fs.renameSync(DB_FILE, bakFile);
+                } catch (e) {
+                    // Fallback if rename isn't possible (e.g. across devices)
+                    fs.copyFileSync(DB_FILE, bakFile);
+                }
+            }
+        } catch (e) {
+            console.warn('[DB] Failed to rotate DB backup:', e?.message || e);
+        }
+
+        // Replace main DB file with tmp (attempt to be resilient on Windows).
+        try {
+            try { fs.unlinkSync(DB_FILE); } catch (e) {}
+            fs.renameSync(tmpFile, DB_FILE);
+        } catch (e) {
+            // Fallback: copy then remove tmp
+            fs.copyFileSync(tmpFile, DB_FILE);
+            try { fs.unlinkSync(tmpFile); } catch (e2) {}
+        }
+
         return true;
     } catch (error) {
         console.error('Error writing database:', error);
+        try { fs.unlinkSync(tmpFile); } catch (e) {}
         return false;
     }
 }
@@ -3685,7 +3747,9 @@ app.post(API_PREFIX + '/orders', (req, res) => {
                 newOrder.status = 'pending_payment';
 
                 data.orders.push(newOrder);
-                writeDatabase(data);
+                if (!writeDatabase(data)) {
+                    return res.status(500).json({ error: 'Failed to persist order' });
+                }
 
                 return res.status(201).json({
                     success: true,
@@ -3725,7 +3789,9 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             newOrder.status = 'pending_payment';
 
             data.orders.push(newOrder);
-            writeDatabase(data);
+            if (!writeDatabase(data)) {
+                return res.status(500).json({ error: 'Failed to persist order' });
+            }
 
             return res.status(201).json({
                 success: true,
@@ -3747,7 +3813,9 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         newOrder.paymentStatus = newOrder.payment.status;
 
         data.orders.push(newOrder);
-        writeDatabase(data);
+        if (!writeDatabase(data)) {
+            return res.status(500).json({ error: 'Failed to persist order' });
+        }
 
         // Fire-and-forget emails (don't block checkout)
         setImmediate(() => {
