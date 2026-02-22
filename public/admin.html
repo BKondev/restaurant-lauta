@@ -108,7 +108,9 @@
             <div class="form-group">
                 <label for="restaurant-logo-input">Restaurant Logo URL:</label>
                 <input type="text" id="restaurant-logo-input" placeholder="https://example.com/logo.png">
-                <small>Enter image URL or leave empty to hide logo</small>
+                <small data-translate="orUploadImage">Or upload an image:</small>
+                <input type="file" id="restaurant-logo-file" accept="image/*" onchange="handleRestaurantLogoUpload(event)">
+                <small>Paste a URL or upload an image. Leave empty to hide logo.</small>
             </div>
 
             <div class="form-group">
@@ -466,6 +468,8 @@
             <div class="form-group">
                 <label for="background-image"><span data-translate="backgroundImageUrl">Background Image URL</span>:</label>
                 <input type="text" id="background-image" placeholder="https://example.com/background.jpg" data-translate-placeholder="backgroundImagePlaceholder">
+                <small data-translate="orUploadImage">Or upload an image:</small>
+                <input type="file" id="background-image-file" accept="image/*" onchange="handleBackgroundImageUpload(event)">
                 <small data-translate="backgroundImageHint">Leave empty to use background color instead</small>
             </div>
 
@@ -711,6 +715,14 @@
                     <span data-translate="enableDelivery">Enable Delivery (Show all delivery options)</span>
                 </label>
                 <small style="color: #666; display: block; margin-top: 5px;" data-translate="enableDeliveryHelp">When disabled, only "Pick up from location" will be available</small>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="pickup-enabled" onchange="togglePickupEnabled()" checked>
+                    <span data-translate="enablePickup">Enable Pickup</span>
+                </label>
+                <small style="color: #666; display: block; margin-top: 5px;" data-translate="enablePickupHelp">When disabled, customers cannot place pickup orders.</small>
             </div>
             
             <div id="delivery-settings-section">

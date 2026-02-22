@@ -51,7 +51,7 @@ const translations = {
         deliveryPricePlaceholder: 'e.g., 5.00',
         addCity: 'Add City',
         enableDelivery: 'Enable Delivery (Show all delivery options)',
-        enableDeliveryHelp: 'When disabled, only "Pick up from location" will be available',
+        enableDeliveryHelp: 'When disabled, delivery orders will not be available.',
         standardDeliveryFee: 'Standard Delivery Fee',
         standardDeliveryFeeEur: 'Standard Delivery Fee (€)',
         deliveryFeePlaceholder: 'e.g., 5.00',
@@ -135,6 +135,8 @@ const translations = {
         allowOrderLaterHelp: 'When disabled, customers can only order "Now".',
         restaurantTemporarilyClosed: 'Temporarily close restaurant',
         restaurantTemporarilyClosedHelp: 'Shows a warning banner and blocks checkout ordering.',
+        enablePickup: 'Enable Pickup',
+        enablePickupHelp: 'When disabled, customers cannot place pickup orders.',
         saveOrderSettings: 'Save Order Settings',
 
         openingTimeHelp: 'Restaurant opening time for pickup orders',
@@ -346,6 +348,7 @@ const translations = {
         endDate: 'End Date',
         productImagePlaceholder: 'https://example.com/image.jpg',
         orUploadImage: 'Or upload an image:',
+        imageUploaded: 'Image uploaded successfully!',
 
         select: 'Select',
         enName: 'EN Name',
@@ -469,7 +472,7 @@ const translations = {
         deliveryPricePlaceholder: 'напр. 5.00',
         addCity: 'Добави Град',
         enableDelivery: 'Активирай доставка (Показвай всички опции за доставка)',
-        enableDeliveryHelp: 'Когато е изключено, ще е налично само "Вземи от място"',
+        enableDeliveryHelp: 'Когато е изключено, доставката няма да е налична.',
         standardDeliveryFee: 'Стандартна Такса за Доставка',
         standardDeliveryFeeEur: 'Стандартна Такса за Доставка (€)',
         deliveryFeePlaceholder: 'напр. 5.00',
@@ -553,6 +556,8 @@ const translations = {
         allowOrderLaterHelp: 'Когато е изключено, клиентите могат да поръчват само "Сега".',
         restaurantTemporarilyClosed: 'Временно затвори ресторанта',
         restaurantTemporarilyClosedHelp: 'Показва предупреждение и блокира поръчките.',
+        enablePickup: 'Разреши взимане от място',
+        enablePickupHelp: 'Когато е изключено, клиентите не могат да правят поръчки за взимане.',
         saveOrderSettings: 'Запази Настройките на Поръчки',
 
         openingTimeHelp: 'Час на отваряне за поръчки с вземане',
@@ -764,6 +769,7 @@ const translations = {
         endDate: 'Крайна дата',
         productImagePlaceholder: 'https://example.com/image.jpg',
         orUploadImage: 'Или качете изображение:',
+        imageUploaded: 'Изображението е качено успешно!',
 
         select: 'Избор',
         enName: 'EN Име',
@@ -2263,6 +2269,89 @@ function maybeEnableEmailDiagnosticsPanel() {
     }
 }
 
+async function uploadImageToServer(file) {
+    if (!file) return null;
+
+    // Check file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+        alert('File is too large. Maximum size is 5MB.');
+        return null;
+    }
+
+    const token = getAdminToken();
+    if (!token) {
+        alert('Session expired. Please login again.');
+        window.location.href = `${BASE_PATH}/login`;
+        return null;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('image', file);
+
+        const response = await fetch(`${API_URL}/upload`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+
+        if (response.status === 401) {
+            alert('Session expired. Please login again.');
+            window.location.href = `${BASE_PATH}/login`;
+            return null;
+        }
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            alert(err.error || 'Failed to upload image');
+            return null;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        const imageUrl = (data && data.imageUrl) ? String(data.imageUrl) : '';
+        if (!imageUrl) {
+            alert('Failed to upload image');
+            return null;
+        }
+
+        return imageUrl;
+    } catch (error) {
+        console.error('Error uploading image:', error);
+        alert('Error uploading image');
+        return null;
+    }
+}
+
+async function handleRestaurantLogoUpload(event) {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+
+    const imageUrl = await uploadImageToServer(file);
+    if (imageUrl) {
+        const logoInput = document.getElementById('restaurant-logo-input');
+        if (logoInput) logoInput.value = imageUrl;
+        alert(t('imageUploaded', 'Image uploaded successfully!'));
+    }
+
+    if (event?.target) event.target.value = '';
+}
+
+async function handleBackgroundImageUpload(event) {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+
+    const imageUrl = await uploadImageToServer(file);
+    if (imageUrl) {
+        const bgInput = document.getElementById('background-image');
+        if (bgInput) bgInput.value = imageUrl;
+        alert(t('imageUploaded', 'Image uploaded successfully!'));
+    }
+
+    if (event?.target) event.target.value = '';
+}
+
 // Handle image upload
 async function handleImageUpload(event) {
     const file = event.target.files[0];
@@ -3278,7 +3367,8 @@ async function updateOrderSettings() {
     const orderSettings = {
         minimumOrderAmount: parseFloat(document.getElementById('minimum-order-amount').value) || 0,
         allowOrderLater: document.getElementById('allow-order-later')?.checked !== false,
-        temporarilyClosed: document.getElementById('restaurant-temporarily-closed')?.checked === true
+        temporarilyClosed: document.getElementById('restaurant-temporarily-closed')?.checked === true,
+        pickupEnabled: document.getElementById('pickup-enabled')?.checked !== false
     };
 
     try {
@@ -3314,6 +3404,9 @@ async function loadOrderSettings() {
 
         const tempClosedEl = document.getElementById('restaurant-temporarily-closed');
         if (tempClosedEl) tempClosedEl.checked = settings.temporarilyClosed === true;
+
+        const pickupEnabledEl = document.getElementById('pickup-enabled');
+        if (pickupEnabledEl) pickupEnabledEl.checked = settings.pickupEnabled !== false;
     } catch (error) {
         console.error('Error loading order settings:', error);
     }
@@ -6647,6 +6740,35 @@ async function toggleDeliverySection() {
         });
     } catch (error) {
         console.error('Error saving delivery enabled state:', error);
+    }
+}
+
+// Toggle pickup availability (auto-save)
+async function togglePickupEnabled() {
+    const enabled = document.getElementById('pickup-enabled')?.checked !== false;
+
+    try {
+        const currentResponse = await fetch(`${API_URL}/settings/order`);
+        const currentSettings = await currentResponse.json();
+
+        currentSettings.pickupEnabled = enabled;
+
+        const token = sessionStorage.getItem('adminToken');
+        if (!token) {
+            alert('Please login first');
+            return;
+        }
+
+        await fetch(`${API_URL}/settings/order`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(currentSettings)
+        });
+    } catch (error) {
+        console.error('Error saving pickup enabled state:', error);
     }
 }
 

@@ -2804,7 +2804,8 @@ app.get(API_PREFIX + '/settings/order', (req, res) => {
     const defaults = {
         minimumOrderAmount: 0,
         allowOrderLater: true,
-        temporarilyClosed: false
+        temporarilyClosed: false,
+        pickupEnabled: true
     };
 
     res.json({
@@ -2819,7 +2820,8 @@ app.put(API_PREFIX + '/settings/order', requireAuth, (req, res) => {
     db.orderSettings = {
         minimumOrderAmount: parseFloat(req.body.minimumOrderAmount) || 0,
         allowOrderLater: req.body.allowOrderLater !== false,
-        temporarilyClosed: req.body.temporarilyClosed === true
+        temporarilyClosed: req.body.temporarilyClosed === true,
+        pickupEnabled: req.body.pickupEnabled !== false
     };
     
     if (writeDatabase(db)) {
@@ -3945,6 +3947,29 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         const orderSettings = data.orderSettings || {};
         const allowOrderLater = orderSettings.allowOrderLater !== false;
 
+        // Fulfillment method enable/disable (server-side)
+        const pickupEnabled = orderSettings.pickupEnabled !== false;
+        const deliveryEnabled = data.deliverySettings?.deliveryEnabled !== false;
+        const normalizedDeliveryMethod = (deliveryMethod === 'delivery' || deliveryType === 'delivery')
+            ? 'delivery'
+            : (deliveryMethod === 'pickup' ? 'pickup' : null);
+
+        if (!normalizedDeliveryMethod) {
+            return res.status(400).json({
+                error: 'Invalid deliveryMethod',
+                message: 'deliveryMethod must be either "delivery" or "pickup"'
+            });
+        }
+
+        if ((normalizedDeliveryMethod === 'delivery' && !deliveryEnabled) || (normalizedDeliveryMethod === 'pickup' && !pickupEnabled)) {
+            return res.status(423).json({
+                error: 'Ordering method disabled',
+                message: normalizedDeliveryMethod === 'delivery'
+                    ? 'Delivery orders are currently disabled by the restaurant'
+                    : 'Pickup orders are currently disabled by the restaurant'
+            });
+        }
+
         const workingHours = data.workingHours || { openingTime: '09:00', closingTime: '22:00' };
         const deliveryHours = (data.deliverySettings && data.deliverySettings.deliveryHours) || { openingTime: '11:00', closingTime: '21:30' };
 
@@ -3955,7 +3980,7 @@ app.post(API_PREFIX + '/orders', (req, res) => {
 
         const nowMinutes = getMinutesOfDayInTimeZone('Europe/Sofia') ?? (new Date().getHours() * 60 + new Date().getMinutes());
 
-        const requiresDeliveryWindow = (deliveryMethod || deliveryType) === 'delivery';
+        const requiresDeliveryWindow = normalizedDeliveryMethod === 'delivery';
         const withinWorking = isMinutesWithinWindow(nowMinutes, whOpen, whClose);
         const withinDelivery = !requiresDeliveryWindow || isMinutesWithinWindow(nowMinutes, dhOpen, dhClose);
 
