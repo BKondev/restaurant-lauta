@@ -279,8 +279,14 @@ const availableCities = [
 ];
 
 // Format price (EUR only)
+function round2(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return 0;
+    return Math.round((x + Number.EPSILON) * 100) / 100;
+}
+
 function formatPrice(priceEUR) {
-    return `${Number(priceEUR || 0).toFixed(2)} €`;
+    return `${round2(priceEUR || 0).toFixed(2)} €`;
 }
 
 // Translations

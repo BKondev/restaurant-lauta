@@ -909,8 +909,14 @@ function renderProducts() {
 }
 
 // Format price (EUR only)
+function round2(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return 0;
+    return Math.round((x + Number.EPSILON) * 100) / 100;
+}
+
 function formatPrice(priceEUR) {
-    return `<span class="price-eur">${Number(priceEUR || 0).toFixed(2)} €</span>`;
+    return `<span class="price-eur">${round2(priceEUR || 0).toFixed(2)} €</span>`;
 }
 
 // Create product card element
@@ -1512,6 +1518,24 @@ function addToCartWithQuantity(productId, quantity) {
     if (!product) return;
     const qty = Math.max(1, Number(quantity) || 1);
 
+    let effectivePrice = getEffectivePrice(product);
+    let originalPrice = product.price;
+    let discountLabel = '';
+
+    // Bundle/combo: preserve original sum price so it can be shown later (email/track/admin).
+    if (product.isCombo && Array.isArray(product.comboProducts) && product.comboProducts.length > 0) {
+        const originalTotal = product.comboProducts.reduce((sum, pid) => {
+            const p = products.find(x => x.id === pid);
+            return sum + (p ? (Number(p.price) || 0) : 0);
+        }, 0);
+        if (originalTotal > 0) originalPrice = originalTotal;
+        discountLabel = (translations && translations[currentLanguage] && translations[currentLanguage].bundle) ? translations[currentLanguage].bundle : 'Bundle';
+    } else if (isPromoActive(product.promo)) {
+        discountLabel = (translations && translations[currentLanguage] && translations[currentLanguage].promo) ? translations[currentLanguage].promo : 'Promo';
+    } else if (appliedPromoCode && (appliedPromoCode.category === 'all' || appliedPromoCode.category === product.category) && effectivePrice < originalPrice) {
+        discountLabel = 'Promo code';
+    }
+
     const existingItem = cart.find(item => item.id === productId);
     if (existingItem) {
         existingItem.quantity += qty;
@@ -1519,8 +1543,9 @@ function addToCartWithQuantity(productId, quantity) {
         cart.push({
             id: product.id,
             name: currentLanguage === 'bg' && product.translations?.bg?.name ? product.translations.bg.name : product.name,
-            price: getEffectivePrice(product),
-            originalPrice: product.price,
+            price: effectivePrice,
+            originalPrice,
+            ...(discountLabel ? { discountLabel } : {}),
             image: product.image,
             category: product.category,
             weight: product.weight,

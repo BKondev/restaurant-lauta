@@ -478,41 +478,6 @@
             </button>
         </div>
 
-        <!-- Order Settings Section -->
-        <div class="admin-section">
-            <h2><i class="fas fa-shopping-cart"></i> <span data-translate="orderSettings">Order Settings</span></h2>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="minimum-order-amount"><span data-translate="minimumOrderAmountEur">Minimum Order Amount (EUR)</span>:</label>
-                    <input type="number" id="minimum-order-amount" step="0.01" min="0" value="0" placeholder="0.00">
-                    <small data-translate="minOrderHint">Set to 0 to disable minimum order requirement</small>
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="allow-order-later" checked>
-                        <span data-translate="allowOrderLater">Allow "Later" scheduling in checkout</span>
-                    </label>
-                    <small style="color: #666; display: block; margin-top: 5px;" data-translate="allowOrderLaterHelp">When disabled, customers can only order "Now".</small>
-                </div>
-
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="restaurant-temporarily-closed">
-                        <span data-translate="restaurantTemporarilyClosed">Temporarily close restaurant</span>
-                    </label>
-                    <small style="color: #666; display: block; margin-top: 5px;" data-translate="restaurantTemporarilyClosedHelp">Shows a warning banner and blocks checkout ordering.</small>
-                </div>
-            </div>
-
-            <button onclick="updateOrderSettings()" class="btn btn-primary">
-                <i class="fas fa-save"></i> <span data-translate="saveOrderSettings">Save Order Settings</span>
-            </button>
-        </div>
-
         <!-- Working Hours Section -->
         <div class="admin-section">
             <h2><i class="fas fa-clock"></i> <span data-translate="workingHours">Working Hours</span></h2>
@@ -716,14 +681,6 @@
                 </label>
                 <small style="color: #666; display: block; margin-top: 5px;" data-translate="enableDeliveryHelp">When disabled, only "Pick up from location" will be available</small>
             </div>
-
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="pickup-enabled" onchange="togglePickupEnabled()" checked>
-                    <span data-translate="enablePickup">Enable Pickup</span>
-                </label>
-                <small style="color: #666; display: block; margin-top: 5px;" data-translate="enablePickupHelp">When disabled, customers cannot place pickup orders.</small>
-            </div>
             
             <div id="delivery-settings-section">
                 <div class="form-row">
@@ -757,13 +714,59 @@
                         <input type="number" id="delivery-fee" min="0" step="0.01" placeholder="e.g., 5.00" value="5.00" data-translate-placeholder="deliveryFeePlaceholder">
                         <small data-translate="deliveryFeeHelp">Fee charged for delivery orders</small>
                     </div>
-                    <div class="form-group" style="display: flex; align-items: flex-end;">
-                        <button onclick="saveDeliverySettings()" class="btn btn-primary" style="width: 100%;">
-                            <i class="fas fa-save"></i> <span data-translate="saveDeliverySettings">Save Delivery Settings</span>
-                        </button>
-                    </div>
                 </div>
             </div>
+
+            <div class="form-row">
+                <div class="form-group" style="display: flex; align-items: flex-end;">
+                    <button onclick="saveDeliverySettings()" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-save"></i> <span data-translate="saveDeliverySettings">Save Delivery Settings</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Order Settings Section -->
+        <div class="admin-section">
+            <h2><i class="fas fa-shopping-cart"></i> <span data-translate="orderSettings">Order Settings</span></h2>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="pickup-enabled" checked>
+                    <span data-translate="enablePickup">Enable Pickup</span>
+                </label>
+                <small style="color: #666; display: block; margin-top: 5px;" data-translate="enablePickupHelp">When disabled, customers cannot place pickup orders.</small>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="minimum-order-amount"><span data-translate="minimumOrderAmountEur">Minimum Order Amount (EUR)</span>:</label>
+                    <input type="number" id="minimum-order-amount" step="0.01" min="0" value="0" placeholder="0.00">
+                    <small data-translate="minOrderHint">Set to 0 to disable minimum order requirement</small>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="allow-order-later" checked>
+                        <span data-translate="allowOrderLater">Allow "Later" scheduling in checkout</span>
+                    </label>
+                    <small style="color: #666; display: block; margin-top: 5px;" data-translate="allowOrderLaterHelp">When disabled, customers can only order "Now".</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="restaurant-temporarily-closed">
+                        <span data-translate="restaurantTemporarilyClosed">Temporarily close restaurant</span>
+                    </label>
+                    <small style="color: #666; display: block; margin-top: 5px;" data-translate="restaurantTemporarilyClosedHelp">Shows a warning banner and blocks checkout ordering.</small>
+                </div>
+            </div>
+
+            <button onclick="updateOrderSettings()" class="btn btn-primary">
+                <i class="fas fa-save"></i> <span data-translate="saveOrderSettings">Save Order Settings</span>
+            </button>
         </div>
         </div><!-- End Delivery Settings Tab -->
 

@@ -104,9 +104,30 @@
         }
 
         .item-note {
-            color: #444;
+            color: var(--highlight-color);
             font-size: 13px;
             margin-top: 6px;
+            white-space: pre-line;
+            font-weight: 800;
+        }
+
+        .order-note-box {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 12px;
+            background: #fff5f5;
+            border: 1px solid #f0b4b4;
+        }
+
+        .order-note-title {
+            font-weight: 900;
+            color: var(--highlight-color);
+            margin-bottom: 6px;
+        }
+
+        .order-note-text {
+            color: var(--highlight-color);
+            font-weight: 800;
             white-space: pre-line;
         }
 
@@ -531,6 +552,11 @@
                 status_cancelled: 'Order cancelled',
                 status_default: 'In progress',
                 itemsTitle: 'Ordered items',
+                promo: 'Promo',
+                subtotal: 'Subtotal',
+                discount: 'Discount',
+                deliveryFee: 'Delivery fee',
+                orderNote: 'Order note',
                 home: 'Home',
                 newOrder: 'New order',
                 error: 'Error',
@@ -576,6 +602,11 @@
                 status_cancelled: 'Поръчката е отказана',
                 status_default: 'В процес на изпълнение',
                 itemsTitle: 'Поръчани продукти',
+                promo: 'Промо',
+                subtotal: 'Сума',
+                discount: 'Отстъпка',
+                deliveryFee: 'Доставка',
+                orderNote: 'Бележка към поръчката',
                 home: 'Начало',
                 newOrder: 'Нова поръчка',
                 error: 'Грешка',
@@ -598,6 +629,11 @@
             return Number.isFinite(n) ? n : 0;
         }
 
+        function round2(val) {
+            const n = toNumber(val);
+            return Math.round((n + Number.EPSILON) * 100) / 100;
+        }
+
         function escapeHtml(value) {
             return String(value ?? '')
                 .replace(/&/g, '&amp;')
@@ -614,8 +650,10 @@
             return toNumber(amountBgn);
         }
 
-        function formatEurFromBgn(amountBgn) {
-            return `${convertBgnToEur(amountBgn).toFixed(2)} €`;
+        function formatMoney(amount, currency) {
+            const cur = (currency || '').toString().trim().toUpperCase();
+            if (cur === 'BGN') return `${round2(convertBgnToEur(amount)).toFixed(2)} €`;
+            return `${round2(amount).toFixed(2)} €`;
         }
 
         // Get order ID from URL
@@ -728,6 +766,14 @@
 
             const normalizedStatus = normalizeStatus(order.status);
 
+            const currency = order.currency || 'EUR';
+            const promoCode = (order.promoCode || '').toString().trim();
+            const discountPct = Math.max(0, Math.min(100, toNumber(order.discount)));
+            const subtotal = toNumber(order.subtotal);
+            const discountAmount = toNumber(order.discountAmount);
+            const deliveryFee = toNumber(order.deliveryFee);
+            const orderNote = (order.orderNote || '').toString().replace(/\r/g, '').trim();
+
             const statusText = normalizedStatus === 'pending'
                 ? t('status_pending')
                 : normalizedStatus === 'approved'
@@ -770,23 +816,61 @@
                         const note = ((it && (it.note || it.notes)) ? String(it.note || it.notes) : '').replace(/\r/g, '').trim();
                         const noteHtml = note ? `<div class="item-note">${escapeHtml(note)}</div>` : '';
                         const qty = toNumber(it && it.quantity);
-                        const priceBgn = toNumber(it && it.price);
-                        const lineBgn = priceBgn * qty;
+                        const price = toNumber(it && it.price);
+                        const originalPrice = Number(it && it.originalPrice);
+                        const hasDiscount = Number.isFinite(originalPrice) && originalPrice > price;
+                        const line = price * qty;
+
+                        const unitHtml = hasDiscount
+                            ? `<span style="text-decoration: line-through; opacity: .75; margin-right: 6px;">${formatMoney(originalPrice, currency)}</span><strong>${formatMoney(price, currency)}</strong>`
+                            : `${formatMoney(price, currency)}`;
                         return `
                             <div class="item-row">
                                 <div>
                                     <div class="item-name">${name}</div>
-                                    <div class="item-sub">${qty} × ${formatEurFromBgn(priceBgn)}</div>
+                                    <div class="item-sub">${qty} × ${unitHtml}</div>
                                     ${noteHtml}
                                 </div>
-                                <div class="item-price">${formatEurFromBgn(lineBgn)}</div>
+                                <div class="item-price">${formatMoney(line, currency)}</div>
                             </div>
                         `;
                     }).join('')}
+
+                    ${(promoCode || discountAmount > 0) ? `
+                        <div class="item-row">
+                            <div class="item-name">${t('promo')}</div>
+                            <div class="item-price">${promoCode ? `${escapeHtml(promoCode)}${discountPct ? ` (-${escapeHtml(discountPct)}%)` : ''}` : (discountPct ? `-${escapeHtml(discountPct)}%` : '—')}</div>
+                        </div>
+                    ` : ''}
+                    ${(subtotal > 0) ? `
+                        <div class="item-row">
+                            <div class="item-name">${t('subtotal')}</div>
+                            <div class="item-price">${formatMoney(subtotal, currency)}</div>
+                        </div>
+                    ` : ''}
+                    ${(discountAmount > 0) ? `
+                        <div class="item-row">
+                            <div class="item-name">${t('discount')}</div>
+                            <div class="item-price">-${formatMoney(discountAmount, currency)}</div>
+                        </div>
+                    ` : ''}
+                    ${(deliveryFee > 0) ? `
+                        <div class="item-row">
+                            <div class="item-name">${t('deliveryFee')}</div>
+                            <div class="item-price">${formatMoney(deliveryFee, currency)}</div>
+                        </div>
+                    ` : ''}
                     <div class="item-row">
                         <div class="item-name">${t('total')}</div>
-                        <div class="item-price">${formatEurFromBgn(order.total)}</div>
+                        <div class="item-price">${formatMoney(order.total, currency)}</div>
                     </div>
+
+                    ${orderNote ? `
+                        <div class="order-note-box">
+                            <div class="order-note-title">${t('orderNote')}</div>
+                            <div class="order-note-text">${escapeHtml(orderNote)}</div>
+                        </div>
+                    ` : ''}
                 </div>
             ` : '';
 
@@ -835,7 +919,7 @@
                     </div>
                     <div class="order-row">
                         <span class="order-label">${t('total')}</span>
-                        <span class="order-value">${formatEurFromBgn(order.total)}</span>
+                        <span class="order-value">${formatMoney(order.total, currency)}</span>
                     </div>
                     ${contactsPhone ? `
                         <div class="order-row">

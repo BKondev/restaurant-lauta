@@ -5134,7 +5134,9 @@ function formatOrderDateTime(ts) {
 function safeToFixed(n, digits = 2) {
     const x = typeof n === 'number' ? n : Number(n);
     if (!Number.isFinite(x)) return (0).toFixed(digits);
-    return x.toFixed(digits);
+    const factor = Math.pow(10, digits);
+    const rounded = Math.round((x + Number.EPSILON) * factor) / factor;
+    return rounded.toFixed(digits);
 }
 
 function getOrdersHistoryFilters() {
@@ -5282,6 +5284,26 @@ function renderOrdersHistory() {
         const totalShown = (order.ownerDiscount && order.ownerDiscount > 0 && order.finalTotal != null) ? order.finalTotal : order.total;
         const actions = getNextActionsForOrder(order);
 
+        const scheduledRaw = (
+            order.scheduledTime ??
+            order.scheduled_time ??
+            order.scheduleTime ??
+            order.scheduledAt ??
+            order.scheduled_for ??
+            ''
+        );
+        const scheduledMatch = String(scheduledRaw || '').match(/(\d{1,2}:\d{2})/);
+        const scheduledHHMM = scheduledMatch ? scheduledMatch[1].padStart(5, '0') : '';
+        const isLater = ((order.orderTime || '').toString().toLowerCase() === 'later') || !!scheduledHHMM;
+        const scheduledLabel = (order.deliveryMethod || order.deliveryType) === 'delivery' ? 'Доставка за' : 'Взимане за';
+        const scheduledLine = (isLater && scheduledHHMM) ? `${scheduledLabel}: ${scheduledHHMM}` : '';
+
+        const promoCode = (order.promoCode || '').toString().trim();
+        const discountPct = Math.max(0, Math.min(100, Number(order.discount) || 0));
+        const discountAmount = Number(order.discountAmount) || 0;
+        const promoLine = promoCode ? `Промо код: ${promoCode}${discountPct ? ` (-${discountPct}%)` : ''}` : '';
+        const discountLine = (discountAmount > 0) ? `Отстъпка: -${safeToFixed(discountAmount)} €` : '';
+
         const productsChipsHtml = (order.items || []).map(item => {
             const qty = Number(item?.quantity) || 0;
             const name = (item?.name || '').toString();
@@ -5291,14 +5313,18 @@ function renderOrdersHistory() {
         }).join('');
 
         const itemsHtml = (order.items || []).map(item => {
-            const price = Number(item.promoPrice != null ? item.promoPrice : item.price) || 0;
+            const price = Number(item.price) || 0;
+            const originalPrice = Number(item.originalPrice);
+            const hasItemDiscount = Number.isFinite(originalPrice) && originalPrice > price;
+            const discountLabel = (item.discountLabel || '').toString().trim();
             const qty = Number(item.quantity) || 0;
             const lineTotal = price * qty;
             return `
                 <div class="order-item" style="display:flex; justify-content: space-between; gap:10px; padding: 6px 0; border-bottom: 1px dashed #eee;">
                     <span class="order-item-name" style="flex: 1; min-width:0;">
                         <div>${item.name}</div>
-                        ${item.note ? `<div style="margin-top:4px; font-size: 12px; color:#555;"><strong>Бележка:</strong> ${item.note}</div>` : ''}
+                        ${item.note ? `<div style="margin-top:4px; font-size: 12px; color:#c62828; font-weight:700;"><strong>Бележка:</strong> ${item.note}</div>` : ''}
+                        ${(discountLabel || hasItemDiscount) ? `<div style="margin-top:4px; font-size: 12px; color:#333;"><strong>${discountLabel || 'Промо'}:</strong> ${hasItemDiscount ? `${safeToFixed(originalPrice)} € → ${safeToFixed(price)} €` : ''}</div>` : ''}
                     </span>
                     <div class="order-item-details" style="display:flex; gap:10px; white-space:nowrap; align-items: baseline;">
                         <span>x${qty}</span>
@@ -5321,6 +5347,7 @@ function renderOrdersHistory() {
                         <div class="oh-col oh-meta">
                         <div class="oh-id">#${order.id}</div>
                         <div class="oh-time">${created}</div>
+                        ${scheduledLine ? `<div class="oh-time" style="font-weight: 800;">${scheduledLine}</div>` : ''}
                         <div class="oh-badges">
                             <span class="delivery-badge ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? 'delivery' : 'pickup'}">
                                 ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? '<i class="fas fa-truck"></i>' : '<i class="fas fa-shopping-bag"></i>'}
@@ -5329,6 +5356,8 @@ function renderOrdersHistory() {
                             <span class="order-status ${statusClass}">${statusLabel}</span>
                         </div>
                         <div class="oh-total">${t('total', 'Total')}: <strong>${safeToFixed(totalShown)} €</strong></div>
+                        ${promoLine ? `<div class="oh-total">${promoLine}</div>` : ''}
+                        ${discountLine ? `<div class="oh-total">${discountLine}</div>` : ''}
                         </div>
 
                         <div class="oh-col oh-customer">
@@ -5340,7 +5369,7 @@ function renderOrdersHistory() {
                                 <div class="oh-line"><span class="oh-label">${t('city', 'City')}:</span> ${order.customerInfo?.city || ''}</div>
                                 <div class="oh-line"><span class="oh-label">${t('address', 'Address')}:</span> ${order.customerInfo?.address || ''}</div>
                             ` : ''}
-                            ${order.customerInfo?.notes ? `<div class="oh-line"><span class="oh-label">${t('notes', 'Notes')}:</span> ${order.customerInfo.notes}</div>` : ''}
+                            ${order.customerInfo?.notes ? `<div class="oh-line"><span class="oh-label">${t('notes', 'Notes')}:</span> <span style="color:#c62828; font-weight:800;">${order.customerInfo.notes}</span></div>` : ''}
                         </div>
 
                         <div class="oh-col oh-products">
@@ -5371,6 +5400,7 @@ function renderOrdersHistory() {
                         <div>
                             <div class="order-id">#${order.id}</div>
                             <div class="order-time">${created}</div>
+                            ${scheduledLine ? `<div class="order-time" style="font-weight: 800;">${scheduledLine}</div>` : ''}
                         </div>
                         <div style="display:flex; gap:10px; align-items:center;">
                             <span class="delivery-badge ${(order.deliveryMethod || order.deliveryType) === 'delivery' ? 'delivery' : 'pickup'}">
@@ -5390,7 +5420,7 @@ function renderOrdersHistory() {
                                 <div class="order-info-row"><span class="order-info-label">${t('city', 'City')}:</span><span class="order-info-value">${order.customerInfo?.city || ''}</span></div>
                                 <div class="order-info-row"><span class="order-info-label">${t('address', 'Address')}:</span><span class="order-info-value">${order.customerInfo?.address || ''}</span></div>
                             ` : ''}
-                            ${order.customerInfo?.notes ? `<div class="order-info-row"><span class="order-info-label">${t('notes', 'Notes')}:</span><span class="order-info-value">${order.customerInfo.notes}</span></div>` : ''}
+                            ${order.customerInfo?.notes ? `<div class="order-info-row"><span class="order-info-label">${t('notes', 'Notes')}:</span><span class="order-info-value" style="color:#c62828; font-weight:800;">${order.customerInfo.notes}</span></div>` : ''}
                         </div>
 
                         <div class="order-section" style="margin-bottom: 10px;">
@@ -5409,6 +5439,8 @@ function renderOrdersHistory() {
                                 <span class="order-total-label">${t('total', 'Total')}:</span>
                                 <span class="order-total-value">${safeToFixed(totalShown)} €</span>
                             </div>
+                            ${promoLine ? `<div class="order-total" style="margin-top: 6px;"><span class="order-total-label">Промо:</span><span class="order-total-value">${promoLine}</span></div>` : ''}
+                            ${discountLine ? `<div class="order-total" style="margin-top: 2px;"><span class="order-total-label">Отстъпка:</span><span class="order-total-value">${discountLine.replace('Отстъпка: ', '')}</span></div>` : ''}
                         </div>
                     </div>
 
@@ -6713,64 +6745,18 @@ function toggleFreeDelivery() {
     }
 }
 
-// Toggle delivery section visibility
-async function toggleDeliverySection() {
+// Toggle delivery section visibility (no auto-save; saved only via Save button)
+function toggleDeliverySection() {
     const enabled = document.getElementById('delivery-enabled').checked;
     const section = document.getElementById('delivery-settings-section');
     
     if (section) {
         section.style.display = enabled ? 'block' : 'none';
     }
-    
-    // Auto-save delivery enabled state
-    try {
-        const currentResponse = await fetch(`${API_URL}/settings/delivery`);
-        const currentSettings = await currentResponse.json();
-        
-        currentSettings.deliveryEnabled = enabled;
-        
-        const token = sessionStorage.getItem('adminToken');
-        await fetch(`${API_URL}/settings/delivery`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(currentSettings)
-        });
-    } catch (error) {
-        console.error('Error saving delivery enabled state:', error);
-    }
 }
 
-// Toggle pickup availability (auto-save)
-async function togglePickupEnabled() {
-    const enabled = document.getElementById('pickup-enabled')?.checked !== false;
-
-    try {
-        const currentResponse = await fetch(`${API_URL}/settings/order`);
-        const currentSettings = await currentResponse.json();
-
-        currentSettings.pickupEnabled = enabled;
-
-        const token = sessionStorage.getItem('adminToken');
-        if (!token) {
-            alert('Please login first');
-            return;
-        }
-
-        await fetch(`${API_URL}/settings/order`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(currentSettings)
-        });
-    } catch (error) {
-        console.error('Error saving pickup enabled state:', error);
-    }
-}
+// Backward-compat (was previously auto-saving). No-op now.
+function togglePickupEnabled() {}
 
 // Save delivery settings
 async function saveDeliverySettings() {

@@ -24,7 +24,10 @@
     .items-row:last-child { border-bottom: none; }
     .items-name { font-weight: 700; color:#333; }
     .items-sub { color:#666; font-size: 13px; margin-top: 2px; }
-    .items-note { color:#444; font-size: 13px; margin-top: 6px; white-space: pre-line; }
+    .items-note { color: var(--highlight-color); font-size: 13px; margin-top: 6px; white-space: pre-line; font-weight: 800; }
+    .order-note-box { margin-top: 12px; padding: 12px; border-radius: 12px; background: #fff5f5; border: 1px solid #f0b4b4; }
+    .order-note-title { font-weight: 900; color: var(--highlight-color); margin-bottom: 6px; }
+    .order-note-text { color: var(--highlight-color); font-weight: 800; white-space: pre-line; }
     .items-price { font-weight: 800; color:#111; white-space: nowrap; }
     .contact-box { margin-top: 14px; color:#444; }
     .contact-box a { color: var(--highlight-color); text-decoration: none; font-weight: 800; }
@@ -111,7 +114,12 @@
           pickup: 'Pickup',
           itemsTitle: 'Ordered items',
           total: 'Total',
-          phone: 'Phone'
+          phone: 'Phone',
+          promo: 'Promo',
+          subtotal: 'Subtotal',
+          discount: 'Discount',
+          deliveryFee: 'Delivery fee',
+          orderNote: 'Order note'
         },
         bg: {
           thankYou: 'Благодарим!',
@@ -133,7 +141,12 @@
           pickup: 'Взимане от място',
           itemsTitle: 'Поръчани продукти',
           total: 'Общо',
-          phone: 'Телефон'
+          phone: 'Телефон',
+          promo: 'Промо',
+          subtotal: 'Сума',
+          discount: 'Отстъпка',
+          deliveryFee: 'Доставка',
+          orderNote: 'Бележка към поръчката'
         }
       };
 
@@ -144,6 +157,11 @@
       function toNumber(val) {
         const n = Number(val);
         return Number.isFinite(n) ? n : 0;
+      }
+
+      function round2(val) {
+        const n = toNumber(val);
+        return Math.round((n + Number.EPSILON) * 100) / 100;
       }
 
       function escapeHtml(value) {
@@ -162,8 +180,10 @@
         return toNumber(amountBgn);
       }
 
-      function formatEurFromBgn(n) {
-        return `${convertBgnToEur(n).toFixed(2)} €`;
+      function formatMoney(amount, currency) {
+        const cur = (currency || '').toString().trim().toUpperCase();
+        if (cur === 'BGN') return `${round2(convertBgnToEur(amount)).toFixed(2)} €`;
+        return `${round2(amount).toFixed(2)} €`;
       }
 
       async function fetchJson(url) {
@@ -210,6 +230,8 @@
           const items = Array.isArray(o?.items) ? o.items : [];
           if (!items.length) return;
 
+          const currency = o?.currency || 'EUR';
+
           const mount = document.getElementById('ty-items');
           if (!mount) return;
 
@@ -219,28 +241,74 @@
             const noteHtml = note ? `<div class="items-note">${escapeHtml(note)}</div>` : '';
             const qty = Number(it?.quantity || 0);
             const price = Number(it?.price || 0);
+            const originalPrice = Number(it?.originalPrice);
+            const hasDiscount = Number.isFinite(originalPrice) && originalPrice > price;
             const lineTotal = price * qty;
+
+            const unitHtml = hasDiscount
+              ? `<span style="text-decoration: line-through; opacity: .75; margin-right: 6px;">${formatMoney(originalPrice, currency)}</span><strong>${formatMoney(price, currency)}</strong>`
+              : `${formatMoney(price, currency)}`;
+
             return `
               <div class="items-row">
                 <div>
                   <div class="items-name">${name}</div>
-                  <div class="items-sub">${qty} × ${formatEurFromBgn(price)}</div>
+                  <div class="items-sub">${qty} × ${unitHtml}</div>
                   ${noteHtml}
                 </div>
-                <div class="items-price">${formatEurFromBgn(lineTotal)}</div>
+                <div class="items-price">${formatMoney(lineTotal, currency)}</div>
               </div>
             `;
           }).join('');
 
-          const total = o?.total;
+          const subtotal = toNumber(o?.subtotal);
+          const discountAmount = toNumber(o?.discountAmount);
+          const deliveryFee = toNumber(o?.deliveryFee);
+          const total = toNumber(o?.total);
+          const promoCode = (o?.promoCode || '').toString().trim();
+          const discountPct = Math.max(0, Math.min(100, toNumber(o?.discount)));
+          const orderNote = (o?.orderNote || '').toString().replace(/\r/g, '').trim();
+
+          const promoLine = promoCode ? `${escapeHtml(promoCode)}${discountPct ? ` (-${escapeHtml(discountPct)}%)` : ''}` : '';
+
           mount.style.display = '';
           mount.innerHTML = `
             <div class="items-title">${t('itemsTitle')}</div>
             ${rows}
+            ${(promoLine || discountAmount > 0) ? `
+              <div class="items-row">
+                <div class="items-name">${t('promo')}</div>
+                <div class="items-price">${promoLine || (discountPct ? `-${discountPct}%` : '—')}</div>
+              </div>
+            ` : ''}
+            ${(subtotal > 0) ? `
+              <div class="items-row">
+                <div class="items-name">${t('subtotal')}</div>
+                <div class="items-price">${formatMoney(subtotal, currency)}</div>
+              </div>
+            ` : ''}
+            ${(discountAmount > 0) ? `
+              <div class="items-row">
+                <div class="items-name">${t('discount')}</div>
+                <div class="items-price">-${formatMoney(discountAmount, currency)}</div>
+              </div>
+            ` : ''}
+            ${(deliveryFee > 0) ? `
+              <div class="items-row">
+                <div class="items-name">${t('deliveryFee')}</div>
+                <div class="items-price">${formatMoney(deliveryFee, currency)}</div>
+              </div>
+            ` : ''}
             <div class="items-row">
               <div class="items-name">${t('total')}</div>
-              <div class="items-price">${formatEurFromBgn(total)}</div>
+              <div class="items-price">${formatMoney(total, currency)}</div>
             </div>
+            ${orderNote ? `
+              <div class="order-note-box">
+                <div class="order-note-title">${t('orderNote')}</div>
+                <div class="order-note-text">${escapeHtml(orderNote)}</div>
+              </div>
+            ` : ''}
           `;
 
           // Email-like summary (customer + delivery)

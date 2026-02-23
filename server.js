@@ -2138,7 +2138,10 @@ function getRestaurantNotificationEmail(restaurant) {
 function formatOrderItemsText(order) {
     return (order.items || [])
         .map(it => {
-            const base = `- ${it.name} x${it.quantity} = ${(parseNumber(it.price, 0) * parseNumber(it.quantity, 0)).toFixed(2)} лв`;
+            const unit = parseNumber(it.price, 0);
+            const qty = parseNumber(it.quantity, 0);
+            const lineTotal = roundMoneyEUR(unit * qty);
+            const base = `- ${it.name} x${qty} = ${formatMoneyEUR(lineTotal)}`;
             const note = (it?.note || it?.notes || '').toString().replace(/\r/g, '').trim();
             if (!note) return base;
             return `${base}\n  Бележка: ${note}`;
@@ -2157,11 +2160,12 @@ function looksLikePlaceholderEmailTemplateText(text) {
 
 function getDefaultOrderPlacedTemplate() {
     return {
-        subject: 'Поръчка №{{orderId}} е получена',
+        subject: '{{orderId}} - успешно направена.',
         body: [
             'Здравейте {{customerName}},',
             '',
             'Получихме Вашата поръчка.',
+            '{{fulfillmentTimeLine}}',
             'Номер: {{orderId}}',
             '{{deliveryText}}',
             '',
@@ -2169,6 +2173,8 @@ function getDefaultOrderPlacedTemplate() {
             '{{itemsText}}',
             '',
             '{{totalText}}',
+            '{{promoText}}',
+            '{{orderNoteText}}',
             '{{trackUrlLine}}',
             '',
             'Благодарим Ви!'
@@ -2182,7 +2188,7 @@ function getEffectiveOrderPlacedTemplate(restaurant) {
     const body = (tpl.body || '').toString().trim();
 
     const defaults = getDefaultOrderPlacedTemplate();
-    const effectiveSubject = subject || defaults.subject;
+    const effectiveSubject = (!subject || looksLikePlaceholderEmailTemplateText(subject)) ? defaults.subject : subject;
     const effectiveBody = looksLikePlaceholderEmailTemplateText(body) ? defaults.body : body;
 
     return {
@@ -2204,10 +2210,43 @@ function formatMoneyBGN(value) {
     return `${parseNumber(value, 0).toFixed(2)} лв`;
 }
 
+function roundMoneyEUR(value) {
+    const n = parseNumber(value, 0);
+    // Stabilize common floating-point edge cases (e.g. 20.985 -> 20.99)
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function formatMoneyEUR(value) {
+    return `${roundMoneyEUR(value).toFixed(2)} €`;
+}
+
 function getDeliverySummaryText(order) {
     return order?.deliveryMethod === 'delivery'
         ? `Доставка до: ${(order?.customerInfo?.city || '').toString().trim()} ${(order?.customerInfo?.address || '').toString().trim()}`.trim()
         : 'Взимане от място';
+}
+
+function getFulfillmentTimeHeader(order) {
+    const method = (order?.deliveryMethod || order?.deliveryType || '').toString();
+    const isDelivery = method === 'delivery';
+    const scheduledRaw = (order?.scheduledTime ?? order?.scheduled_time ?? order?.scheduleTime ?? '').toString().trim();
+    const scheduledMatch = scheduledRaw.match(/(\d{1,2}:\d{2})/);
+    const scheduledHHMM = scheduledMatch ? scheduledMatch[1].padStart(5, '0') : '';
+    const isLater = (order?.orderTime || '').toString().toLowerCase() === 'later' || !!scheduledHHMM;
+
+    if (isLater && scheduledHHMM) {
+        return {
+            label: isDelivery ? 'Доставка за' : 'Взимане за',
+            value: scheduledHHMM
+        };
+    }
+
+    const estMin = Number(order?.estimatedTime);
+    const minutes = Number.isFinite(estMin) && estMin > 0 ? Math.round(estMin) : 60;
+    return {
+        label: isDelivery ? 'Очаквана доставка след' : 'Готово за взимане след',
+        value: `${minutes} мин`
+    };
 }
 
 function formatOrderItemsHtml(order) {
@@ -2219,16 +2258,21 @@ function formatOrderItemsHtml(order) {
         const note = (it?.note || it?.notes || '').toString().replace(/\r/g, '').trim();
         const qty = parseNumber(it?.quantity, 0);
         const price = parseNumber(it?.price, 0);
+        const originalPrice = parseNumber(it?.originalPrice, NaN);
+        const hasItemPromo = Number.isFinite(originalPrice) && originalPrice > price;
         const lineTotal = price * qty;
         return `
             <tr>
                 <td style="padding:6px 0;">
                     <div>${name}</div>
-                    ${note ? `<div style="margin-top:2px; color:#555; font-size:12px;">Бележка: ${escapeHtml(note)}</div>` : ''}
+                    ${note ? `<div style="margin-top:4px; color:#c62828; font-size:13px; font-weight:700;">Бележка: ${escapeHtml(note)}</div>` : ''}
                 </td>
                 <td style="padding:6px 0; text-align:right; white-space:nowrap;">x${escapeHtml(qty)}</td>
-                <td style="padding:6px 0; text-align:right; white-space:nowrap;">${escapeHtml(formatMoneyBGN(price))}</td>
-                <td style="padding:6px 0; text-align:right; white-space:nowrap;">${escapeHtml(formatMoneyBGN(lineTotal))}</td>
+                <td style="padding:6px 0; text-align:right; white-space:nowrap;">
+                    ${hasItemPromo ? `<span style="text-decoration: line-through; color:#777; margin-right:6px;">${escapeHtml(formatMoneyEUR(originalPrice))}</span>` : ''}
+                    <span>${escapeHtml(formatMoneyEUR(price))}</span>
+                </td>
+                <td style="padding:6px 0; text-align:right; white-space:nowrap;">${escapeHtml(formatMoneyEUR(lineTotal))}</td>
             </tr>`;
     }).join('');
 
@@ -2251,8 +2295,12 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl) {
     const orderId = escapeHtml(order?.id || '');
     const customerName = escapeHtml(order?.customerInfo?.name || '');
     const deliverySummary = escapeHtml(getDeliverySummaryText(order));
-    const total = escapeHtml(formatMoneyBGN(order?.total));
+    const total = escapeHtml(formatMoneyEUR(order?.total));
     const paymentMethod = escapeHtml((order?.payment?.method || order?.paymentMethod || '').toString());
+    const fulfillment = getFulfillmentTimeHeader(order);
+    const promoCode = (order?.promoCode || '').toString().trim();
+    const discountPct = Math.max(0, Math.min(100, parseNumber(order?.discount, 0)));
+    const orderNote = (order?.customerInfo?.notes || '').toString().replace(/\r/g, '').trim();
 
     const trackBlock = trackUrl
         ? `<p style="margin:16px 0;">Проследяване: <a href="${escapeHtml(trackUrl)}">${escapeHtml(trackUrl)}</a></p>`
@@ -2262,20 +2310,38 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl) {
         ? `<p style="margin:6px 0;">Начин на плащане: <strong>${paymentMethod}</strong></p>`
         : '';
 
+    const promoBlock = promoCode
+        ? `<p style="margin:6px 0;">Промо код: <strong>${escapeHtml(promoCode)}</strong>${discountPct ? ` (-${escapeHtml(discountPct)}%)` : ''}</p>`
+        : '';
+
+    const orderNoteBlock = orderNote
+        ? `<div style="margin:16px 0 0 0; padding: 12px; border: 1px solid #f0b4b4; border-radius: 10px; background: #fff5f5;">
+            <div style="font-weight:800; color:#c62828; margin-bottom:6px;">Бележка към поръчката</div>
+            <div style="color:#c62828; font-weight:700; white-space: pre-line;">${escapeHtml(orderNote)}</div>
+          </div>`
+        : '';
+
     return `
         <div style="font-family: Arial, sans-serif; line-height: 1.5;">
             <h2 style="margin:0 0 12px 0;">${restaurantName}</h2>
             <p style="margin:0 0 12px 0;">Здравейте${customerName ? `, <strong>${customerName}</strong>` : ''},</p>
             <p style="margin:0 0 12px 0;">Получихме Вашата поръчка.</p>
 
+            <div style="margin:12px 0 14px 0; padding: 14px; border-radius: 12px; background: #f3f4f6;">
+                <div style="font-size: 14px; color:#374151; font-weight: 800;">${escapeHtml(fulfillment.label)}</div>
+                <div style="font-size: 28px; color:#111827; font-weight: 900; margin-top: 2px;">${escapeHtml(fulfillment.value)}</div>
+            </div>
+
             <p style="margin:6px 0;">Номер: <strong>${orderId}</strong></p>
             <p style="margin:6px 0;">${deliverySummary}</p>
             ${paymentBlock}
+            ${promoBlock}
 
             <h3 style="margin:18px 0 8px 0;">Артикули</h3>
             ${formatOrderItemsHtml(order)}
 
             <p style="margin:16px 0 0 0; font-size: 16px;">Общо: <strong>${total}</strong></p>
+            ${orderNoteBlock}
             ${trackBlock}
 
             <p style="margin:20px 0 0 0;">Благодарим Ви!</p>
@@ -2308,8 +2374,14 @@ async function sendOrderPlacedEmails(order, restaurant) {
     const subjectRestaurant = `Нова поръчка ${order.id} (${order.deliveryMethod})`;
 
     const itemsText = formatOrderItemsText(order);
-    const totalText = `Общо: ${formatMoneyBGN(order.total)}`;
+    const totalText = `Общо: ${formatMoneyEUR(order.total)}`;
     const deliveryText = getDeliverySummaryText(order);
+    const fulfillment = getFulfillmentTimeHeader(order);
+    const promoCode = (order?.promoCode || '').toString().trim();
+    const discountPct = Math.max(0, Math.min(100, parseNumber(order?.discount, 0)));
+    const promoText = promoCode ? `Промо код: ${promoCode}${discountPct ? ` (-${discountPct}%)` : ''}` : '';
+    const orderNote = (order?.customerInfo?.notes || '').toString().replace(/\r/g, '').trim();
+    const orderNoteText = orderNote ? `Бележка към поръчката: ${orderNote}` : '';
 
     const templateVars = {
         orderId: order.id,
@@ -2320,12 +2392,15 @@ async function sendOrderPlacedEmails(order, restaurant) {
         itemsText,
         totalText,
         deliveryText,
+        fulfillmentTimeLine: `${fulfillment.label}: ${fulfillment.value}`,
+        promoText,
+        orderNoteText,
         trackUrl,
         trackUrlLine: trackUrl ? `Проследяване: ${trackUrl}` : ''
     };
 
     const tpl = getEffectiveOrderPlacedTemplate(restaurant);
-    const subjectCustomer = (tpl.subject || '').toString().trim() || `Поръчка №${order.id} е получена`;
+    const subjectCustomer = (tpl.subject || '').toString().trim() || `${order.id} - успешно направена.`;
     const bodyCustomer = (tpl.body || '').toString().trim() || getDefaultOrderPlacedTemplate().body;
 
     const customerText = renderTemplateText(bodyCustomer, templateVars);
@@ -2336,7 +2411,10 @@ async function sendOrderPlacedEmails(order, restaurant) {
     const restaurantText = [
         `Нова поръчка: ${order.id}`,
         `Клиент: ${order.customerInfo?.name || ''} / ${order.customerInfo?.phone || ''} / ${order.customerInfo?.email || ''}`,
+        `${fulfillment.label}: ${fulfillment.value}`,
         deliveryText,
+        promoText,
+        orderNoteText,
         itemsText,
         totalText
     ].filter(Boolean).join('\n');
@@ -2345,10 +2423,19 @@ async function sendOrderPlacedEmails(order, restaurant) {
         <div style="font-family: Arial, sans-serif; line-height: 1.5;">
             <h2 style="margin:0 0 12px 0;">Нова поръчка</h2>
             <p style="margin:6px 0;">Номер: <strong>${escapeHtml(order.id)}</strong></p>
+            <div style="margin:10px 0 14px 0; padding: 12px; border-radius: 10px; background: #f3f4f6;">
+                <div style="font-size: 14px; color:#374151; font-weight: 800;">${escapeHtml(fulfillment.label)}</div>
+                <div style="font-size: 24px; color:#111827; font-weight: 900; margin-top: 2px;">${escapeHtml(fulfillment.value)}</div>
+            </div>
             <p style="margin:6px 0;">${escapeHtml(deliveryText)}</p>
             <p style="margin:6px 0;">Клиент: <strong>${escapeHtml(order.customerInfo?.name || '')}</strong></p>
             <p style="margin:6px 0;">Телефон: ${escapeHtml(order.customerInfo?.phone || '')}</p>
             <p style="margin:6px 0;">Имейл: ${escapeHtml(order.customerInfo?.email || '')}</p>
+            ${promoCode ? `<p style="margin:6px 0;">Промо код: <strong>${escapeHtml(promoCode)}</strong>${discountPct ? ` (-${escapeHtml(discountPct)}%)` : ''}</p>` : ''}
+            ${orderNote ? `<div style="margin:12px 0 0 0; padding: 10px; border: 1px solid #f0b4b4; border-radius: 10px; background: #fff5f5;">
+                <div style="font-weight:800; color:#c62828; margin-bottom:6px;">Бележка към поръчката</div>
+                <div style="color:#c62828; font-weight:700; white-space: pre-line;">${escapeHtml(orderNote)}</div>
+              </div>` : ''}
             <h3 style="margin:18px 0 8px 0;">Артикули</h3>
             ${formatOrderItemsHtml(order)}
             <p style="margin:16px 0 0 0;">${escapeHtml(totalText)}</p>
@@ -3413,19 +3500,25 @@ function sanitizeOrderItems(items) {
             const name = (it?.name || '').toString().trim();
             const quantity = Math.max(0, Math.floor(parseNumber(it?.quantity, 0)));
             const price = Math.max(0, parseNumber(it?.price, 0));
+            const originalPriceRaw = parseNumber(it?.originalPrice, NaN);
+            const originalPrice = Number.isFinite(originalPriceRaw) ? Math.max(0, originalPriceRaw) : undefined;
             const id = it?.id;
             const weight = it?.weight;
             const image = it?.image;
             const noteRaw = (it?.note || it?.notes || '').toString();
             const note = noteRaw.replace(/\r/g, '').trim();
+            const discountLabelRaw = (it?.discountLabel || it?.discount_label || '').toString().replace(/\r/g, '').trim();
+            const discountLabel = discountLabelRaw ? discountLabelRaw.slice(0, 80) : '';
             return {
                 ...(id !== undefined ? { id } : {}),
                 name,
                 price,
+                ...(originalPrice !== undefined ? { originalPrice } : {}),
                 quantity,
                 ...(weight !== undefined ? { weight } : {}),
                 ...(image !== undefined ? { image } : {}),
-                ...(note ? { note: note.slice(0, 500) } : {})
+                ...(note ? { note: note.slice(0, 500) } : {}),
+                ...(discountLabel ? { discountLabel } : {})
             };
         })
         .filter(it => it.name && it.quantity > 0);
@@ -3442,11 +3535,11 @@ function recomputeOrderTotals(order) {
     const deliveryFee = Math.max(0, parseNumber(order.deliveryFee, 0));
     const total = Math.max(0, subtotal - discountAmount + deliveryFee);
 
-    order.subtotal = subtotal;
+    order.subtotal = roundMoneyEUR(subtotal);
     order.discount = discountPercent;
-    order.discountAmount = discountAmount;
-    order.deliveryFee = deliveryFee;
-    order.total = total;
+    order.discountAmount = roundMoneyEUR(discountAmount);
+    order.deliveryFee = roundMoneyEUR(deliveryFee);
+    order.total = roundMoneyEUR(total);
 
     const ownerDiscount = Math.max(0, Math.min(100, parseNumber(order.ownerDiscount, 0)));
     if (ownerDiscount > 0 && order.status === 'approved') {
@@ -3871,16 +3964,25 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
         const apiVersion = '2026-02-20-track-v2';
 
         // Return limited order info (hide sensitive data)
+        const orderNote = (order?.customerInfo?.notes || '').toString().replace(/\r/g, '').trim();
+
         const publicOrderInfo = {
             id: order.id,
             status: order.status,
-            total: order.total,
+            currency: 'EUR',
+            subtotal: parseNumber(order.subtotal, 0),
+            discount: Math.max(0, Math.min(100, parseNumber(order.discount, 0))),
+            discountAmount: parseNumber(order.discountAmount, 0),
+            deliveryFee: parseNumber(order.deliveryFee, 0),
+            promoCode: (order.promoCode || '').toString().trim() || null,
+            total: parseNumber(order.total, 0),
             deliveryMethod: order.deliveryMethod,
             estimatedTime: order.estimatedTime || 60,
             createdAt: order.createdAt,
             trackingExpiry: order.trackingExpiry,
             orderTime: ((order.orderTime === 'now' || order.orderTime === 'later') ? order.orderTime : inferredOrderTime) || null,
             scheduledTime: scheduledTime || null,
+            orderNote: orderNote || null,
             items,
             customerInfo: order.deliveryMethod === 'delivery' ? {
                 city: order.customerInfo?.city,
@@ -3918,7 +4020,8 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         // In single-restaurant deployments we allow a safe fallback.
         let targetRestaurantId = restaurantId || req.headers['x-restaurant-id'];
         
-        if (!items || !items.length || !customerInfo || !deliveryMethod) {
+        const sanitizedItems = sanitizeOrderItems(items);
+        if (!sanitizedItems || sanitizedItems.length === 0 || !customerInfo || !deliveryMethod) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
@@ -4050,14 +4153,17 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         const createdAt = new Date();
         const trackingExpiry = new Date(createdAt.getTime() + 2 * 60 * 60 * 1000); // 2 hours from now
 
+        const customerNotesRaw = (customerInfo?.notes || '').toString().replace(/\r/g, '').trim();
+        const customerNotes = customerNotesRaw ? customerNotesRaw.slice(0, 1000) : '';
+
         const newOrder = {
             id: 'order_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
             restaurantId: targetRestaurantId,
             restaurantName: restaurant.name,
-            items,
-            promoCode,
-            discount: discount || 0,
-            total,
+            items: sanitizedItems,
+            promoCode: (promoCode || '').toString().trim() || undefined,
+            discount: Math.max(0, Math.min(100, parseNumber(discount, 0))),
+            total: parseNumber(total, 0),
             // Keep existing field for backward compatibility across UI surfaces
             deliveryMethod,
             // Normalized field for future flows
@@ -4067,6 +4173,7 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             scheduledTime: (typeof scheduledTime === 'string' && scheduledTime.trim()) ? scheduledTime.trim() : undefined,
             customerInfo: {
                 ...customerInfo,
+                ...(customerNotes ? { notes: customerNotes } : {}),
                 previousOrders: previousOrders
             },
             timestamp: timestamp || createdAt.toISOString(),
@@ -4074,6 +4181,9 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             createdAt: createdAt.toISOString(),
             trackingExpiry: trackingExpiry.toISOString()
         };
+
+        // Ensure totals are consistent server-side (and rounded correctly).
+        recomputeOrderTotals(newOrder);
 
         const normalizedPaymentMethod = (paymentMethod || 'cash').toString().trim().toLowerCase();
         if (normalizedPaymentMethod === 'card') {
@@ -4095,8 +4205,8 @@ app.post(API_PREFIX + '/orders', (req, res) => {
                 const currency = (currencyRaw === 'BGN' || currencyRaw === 'EUR') ? currencyRaw : 'EUR';
 
                 const amount = currency === 'BGN'
-                    ? parseNumber(total, 0) * eurToBgnRate
-                    : parseNumber(total, 0);
+                    ? parseNumber(newOrder.total, 0) * eurToBgnRate
+                    : parseNumber(newOrder.total, 0);
 
                 const redirectUrl = `${API_PREFIX}/payments/borica/start?orderId=${encodeURIComponent(newOrder.id)}`;
 
@@ -4130,7 +4240,7 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             const providerOrderId = generateBoricaProviderOrderId();
             const currencySettings = data.currencySettings || { eurToBgnRate: 1.9558 };
             const eurToBgnRate = parseNumber(currencySettings.eurToBgnRate, 1.9558);
-            const amountBGN = parseNumber(total, 0) * eurToBgnRate;
+            const amountBGN = parseNumber(newOrder.total, 0) * eurToBgnRate;
             const orderDescription = `Order ${newOrder.id}`;
             const message = boricaBuildRegisterTransactionMessage({
                 amountBGN,
