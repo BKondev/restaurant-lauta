@@ -2141,7 +2141,7 @@ function formatOrderItemsText(order) {
             const unit = parseNumber(it.price, 0);
             const qty = parseNumber(it.quantity, 0);
             const lineTotal = roundMoneyEUR(unit * qty);
-            const base = `- ${it.name} x${qty} = ${formatMoneyEUR(lineTotal)}`;
+            const base = `- ${qty}x ${it.name} = ${formatMoneyEUR(lineTotal)}`;
             const note = (it?.note || it?.notes || '').toString().replace(/\r/g, '').trim();
             if (!note) return base;
             return `${base}\n  Бележка: ${note}`;
@@ -2220,6 +2220,18 @@ function formatMoneyEUR(value) {
     return `${roundMoneyEUR(value).toFixed(2)} €`;
 }
 
+function computeItemsPromoSavingsEUR(order) {
+    const items = Array.isArray(order?.items) ? order.items : [];
+    const savings = items.reduce((acc, it) => {
+        const qty = Math.max(0, parseNumber(it?.quantity, 0));
+        const price = Math.max(0, parseNumber(it?.price, 0));
+        const originalPrice = parseNumber(it?.originalPrice, NaN);
+        if (!Number.isFinite(originalPrice) || originalPrice <= price) return acc;
+        return acc + ((originalPrice - price) * qty);
+    }, 0);
+    return roundMoneyEUR(savings);
+}
+
 function getDeliverySummaryText(order) {
     return order?.deliveryMethod === 'delivery'
         ? `Доставка до: ${(order?.customerInfo?.city || '').toString().trim()} ${(order?.customerInfo?.address || '').toString().trim()}`.trim()
@@ -2256,6 +2268,8 @@ function formatOrderItemsHtml(order) {
     const rows = items.map((it) => {
         const name = escapeHtml(it?.name || '');
         const note = (it?.note || it?.notes || '').toString().replace(/\r/g, '').trim();
+        const discountLabelRaw = (it?.discountLabel || it?.discount_label || '').toString().replace(/\r/g, '').trim();
+        const discountLabel = discountLabelRaw ? discountLabelRaw.slice(0, 80) : '';
         const qty = parseNumber(it?.quantity, 0);
         const price = parseNumber(it?.price, 0);
         const originalPrice = parseNumber(it?.originalPrice, NaN);
@@ -2264,10 +2278,10 @@ function formatOrderItemsHtml(order) {
         return `
             <tr>
                 <td style="padding:6px 0;">
-                    <div>${name}</div>
+                    <div><strong>${escapeHtml(qty)}x</strong> ${name}</div>
+                    ${(discountLabel || hasItemPromo) ? `<div style="margin-top:4px; font-size:13px;"><strong>Промо:</strong> ${escapeHtml(discountLabel || 'Промо')}</div>` : ''}
                     ${note ? `<div style="margin-top:4px; color:#c62828; font-size:13px; font-weight:700;">Бележка: ${escapeHtml(note)}</div>` : ''}
                 </td>
-                <td style="padding:6px 0; text-align:right; white-space:nowrap;">x${escapeHtml(qty)}</td>
                 <td style="padding:6px 0; text-align:right; white-space:nowrap;">
                     ${hasItemPromo ? `<span style="text-decoration: line-through; color:#777; margin-right:6px;">${escapeHtml(formatMoneyEUR(originalPrice))}</span>` : ''}
                     <span>${escapeHtml(formatMoneyEUR(price))}</span>
@@ -2281,7 +2295,6 @@ function formatOrderItemsHtml(order) {
             <thead>
                 <tr>
                     <th style="text-align:left; padding:6px 0;">Артикул</th>
-                    <th style="text-align:right; padding:6px 0;">Брой</th>
                     <th style="text-align:right; padding:6px 0;">Ед. цена</th>
                     <th style="text-align:right; padding:6px 0;">Общо</th>
                 </tr>
@@ -2295,6 +2308,11 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl) {
     const orderId = escapeHtml(order?.id || '');
     const customerName = escapeHtml(order?.customerInfo?.name || '');
     const deliverySummary = escapeHtml(getDeliverySummaryText(order));
+    const subtotalNum = Math.max(0, parseNumber(order?.subtotal, 0));
+    const discountAmountNum = Math.max(0, parseNumber(order?.discountAmount, 0));
+    const deliveryFeeNum = Math.max(0, parseNumber(order?.deliveryFee, 0));
+    const itemsSavingsNum = computeItemsPromoSavingsEUR(order);
+    const totalSavingsNum = roundMoneyEUR(discountAmountNum + itemsSavingsNum);
     const total = escapeHtml(formatMoneyEUR(order?.total));
     const paymentMethod = escapeHtml((order?.payment?.method || order?.paymentMethod || '').toString());
     const fulfillment = getFulfillmentTimeHeader(order);
@@ -2313,6 +2331,19 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl) {
     const promoBlock = promoCode
         ? `<p style="margin:6px 0;">Промо код: <strong>${escapeHtml(promoCode)}</strong>${discountPct ? ` (-${escapeHtml(discountPct)}%)` : ''}</p>`
         : '';
+
+    const savingsBlock = totalSavingsNum > 0
+        ? `<p style="margin:6px 0;">Спестявате: <strong>${escapeHtml(formatMoneyEUR(totalSavingsNum))}</strong></p>`
+        : '';
+
+    const totalsBlock = `
+        <div style="margin:16px 0 0 0;">
+            ${subtotalNum > 0 ? `<p style="margin:6px 0;">Сума: <strong>${escapeHtml(formatMoneyEUR(subtotalNum))}</strong></p>` : ''}
+            ${discountAmountNum > 0 ? `<p style="margin:6px 0;">Отстъпка${promoCode ? ` (${escapeHtml(promoCode)})` : ''}: <strong>-${escapeHtml(formatMoneyEUR(discountAmountNum))}</strong></p>` : ''}
+            ${(order?.deliveryMethod === 'delivery' && deliveryFeeNum > 0) ? `<p style="margin:6px 0;">Доставка: <strong>${escapeHtml(formatMoneyEUR(deliveryFeeNum))}</strong></p>` : ''}
+            <p style="margin:6px 0; font-size: 16px;">Общо: <strong>${total}</strong></p>
+        </div>
+    `;
 
     const orderNoteBlock = orderNote
         ? `<div style="margin:16px 0 0 0; padding: 12px; border: 1px solid #f0b4b4; border-radius: 10px; background: #fff5f5;">
@@ -2335,12 +2366,18 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl) {
             <p style="margin:6px 0;">Номер: <strong>${orderId}</strong></p>
             <p style="margin:6px 0;">${deliverySummary}</p>
             ${paymentBlock}
-            ${promoBlock}
 
             <h3 style="margin:18px 0 8px 0;">Артикули</h3>
             ${formatOrderItemsHtml(order)}
 
-            <p style="margin:16px 0 0 0; font-size: 16px;">Общо: <strong>${total}</strong></p>
+            ${(promoBlock || savingsBlock) ? `
+                <div style="margin:12px 0 0 0; padding: 12px; border-radius: 10px; background: #f9fafb;">
+                    ${promoBlock}
+                    ${savingsBlock}
+                </div>
+            ` : ''}
+
+            ${totalsBlock}
             ${orderNoteBlock}
             ${trackBlock}
 

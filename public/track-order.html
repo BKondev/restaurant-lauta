@@ -556,6 +556,7 @@
                 subtotal: 'Subtotal',
                 discount: 'Discount',
                 deliveryFee: 'Delivery fee',
+                savings: 'You saved',
                 orderNote: 'Order note',
                 home: 'Home',
                 newOrder: 'New order',
@@ -606,6 +607,7 @@
                 subtotal: 'Сума',
                 discount: 'Отстъпка',
                 deliveryFee: 'Доставка',
+                savings: 'Спестявате',
                 orderNote: 'Бележка към поръчката',
                 home: 'Начало',
                 newOrder: 'Нова поръчка',
@@ -808,6 +810,15 @@
             const pickupMapsUrl = contactsMapsUrl || (contactsAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contactsAddress)}` : '');
 
             const items = Array.isArray(order.items) ? order.items : [];
+            const itemsSavings = round2(items.reduce((acc, it) => {
+                const qty = Math.max(0, toNumber(it && it.quantity));
+                const price = Math.max(0, toNumber(it && it.price));
+                const original = Number(it && it.originalPrice);
+                if (!Number.isFinite(original) || original <= price) return acc;
+                return acc + ((original - price) * qty);
+            }, 0));
+            const totalSavings = round2(itemsSavings + Math.max(0, discountAmount));
+
             const itemsHtml = items.length ? `
                 <div class="items-info">
                     <div class="items-title">${t('itemsTitle')}</div>
@@ -819,6 +830,7 @@
                         const price = toNumber(it && it.price);
                         const originalPrice = Number(it && it.originalPrice);
                         const hasDiscount = Number.isFinite(originalPrice) && originalPrice > price;
+                        const promoLabel = ((it && (it.discountLabel || it.discount_label)) ? String(it.discountLabel || it.discount_label) : '').replace(/\r/g, '').trim();
                         const line = price * qty;
 
                         const unitHtml = hasDiscount
@@ -829,6 +841,7 @@
                                 <div>
                                     <div class="item-name">${name}</div>
                                     <div class="item-sub">${qty} × ${unitHtml}</div>
+                                    ${(promoLabel || hasDiscount) ? `<div class="item-sub"><strong>${escapeHtml(promoLabel || 'Promo')}</strong></div>` : ''}
                                     ${noteHtml}
                                 </div>
                                 <div class="item-price">${formatMoney(line, currency)}</div>
@@ -852,6 +865,12 @@
                         <div class="item-row">
                             <div class="item-name">${t('discount')}</div>
                             <div class="item-price">-${formatMoney(discountAmount, currency)}</div>
+                        </div>
+                    ` : ''}
+                    ${(totalSavings > 0) ? `
+                        <div class="item-row">
+                            <div class="item-name">${t('savings')}</div>
+                            <div class="item-price">${formatMoney(totalSavings, currency)}</div>
                         </div>
                     ` : ''}
                     ${(deliveryFee > 0) ? `

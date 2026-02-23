@@ -119,6 +119,7 @@
           subtotal: 'Subtotal',
           discount: 'Discount',
           deliveryFee: 'Delivery fee',
+           savings: 'You saved',
           orderNote: 'Order note'
         },
         bg: {
@@ -146,6 +147,7 @@
           subtotal: 'Сума',
           discount: 'Отстъпка',
           deliveryFee: 'Доставка',
+           savings: 'Спестявате',
           orderNote: 'Бележка към поръчката'
         }
       };
@@ -243,6 +245,7 @@
             const price = Number(it?.price || 0);
             const originalPrice = Number(it?.originalPrice);
             const hasDiscount = Number.isFinite(originalPrice) && originalPrice > price;
+             const promoLabel = ((it?.discountLabel || it?.discount_label || '').toString().replace(/\r/g, '').trim());
             const lineTotal = price * qty;
 
             const unitHtml = hasDiscount
@@ -254,6 +257,7 @@
                 <div>
                   <div class="items-name">${name}</div>
                   <div class="items-sub">${qty} × ${unitHtml}</div>
+                   ${(promoLabel || hasDiscount) ? `<div class="items-sub"><strong>${escapeHtml(promoLabel || 'Promo')}</strong></div>` : ''}
                   ${noteHtml}
                 </div>
                 <div class="items-price">${formatMoney(lineTotal, currency)}</div>
@@ -265,6 +269,14 @@
           const discountAmount = toNumber(o?.discountAmount);
           const deliveryFee = toNumber(o?.deliveryFee);
           const total = toNumber(o?.total);
+           const itemsSavings = round2(items.reduce((acc, it) => {
+             const qty = Math.max(0, Number(it?.quantity || 0));
+             const price = Math.max(0, Number(it?.price || 0));
+             const original = Number(it?.originalPrice);
+             if (!Number.isFinite(original) || original <= price) return acc;
+             return acc + ((original - price) * qty);
+           }, 0));
+           const totalSavings = round2(itemsSavings + Math.max(0, discountAmount));
           const promoCode = (o?.promoCode || '').toString().trim();
           const discountPct = Math.max(0, Math.min(100, toNumber(o?.discount)));
           const orderNote = (o?.orderNote || '').toString().replace(/\r/g, '').trim();
@@ -293,6 +305,12 @@
                 <div class="items-price">-${formatMoney(discountAmount, currency)}</div>
               </div>
             ` : ''}
+             ${(totalSavings > 0) ? `
+               <div class="items-row">
+                 <div class="items-name">${t('savings')}</div>
+                 <div class="items-price">${formatMoney(totalSavings, currency)}</div>
+               </div>
+             ` : ''}
             ${(deliveryFee > 0) ? `
               <div class="items-row">
                 <div class="items-name">${t('deliveryFee')}</div>
