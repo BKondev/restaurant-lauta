@@ -327,6 +327,16 @@ async function markOrderPrinted(apiBaseUrl, apiKey, orderId, printerTarget) {
     return !!r.json?.success;
 }
 
+async function clearOrderReprint(apiBaseUrl, apiKey, orderId) {
+    const url = `${apiBaseUrl}/orders/${encodeURIComponent(orderId)}/clear-reprint`;
+    const r = await requestJson('POST', url, { 'x-api-key': apiKey }, {});
+    if (r.status !== 200) {
+        console.warn(`[REPRINT] Failed to clear reprint for ${orderId} (${r.status})`, r.json || r.raw);
+        return false;
+    }
+    return !!r.json?.success;
+}
+
 async function resolvePrinterTarget(printerCfg, envOverride, state) {
     const overrideIp = (envOverride.ip || '').toString().trim();
     const overridePort = envOverride.port;
@@ -424,8 +434,12 @@ async function run() {
 
             const orders = await fetchApprovedOrders(apiBaseUrl, apiKey);
             const candidates = orders
-                .filter(o => o && (o.printerPrintedAt ? false : true))
-                .filter(o => !state.printed[String(o.id || '')])
+                .filter(o => o && (o.forceReprint === true ? true : !(o.printerPrintedAt ? true : false)))
+                .filter(o => {
+                    const orderId = String(o?.id || '');
+                    if (!orderId) return false;
+                    return o.forceReprint === true ? true : !state.printed[orderId];
+                })
                 .filter(o => {
                     const method = (o.deliveryMethod || o.deliveryType || '').toString();
                     const isPickup = method === 'pickup';
@@ -472,6 +486,10 @@ async function run() {
                 if (marked) {
                     state.printed[orderId] = new Date().toISOString();
                     saveState(stateFile, state);
+
+                    if (order.forceReprint === true) {
+                        await clearOrderReprint(apiBaseUrl, apiKey, orderId);
+                    }
                 }
             }
         } catch (e) {

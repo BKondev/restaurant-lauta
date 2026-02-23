@@ -49,10 +49,36 @@ let currencySettings = {
 };
 let orderSettings = {
     minimumOrderAmount: 0,
+    minimumOrderDeliveryEnabled: false,
+    minimumOrderDeliveryAmount: 0,
+    minimumOrderPickupEnabled: false,
+    minimumOrderPickupAmount: 0,
     allowOrderLater: true,
     temporarilyClosed: false,
     pickupEnabled: true
 };
+
+function getEffectiveMinimumOrderAmountForMethod(method) {
+    const normalized = (method === 'delivery' || method === 'pickup') ? method : null;
+    if (!normalized) return 0;
+
+    const settings = orderSettings || {};
+    const legacyAmount = Math.max(0, Number(settings.minimumOrderAmount) || 0);
+
+    const hasDeliveryToggle = typeof settings.minimumOrderDeliveryEnabled === 'boolean';
+    const hasPickupToggle = typeof settings.minimumOrderPickupEnabled === 'boolean';
+    if (!hasDeliveryToggle && !hasPickupToggle) {
+        return legacyAmount;
+    }
+
+    if (normalized === 'delivery') {
+        if (settings.minimumOrderDeliveryEnabled !== true) return 0;
+        return Math.max(0, Number(settings.minimumOrderDeliveryAmount) || 0);
+    }
+
+    if (settings.minimumOrderPickupEnabled !== true) return 0;
+    return Math.max(0, Number(settings.minimumOrderPickupAmount) || 0);
+}
 let workingHours = {
     openingTime: '09:00',
     closingTime: '22:00'
@@ -1095,6 +1121,7 @@ function renderCheckout() {
     summarySection.className = 'summary-section';
     
     const { subtotal, discount, deliveryFee, freeDeliveryApplied, total } = calculateTotals();
+    const minOrderAmountNow = getEffectiveMinimumOrderAmountForMethod(deliveryMethod);
 
     summarySection.innerHTML = `
         <div class="summary-row subtotal">
@@ -1117,15 +1144,15 @@ function renderCheckout() {
             <span data-translate="total">${translations[currentLanguage].total}</span>
             <span>${formatPrice(total)}</span>
         </div>
-        ${orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount ? `
+        ${minOrderAmountNow > 0 && total < minOrderAmountNow ? `
         <div class="order-warning">
             <i class="fas fa-exclamation-triangle"></i>
-            ${currentLanguage === 'bg' ? 'Минимална сума за поръчка' : 'Minimum order amount'}: ${formatPrice(orderSettings.minimumOrderAmount)}
+            ${currentLanguage === 'bg' ? 'Минимална сума за поръчка' : 'Minimum order amount'}: ${formatPrice(minOrderAmountNow)}
             <br>
             ${currentLanguage === 'bg' ? 'Текуща сума' : 'Current amount'}: ${formatPrice(total)}
         </div>
         ` : ''}
-        <button class="checkout-btn" type="button" onclick="placeOrder()" aria-disabled="${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'true' : 'false'}">
+        <button class="checkout-btn" type="button" onclick="placeOrder()" aria-disabled="${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (minOrderAmountNow > 0 && total < minOrderAmountNow) ? 'true' : 'false'}">
             ${deliveryMethod === 'delivery' 
                 ? (currentLanguage === 'bg' ? 'Поръчай с Доставка' : 'Order with Delivery')
                 : (currentLanguage === 'bg' ? 'Поръчай и Вземи' : 'Order and Pickup')}
@@ -1820,7 +1847,7 @@ async function placeOrder() {
 
     // Minimum order amount feedback (avoid a disabled button doing "nothing")
     const totalsNow = calculateTotals();
-    const minAmount = Number(orderSettings?.minimumOrderAmount) || 0;
+    const minAmount = getEffectiveMinimumOrderAmountForMethod(deliveryMethod);
     if (minAmount > 0 && (totalsNow?.total || 0) < minAmount) {
         alert(
             currentLanguage === 'bg'
@@ -2244,6 +2271,7 @@ function updateOrderSummary() {
     
     const { subtotal, discount, deliveryFee, freeDeliveryApplied, total } = calculateTotals();
     const restaurantClosedReason = getRestaurantClosedReason();
+    const minOrderAmountNow = getEffectiveMinimumOrderAmountForMethod(deliveryMethod);
     
     summarySection.innerHTML = `
         <div class="summary-row subtotal">
@@ -2272,10 +2300,10 @@ function updateOrderSummary() {
             <span style="color: #e67e22; font-weight: 700;">${selectedTimeSlot}</span>
         </div>
         ` : ''}
-        ${orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount ? `
+        ${minOrderAmountNow > 0 && total < minOrderAmountNow ? `
         <div class="order-warning">
             <i class="fas fa-exclamation-triangle"></i>
-            <span>${currentLanguage === 'bg' ? `Минимална сума за поръчка: ${formatPrice(orderSettings.minimumOrderAmount)}` : `Minimum order amount: ${formatPrice(orderSettings.minimumOrderAmount)}`}</span>
+            <span>${currentLanguage === 'bg' ? `Минимална сума за поръчка: ${formatPrice(minOrderAmountNow)}` : `Minimum order amount: ${formatPrice(minOrderAmountNow)}`}</span>
         </div>
         ` : ''}
         ${orderSettings?.temporarilyClosed === true ? `
@@ -2284,7 +2312,7 @@ function updateOrderSummary() {
             <span>${currentLanguage === 'bg' ? 'Ресторантът е временно затворен.' : 'The restaurant is temporarily closed.'}</span>
         </div>
         ` : ''}
-        <button class="checkout-btn" type="button" onclick="placeOrder()" aria-disabled="${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (orderSettings.minimumOrderAmount > 0 && total < orderSettings.minimumOrderAmount) ? 'true' : 'false'}">
+        <button class="checkout-btn" type="button" onclick="placeOrder()" aria-disabled="${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (minOrderAmountNow > 0 && total < minOrderAmountNow) ? 'true' : 'false'}">
             <i class="fas fa-${deliveryMethod === 'delivery' ? 'truck' : 'shopping-bag'}"></i>
             <span data-translate="placeOrder">${deliveryMethod === 'delivery' ? translations[currentLanguage].orderDelivery : translations[currentLanguage].orderPickup}</span>
         </button>

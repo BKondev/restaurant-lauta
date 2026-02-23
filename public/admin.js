@@ -131,6 +131,11 @@ const translations = {
         orderSettings: 'Order Settings',
         minimumOrderAmountEur: 'Minimum Order Amount (EUR)',
         minOrderHint: 'Set to 0 to disable minimum order requirement',
+        minimumOrderDeliveryEnabled: 'Enable minimum order for delivery',
+        minimumOrderDeliveryAmountEur: 'Delivery minimum (EUR)',
+        minimumOrderPickupEnabled: 'Enable minimum order for pickup',
+        minimumOrderPickupAmountEur: 'Pickup minimum (EUR)',
+        minimumOrderPerMethodHint: 'When disabled, there is no minimum order for this method.',
         allowOrderLater: 'Allow "Later" scheduling in checkout',
         allowOrderLaterHelp: 'When disabled, customers can only order "Now".',
         restaurantTemporarilyClosed: 'Temporarily close restaurant',
@@ -552,6 +557,11 @@ const translations = {
         orderSettings: 'Настройки на Поръчки',
         minimumOrderAmountEur: 'Минимална сума на поръчка (EUR)',
         minOrderHint: 'Задайте 0, за да изключите минималната сума',
+        minimumOrderDeliveryEnabled: 'Минимална сума за доставка',
+        minimumOrderDeliveryAmountEur: 'Минимум за доставка (EUR)',
+        minimumOrderPickupEnabled: 'Минимална сума за взимане',
+        minimumOrderPickupAmountEur: 'Минимум за взимане (EUR)',
+        minimumOrderPerMethodHint: 'Когато е изключено, няма минимална сума за този метод.',
         allowOrderLater: 'Разреши опцията "По-късно" в поръчката',
         allowOrderLaterHelp: 'Когато е изключено, клиентите могат да поръчват само "Сега".',
         restaurantTemporarilyClosed: 'Временно затвори ресторанта',
@@ -3357,6 +3367,20 @@ async function updateCustomization() {
 
 // ========== ORDER SETTINGS FUNCTIONS ==========
 
+function applyMinimumOrderUiState() {
+    const deliveryEnabledEl = document.getElementById('minimum-order-delivery-enabled');
+    const deliveryAmountEl = document.getElementById('minimum-order-delivery-amount');
+    if (deliveryEnabledEl && deliveryAmountEl) {
+        deliveryAmountEl.disabled = deliveryEnabledEl.checked !== true;
+    }
+
+    const pickupEnabledEl = document.getElementById('minimum-order-pickup-enabled');
+    const pickupAmountEl = document.getElementById('minimum-order-pickup-amount');
+    if (pickupEnabledEl && pickupAmountEl) {
+        pickupAmountEl.disabled = pickupEnabledEl.checked !== true;
+    }
+}
+
 async function updateOrderSettings() {
     const token = sessionStorage.getItem('adminToken');
     if (!token) {
@@ -3365,7 +3389,10 @@ async function updateOrderSettings() {
     }
 
     const orderSettings = {
-        minimumOrderAmount: parseFloat(document.getElementById('minimum-order-amount').value) || 0,
+        minimumOrderDeliveryEnabled: document.getElementById('minimum-order-delivery-enabled')?.checked === true,
+        minimumOrderDeliveryAmount: parseFloat(document.getElementById('minimum-order-delivery-amount')?.value) || 0,
+        minimumOrderPickupEnabled: document.getElementById('minimum-order-pickup-enabled')?.checked === true,
+        minimumOrderPickupAmount: parseFloat(document.getElementById('minimum-order-pickup-amount')?.value) || 0,
         allowOrderLater: document.getElementById('allow-order-later')?.checked !== false,
         temporarilyClosed: document.getElementById('restaurant-temporarily-closed')?.checked === true,
         pickupEnabled: document.getElementById('pickup-enabled')?.checked !== false
@@ -3396,8 +3423,16 @@ async function loadOrderSettings() {
     try {
         const response = await fetch(`${API_URL}/settings/order`);
         const settings = await response.json();
-        
-        document.getElementById('minimum-order-amount').value = settings.minimumOrderAmount || 0;
+
+        const deliveryEnabledEl = document.getElementById('minimum-order-delivery-enabled');
+        if (deliveryEnabledEl) deliveryEnabledEl.checked = settings.minimumOrderDeliveryEnabled === true;
+        const deliveryAmountEl = document.getElementById('minimum-order-delivery-amount');
+        if (deliveryAmountEl) deliveryAmountEl.value = Number(settings.minimumOrderDeliveryAmount) || 0;
+
+        const pickupMinEnabledEl = document.getElementById('minimum-order-pickup-enabled');
+        if (pickupMinEnabledEl) pickupMinEnabledEl.checked = settings.minimumOrderPickupEnabled === true;
+        const pickupMinAmountEl = document.getElementById('minimum-order-pickup-amount');
+        if (pickupMinAmountEl) pickupMinAmountEl.value = Number(settings.minimumOrderPickupAmount) || 0;
 
         const allowLaterEl = document.getElementById('allow-order-later');
         if (allowLaterEl) allowLaterEl.checked = settings.allowOrderLater !== false;
@@ -3407,6 +3442,12 @@ async function loadOrderSettings() {
 
         const pickupEnabledEl = document.getElementById('pickup-enabled');
         if (pickupEnabledEl) pickupEnabledEl.checked = settings.pickupEnabled !== false;
+
+        applyMinimumOrderUiState();
+
+        // Keep UI responsive when toggling without a full reload
+        if (deliveryEnabledEl) deliveryEnabledEl.addEventListener('change', applyMinimumOrderUiState);
+        if (pickupMinEnabledEl) pickupMinEnabledEl.addEventListener('change', applyMinimumOrderUiState);
     } catch (error) {
         console.error('Error loading order settings:', error);
     }

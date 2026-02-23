@@ -740,9 +740,27 @@
 
             <div class="form-row">
                 <div class="form-group">
-                    <label for="minimum-order-amount"><span data-translate="minimumOrderAmountEur">Minimum Order Amount (EUR)</span>:</label>
-                    <input type="number" id="minimum-order-amount" step="0.01" min="0" value="0" placeholder="0.00">
-                    <small data-translate="minOrderHint">Set to 0 to disable minimum order requirement</small>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="minimum-order-delivery-enabled">
+                        <span data-translate="minimumOrderDeliveryEnabled">Enable minimum order for delivery</span>
+                    </label>
+                    <label for="minimum-order-delivery-amount" style="display: block; margin-top: 8px;">
+                        <span data-translate="minimumOrderDeliveryAmountEur">Delivery minimum (EUR)</span>:
+                    </label>
+                    <input type="number" id="minimum-order-delivery-amount" step="0.01" min="0" value="0" placeholder="0.00">
+                    <small data-translate="minimumOrderPerMethodHint">When disabled, there is no minimum order for this method.</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="minimum-order-pickup-enabled">
+                        <span data-translate="minimumOrderPickupEnabled">Enable minimum order for pickup</span>
+                    </label>
+                    <label for="minimum-order-pickup-amount" style="display: block; margin-top: 8px;">
+                        <span data-translate="minimumOrderPickupAmountEur">Pickup minimum (EUR)</span>:
+                    </label>
+                    <input type="number" id="minimum-order-pickup-amount" step="0.01" min="0" value="0" placeholder="0.00">
+                    <small data-translate="minimumOrderPerMethodHint">When disabled, there is no minimum order for this method.</small>
                 </div>
             </div>
 

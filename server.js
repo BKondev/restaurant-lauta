@@ -2888,24 +2888,81 @@ app.put(API_PREFIX + '/settings/delivery', requireAuth, (req, res) => {
 // Get order settings
 app.get(API_PREFIX + '/settings/order', (req, res) => {
     const db = readDatabase();
+    const raw = db.orderSettings || {};
     const defaults = {
         minimumOrderAmount: 0,
+        minimumOrderDeliveryEnabled: false,
+        minimumOrderDeliveryAmount: 0,
+        minimumOrderPickupEnabled: false,
+        minimumOrderPickupAmount: 0,
         allowOrderLater: true,
         temporarilyClosed: false,
         pickupEnabled: true
     };
 
-    res.json({
+    const merged = {
         ...defaults,
-        ...(db.orderSettings || {})
-    });
+        ...raw
+    };
+
+    // Backward compatibility: if only the legacy global minimum exists, treat it as
+    // the minimum for both delivery and pickup (enabled).
+    const legacyMin = Math.max(0, parseNumber(merged.minimumOrderAmount, 0));
+    const hasDeliveryToggle = Object.prototype.hasOwnProperty.call(raw, 'minimumOrderDeliveryEnabled');
+    const hasPickupToggle = Object.prototype.hasOwnProperty.call(raw, 'minimumOrderPickupEnabled');
+    const hasDeliveryAmount = Object.prototype.hasOwnProperty.call(raw, 'minimumOrderDeliveryAmount');
+    const hasPickupAmount = Object.prototype.hasOwnProperty.call(raw, 'minimumOrderPickupAmount');
+    if (!hasDeliveryToggle && !hasPickupToggle && !hasDeliveryAmount && !hasPickupAmount && legacyMin > 0) {
+        merged.minimumOrderDeliveryEnabled = true;
+        merged.minimumOrderDeliveryAmount = legacyMin;
+        merged.minimumOrderPickupEnabled = true;
+        merged.minimumOrderPickupAmount = legacyMin;
+    }
+
+    res.json(merged);
 });
 
 // Update order settings
 app.put(API_PREFIX + '/settings/order', requireAuth, (req, res) => {
     const db = readDatabase();
+
+    const legacyProvided = req.body.minimumOrderAmount !== undefined;
+    const legacyMinimumOrderAmountRaw = legacyProvided ? Number(req.body.minimumOrderAmount) : NaN;
+    const legacyMinimumOrderAmount = Number.isFinite(legacyMinimumOrderAmountRaw)
+        ? Math.max(0, legacyMinimumOrderAmountRaw)
+        : NaN;
+
+    const deliveryEnabledProvided = req.body.minimumOrderDeliveryEnabled !== undefined;
+    const deliveryAmountProvided = req.body.minimumOrderDeliveryAmount !== undefined;
+    const pickupEnabledProvided = req.body.minimumOrderPickupEnabled !== undefined;
+    const pickupAmountProvided = req.body.minimumOrderPickupAmount !== undefined;
+
+    // If the caller only sends the legacy field, mirror it into both per-method fields
+    // so older admin UIs keep working.
+    const deliveryEnabled = deliveryEnabledProvided
+        ? coerceBoolean(req.body.minimumOrderDeliveryEnabled, false)
+        : (legacyProvided ? (Number.isFinite(legacyMinimumOrderAmount) && legacyMinimumOrderAmount > 0) : coerceBoolean(db.orderSettings?.minimumOrderDeliveryEnabled, false));
+    const deliveryAmount = deliveryAmountProvided
+        ? Math.max(0, parseNumber(req.body.minimumOrderDeliveryAmount, 0))
+        : (legacyProvided ? (Number.isFinite(legacyMinimumOrderAmount) ? legacyMinimumOrderAmount : 0) : Math.max(0, parseNumber(db.orderSettings?.minimumOrderDeliveryAmount, 0)));
+
+    const pickupEnabled = pickupEnabledProvided
+        ? coerceBoolean(req.body.minimumOrderPickupEnabled, false)
+        : (legacyProvided ? (Number.isFinite(legacyMinimumOrderAmount) && legacyMinimumOrderAmount > 0) : coerceBoolean(db.orderSettings?.minimumOrderPickupEnabled, false));
+    const pickupAmount = pickupAmountProvided
+        ? Math.max(0, parseNumber(req.body.minimumOrderPickupAmount, 0))
+        : (legacyProvided ? (Number.isFinite(legacyMinimumOrderAmount) ? legacyMinimumOrderAmount : 0) : Math.max(0, parseNumber(db.orderSettings?.minimumOrderPickupAmount, 0)));
+
     db.orderSettings = {
-        minimumOrderAmount: parseFloat(req.body.minimumOrderAmount) || 0,
+        // Keep the legacy field for old clients. If per-method fields are used, we
+        // store the maximum as a conservative fallback.
+        minimumOrderAmount: Number.isFinite(legacyMinimumOrderAmount)
+            ? legacyMinimumOrderAmount
+            : Math.max(0, deliveryEnabled ? deliveryAmount : 0, pickupEnabled ? pickupAmount : 0),
+        minimumOrderDeliveryEnabled: deliveryEnabled,
+        minimumOrderDeliveryAmount: deliveryAmount,
+        minimumOrderPickupEnabled: pickupEnabled,
+        minimumOrderPickupAmount: pickupAmount,
         allowOrderLater: req.body.allowOrderLater !== false,
         temporarilyClosed: req.body.temporarilyClosed === true,
         pickupEnabled: req.body.pickupEnabled !== false
@@ -3474,6 +3531,41 @@ function parseNumber(value, fallback = 0) {
     return Number.isFinite(n) ? n : fallback;
 }
 
+function coerceBoolean(value, fallback = false) {
+    if (value === undefined || value === null) return fallback;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    const s = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(s)) return true;
+    if (['false', '0', 'no', 'off'].includes(s)) return false;
+    return fallback;
+}
+
+function getEffectiveMinimumOrderAmount(orderSettings, method) {
+    const settings = orderSettings || {};
+    const normalized = (method === 'delivery' || method === 'pickup') ? method : null;
+    const legacyAmount = Math.max(0, parseNumber(settings.minimumOrderAmount, 0));
+
+    const hasDeliveryToggle = typeof settings.minimumOrderDeliveryEnabled === 'boolean';
+    const hasPickupToggle = typeof settings.minimumOrderPickupEnabled === 'boolean';
+
+    // If the new fields are not configured yet, fall back to the legacy global minimum.
+    if (!hasDeliveryToggle && !hasPickupToggle) {
+        return legacyAmount;
+    }
+
+    if (normalized === 'delivery') {
+        if (settings.minimumOrderDeliveryEnabled !== true) return 0;
+        return Math.max(0, parseNumber(settings.minimumOrderDeliveryAmount, 0));
+    }
+    if (normalized === 'pickup') {
+        if (settings.minimumOrderPickupEnabled !== true) return 0;
+        return Math.max(0, parseNumber(settings.minimumOrderPickupAmount, 0));
+    }
+
+    return legacyAmount;
+}
+
 function isValidEmail(email) {
     const e = (email || '').toString().trim();
     return !!e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
@@ -3773,6 +3865,80 @@ app.post(API_PREFIX + '/orders/:id/printed', requireAuthOrApiKey, (req, res) => 
     } catch (error) {
         console.error('Error marking order as printed:', error);
         res.status(500).json({ error: 'Failed to mark order as printed' });
+    }
+});
+
+// Request order reprint (Bearer token or API key)
+// Used by mobile "Confirmed" tab to trigger the printer agent to reprint an order.
+app.post(API_PREFIX + '/orders/:id/reprint', requireAuthOrApiKey, (req, res) => {
+    try {
+        const orderId = req.params.id;
+
+        const data = readDatabase();
+        if (!data.orders) {
+            return res.status(404).json({ success: false, message: 'No orders found', expired: true });
+        }
+
+        const idx = data.orders.findIndex(o => o && o.id === orderId);
+        if (idx === -1) {
+            return res.status(404).json({ success: false, message: 'Order not found', expired: true });
+        }
+
+        const order = data.orders[idx];
+        if (!isOrderForRestaurant(order, req.restaurantId, data)) {
+            return res.status(403).json({ success: false, message: 'Access denied', expired: false });
+        }
+
+        const nowIso = new Date().toISOString();
+        order.forceReprint = true;
+        order.forceReprintRequestedAt = nowIso;
+        order.forceReprintRequestedBy = (req.username || req.restaurantName || 'api').toString();
+        order.updatedAt = nowIso;
+
+        data.orders[idx] = order;
+        writeDatabase(data);
+
+        res.json({ success: true, message: 'Reprint requested', expired: false, orderId });
+    } catch (error) {
+        console.error('Error requesting order reprint:', error);
+        res.status(500).json({ success: false, message: 'Failed to request reprint', expired: false });
+    }
+});
+
+// Clear order reprint flag (Bearer token or API key)
+// Called by printer agent after a successful print so the order returns to normal printed behavior.
+app.post(API_PREFIX + '/orders/:id/clear-reprint', requireAuthOrApiKey, (req, res) => {
+    try {
+        const orderId = req.params.id;
+
+        const data = readDatabase();
+        if (!data.orders) {
+            return res.status(404).json({ success: false, message: 'No orders found' });
+        }
+
+        const idx = data.orders.findIndex(o => o && o.id === orderId);
+        if (idx === -1) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        const order = data.orders[idx];
+        if (!isOrderForRestaurant(order, req.restaurantId, data)) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
+        const nowIso = new Date().toISOString();
+        order.forceReprint = false;
+        order.forceReprintClearedAt = nowIso;
+        order.forceReprintClearedBy = (req.username || req.restaurantName || 'api').toString();
+        order.updatedAt = nowIso;
+
+        data.orders[idx] = order;
+        writeDatabase(data);
+
+        res.json({ success: true, message: 'Reprint flag cleared', orderId });
+    } catch (error) {
+        console.error('Error clearing reprint flag:', error);
+        res.status(500).json({ success: false, message: 'Failed to clear reprint flag' });
     }
 });
 
@@ -4184,6 +4350,18 @@ app.post(API_PREFIX + '/orders', (req, res) => {
 
         // Ensure totals are consistent server-side (and rounded correctly).
         recomputeOrderTotals(newOrder);
+
+        // Enforce minimum order amount per fulfillment method (server-side)
+        const effectiveMinAmount = getEffectiveMinimumOrderAmount(orderSettings, normalizedDeliveryMethod);
+        if (effectiveMinAmount > 0 && parseNumber(newOrder.total, 0) < effectiveMinAmount) {
+            return res.status(400).json({
+                error: 'Minimum order amount not reached',
+                message: 'Order total is below the minimum required amount',
+                minimumOrderAmount: effectiveMinAmount,
+                currentTotal: parseNumber(newOrder.total, 0),
+                deliveryMethod: normalizedDeliveryMethod
+            });
+        }
 
         const normalizedPaymentMethod = (paymentMethod || 'cash').toString().trim().toLowerCase();
         if (normalizedPaymentMethod === 'card') {
