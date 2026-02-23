@@ -2160,7 +2160,7 @@ function looksLikePlaceholderEmailTemplateText(text) {
 
 function getDefaultOrderPlacedTemplate() {
     return {
-        subject: '{{orderId}} - успешно направена.',
+        subject: 'Поръчка - {{orderId}} - успешно направена.',
         body: [
             'Здравейте {{customerName}},',
             '',
@@ -2400,7 +2400,7 @@ async function sendOrderPlacedEmails(order, restaurant) {
     };
 
     const tpl = getEffectiveOrderPlacedTemplate(restaurant);
-    const subjectCustomer = (tpl.subject || '').toString().trim() || `${order.id} - успешно направена.`;
+    const subjectCustomer = (tpl.subject || '').toString().trim() || `Поръчка - ${order.id} - успешно направена.`;
     const bodyCustomer = (tpl.body || '').toString().trim() || getDefaultOrderPlacedTemplate().body;
 
     const customerText = renderTemplateText(bodyCustomer, templateVars);
