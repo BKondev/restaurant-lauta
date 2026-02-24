@@ -1482,6 +1482,17 @@ function nowMinutesOfDay() {
     return now.getHours() * 60 + now.getMinutes();
 }
 
+function isMinutesWithinWindow(nowMinutes, openMinutes, closeMinutes) {
+    if (!Number.isFinite(nowMinutes) || !Number.isFinite(openMinutes) || !Number.isFinite(closeMinutes)) return false;
+    if (openMinutes === closeMinutes) return false;
+    // Normal window (same day)
+    if (closeMinutes > openMinutes) {
+        return nowMinutes >= openMinutes && nowMinutes < closeMinutes;
+    }
+    // Overnight window (e.g. 18:00 - 02:00)
+    return nowMinutes >= openMinutes || nowMinutes < closeMinutes;
+}
+
 function getRestaurantWindowMinutes() {
     const open = parseHHMMToMinutes(workingHours?.openingTime) ?? (9 * 60);
     const close = parseHHMMToMinutes(workingHours?.closingTime) ?? (22 * 60);
@@ -1534,15 +1545,17 @@ function getRestaurantClosedReason() {
     const window = getRestaurantWindowMinutes();
     const now = nowMinutesOfDay();
 
-    if (now < window.open) {
-        return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: false };
-    }
+    const within = isMinutesWithinWindow(now, window.open, window.close);
+    if (within) return null;
 
-    if (now >= window.close) {
+    // Closed: compute next opening time.
+    if (window.close > window.open) {
+        if (now < window.open) return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: false };
         return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: true };
     }
 
-    return null;
+    // Overnight schedule: closed only in the gap [close, open)
+    return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: false };
 }
 
 function getDeliveryClosedReason() {
@@ -1554,15 +1567,15 @@ function getDeliveryClosedReason() {
     const window = getDeliveryWindowMinutes();
     const now = nowMinutesOfDay();
 
-    if (now < window.open) {
-        return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: false };
-    }
+    const within = isMinutesWithinWindow(now, window.open, window.close);
+    if (within) return null;
 
-    if (now >= window.close) {
+    if (window.close > window.open) {
+        if (now < window.open) return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: false };
         return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: true };
     }
 
-    return null;
+    return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: false };
 }
 
 function getPickupClosedReason() {

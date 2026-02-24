@@ -237,6 +237,17 @@ function nowMinutesOfDay() {
     return now.getHours() * 60 + now.getMinutes();
 }
 
+function isMinutesWithinWindow(nowMinutes, openMinutes, closeMinutes) {
+    if (!Number.isFinite(nowMinutes) || !Number.isFinite(openMinutes) || !Number.isFinite(closeMinutes)) return false;
+    if (openMinutes === closeMinutes) return false;
+    // Normal window (same day)
+    if (closeMinutes > openMinutes) {
+        return nowMinutes >= openMinutes && nowMinutes < closeMinutes;
+    }
+    // Overnight window (e.g. 18:00 - 02:00)
+    return nowMinutes >= openMinutes || nowMinutes < closeMinutes;
+}
+
 function getStorefrontClosedReason() {
     if (siteOrderSettings?.temporarilyClosed === true) {
         return { type: 'manual' };
@@ -246,15 +257,18 @@ function getStorefrontClosedReason() {
     const close = parseHHMMToMinutes(siteWorkingHours?.closingTime) ?? (22 * 60);
     const now = nowMinutesOfDay();
 
-    if (now < open) {
-        return { type: 'hours', opensAt: minutesToHHMM(open), tomorrow: false };
-    }
+    const within = isMinutesWithinWindow(now, open, close);
+    if (within) return null;
 
-    if (now >= close) {
+    // Closed: compute next opening time.
+    if (close > open) {
+        // Same-day schedule.
+        if (now < open) return { type: 'hours', opensAt: minutesToHHMM(open), tomorrow: false };
         return { type: 'hours', opensAt: minutesToHHMM(open), tomorrow: true };
     }
 
-    return null;
+    // Overnight schedule: closed only in the gap [close, open)
+    return { type: 'hours', opensAt: minutesToHHMM(open), tomorrow: false };
 }
 
 function renderRestaurantStatusBanner() {
