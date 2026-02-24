@@ -556,37 +556,56 @@ const translations = {
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     // Fix navigation links
-    document.querySelectorAll('a[href="../"]').forEach(link => {
-        link.href = BASE_PATH + '/';
-    });
-    await loadRestaurantInfo();
-    await loadCurrencySettings();
-    await loadDeliverySettings();
-    await loadOrderSettings();
-    await loadWorkingHours();
-    await loadPaymentsConfig();
-    await loadSiteSettings();
-    loadCheckoutState();
-    enforceOrderSettingsConstraints();
-    loadAppliedPromoState();
-    loadCart();
-    // If checkout state restored a delivery order, compute the correct delivery fee right away.
-    if (deliveryMethod === 'delivery') {
-        calculateDeliveryFee();
+    try {
+        document.querySelectorAll('a[href="../"]').forEach(link => {
+            link.href = BASE_PATH + '/';
+        });
+    } catch (e) {
+        // ignore
     }
-    await syncCartFromServerIfNeeded();
-    await hydrateCartDisplayFieldsFromServer();
-    setupLanguageSwitcher();
-    setupResponsiveCheckoutHandlers();
-    setupBackArrowMobile();
-    updateLanguage();
-    renderCheckout();
-    renderRestaurantStatusBanner();
 
-    renderSiteMap();
-    renderSiteFooter();
-
-    window.addEventListener('beforeunload', saveCheckoutState);
+    try {
+        await loadRestaurantInfo();
+        await loadCurrencySettings();
+        await loadDeliverySettings();
+        await loadOrderSettings();
+        await loadWorkingHours();
+        await loadPaymentsConfig();
+        await loadSiteSettings();
+        loadCheckoutState();
+        enforceOrderSettingsConstraints();
+        loadAppliedPromoState();
+        loadCart();
+        // If checkout state restored a delivery order, compute the correct delivery fee right away.
+        if (deliveryMethod === 'delivery') {
+            calculateDeliveryFee();
+        }
+        await syncCartFromServerIfNeeded();
+        await hydrateCartDisplayFieldsFromServer();
+        setupLanguageSwitcher();
+        setupResponsiveCheckoutHandlers();
+        setupBackArrowMobile();
+        updateLanguage();
+        renderCheckout();
+        renderRestaurantStatusBanner();
+    } catch (error) {
+        console.error('Checkout init failed:', error);
+        // Best-effort minimal render so the page doesn't go blank.
+        try {
+            loadCheckoutState();
+            loadAppliedPromoState();
+            loadCart();
+            setupLanguageSwitcher();
+            updateLanguage();
+            renderCheckout();
+        } catch (e) {
+            // ignore
+        }
+    } finally {
+        try { renderSiteMap(); } catch (e) {}
+        try { renderSiteFooter(); } catch (e) {}
+        try { window.addEventListener('beforeunload', saveCheckoutState); } catch (e) {}
+    }
 });
 
 async function hydrateCartDisplayFieldsFromServer() {
@@ -1009,8 +1028,19 @@ async function loadWorkingHours() {
 
 // Load cart from localStorage
 function loadCart() {
-    const savedCart = localStorage.getItem('cart');
-    cart = savedCart ? JSON.parse(savedCart) : [];
+    try {
+        const savedCart = localStorage.getItem('cart');
+        cart = savedCart ? JSON.parse(savedCart) : [];
+        if (!Array.isArray(cart)) cart = [];
+    } catch (e) {
+        console.error('Failed to parse saved cart from localStorage:', e);
+        cart = [];
+        try {
+            localStorage.removeItem('cart');
+        } catch (err) {
+            // ignore
+        }
+    }
 }
 
 // Save cart to localStorage
