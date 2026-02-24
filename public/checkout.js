@@ -1120,6 +1120,7 @@ function renderCheckout() {
     cartSection.className = 'cart-section';
     
     const cartTotals = calculateTotals();
+    const restaurantClosedReason = getRestaurantClosedReason();
     const deliveryClosedReason = getDeliveryClosedReason();
     const pickupClosedReason = getPickupClosedReason();
     // If pickup was selected from saved state but is currently disabled,
