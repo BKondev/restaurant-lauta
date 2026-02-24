@@ -62,6 +62,16 @@ function getEffectiveMinimumOrderAmountForMethod(method) {
     const normalized = (method === 'delivery' || method === 'pickup') ? method : null;
     if (!normalized) return 0;
 
+    // City-specific override (delivery only)
+    if (normalized === 'delivery') {
+        const city = (customerInfo?.city || '').toString().trim();
+        const cityEntry = getCityDeliveryEntry(city);
+        const cityMin = cityEntry && Number.isFinite(cityEntry.minimumOrderAmount) ? cityEntry.minimumOrderAmount : NaN;
+        if (Number.isFinite(cityMin)) {
+            return Math.max(0, cityMin);
+        }
+    }
+
     const settings = orderSettings || {};
     const legacyAmount = Math.max(0, Number(settings.minimumOrderAmount) || 0);
 
@@ -168,26 +178,47 @@ function getDefaultDeliveryFee() {
     return Number.isFinite(val) ? val : 5;
 }
 
-function getDeliveryFeeForCity(cityRaw) {
+function normalizeCityPriceEntry(value) {
+    if (value === undefined || value === null) return null;
+
+    // Backward compatibility: numeric fee
+    if (typeof value === 'number' || typeof value === 'string') {
+        const fee = parseFloat(value);
+        return Number.isFinite(fee) ? { fee } : null;
+    }
+
+    if (typeof value !== 'object') return null;
+
+    const feeRaw = value.fee ?? value.price ?? value.deliveryFee ?? value.deliveryPrice;
+    const minRaw = value.minimumOrderAmount ?? value.minOrderAmount ?? value.minimumOrder ?? value.min;
+    const freeRaw = value.freeDeliveryAmount ?? value.freeDeliveryOverAmount ?? value.freeOverAmount;
+
+    const fee = parseFloat(feeRaw);
+    const minimumOrderAmount = parseFloat(minRaw);
+    const freeDeliveryAmount = parseFloat(freeRaw);
+
+    const out = {};
+    if (Number.isFinite(fee)) out.fee = fee;
+    if (Number.isFinite(minimumOrderAmount)) out.minimumOrderAmount = minimumOrderAmount;
+    if (Number.isFinite(freeDeliveryAmount)) out.freeDeliveryAmount = freeDeliveryAmount;
+    return Object.keys(out).length ? out : null;
+}
+
+function getCityDeliveryEntry(cityRaw) {
     const city = String(cityRaw || '').trim();
     const prices = deliverySettings?.cityPrices || {};
 
-    if (!city) {
-        // If user hasn't chosen a city yet, use default fee (still show delivery cost for delivery orders).
-        return getDefaultDeliveryFee();
-    }
+    if (!city) return null;
 
     if (prices && prices[city] !== undefined) {
-        const direct = parseFloat(prices[city]);
-        return Number.isFinite(direct) ? direct : getDefaultDeliveryFee();
+        return normalizeCityPriceEntry(prices[city]);
     }
 
     // Case-insensitive lookup
     const cityNorm = city.toLowerCase();
     for (const [key, value] of Object.entries(prices)) {
         if (String(key).trim().toLowerCase() === cityNorm) {
-            const v = parseFloat(value);
-            return Number.isFinite(v) ? v : getDefaultDeliveryFee();
+            return normalizeCityPriceEntry(value);
         }
     }
 
@@ -195,12 +226,23 @@ function getDeliveryFeeForCity(cityRaw) {
     const fallbackKeys = ['Други', 'Other', 'other', '*', 'default'];
     for (const k of fallbackKeys) {
         if (prices && prices[k] !== undefined) {
-            const v = parseFloat(prices[k]);
-            return Number.isFinite(v) ? v : getDefaultDeliveryFee();
+            return normalizeCityPriceEntry(prices[k]);
         }
     }
 
-    return getDefaultDeliveryFee();
+    return null;
+}
+
+function getDeliveryFeeForCity(cityRaw) {
+    const city = String(cityRaw || '').trim();
+    if (!city) {
+        // If user hasn't chosen a city yet, use default fee (still show delivery cost for delivery orders).
+        return getDefaultDeliveryFee();
+    }
+
+    const entry = getCityDeliveryEntry(city);
+    const fee = entry && Number.isFinite(entry.fee) ? entry.fee : NaN;
+    return Number.isFinite(fee) ? fee : getDefaultDeliveryFee();
 }
 
 function applyCheckoutStepVisibility() {
@@ -463,6 +505,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         calculateDeliveryFee();
     }
     await syncCartFromServerIfNeeded();
+    await hydrateCartDisplayFieldsFromServer();
     setupLanguageSwitcher();
     setupResponsiveCheckoutHandlers();
     setupBackArrowMobile();
@@ -475,6 +518,51 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.addEventListener('beforeunload', saveCheckoutState);
 });
+
+async function hydrateCartDisplayFieldsFromServer() {
+    // For older carts (e.g. items added in BG), store the base (EN/default) name
+    // so language switching can show the correct product name.
+    if (!Array.isArray(cart) || cart.length === 0) return;
+    const needsHydration = cart.some(it => !it || !it.baseName || typeof it.baseName !== 'string' || !it.baseName.trim());
+    if (!needsHydration) return;
+
+    try {
+        const productsResponse = await fetch(`${API_URL}/products`);
+        if (!productsResponse.ok) return;
+        const products = await productsResponse.json();
+
+        const byId = new Map();
+        (products || []).forEach(p => {
+            if (p && (p.id !== undefined && p.id !== null)) {
+                byId.set(String(p.id), p);
+            }
+        });
+
+        let changed = false;
+        cart = cart.map(item => {
+            if (!item) return item;
+            const product = byId.get(String(item.id));
+            if (!product) return item;
+
+            const next = { ...item };
+            if (!next.baseName || !String(next.baseName).trim()) {
+                next.baseName = (product.name || '').toString();
+                changed = true;
+            }
+            if (!next.translations && product.translations) {
+                next.translations = product.translations;
+                changed = true;
+            }
+            return next;
+        });
+
+        if (changed) {
+            saveCart();
+        }
+    } catch (error) {
+        console.error('Error hydrating cart from server:', error);
+    }
+}
 
 async function loadSiteSettings() {
     try {
@@ -892,6 +980,8 @@ function switchLanguage(lang) {
     syncLanguageUi();
     updateLanguage();
     renderCheckout();
+    try { renderSiteMap(); } catch (e) {}
+    try { renderSiteFooter(); } catch (e) {}
 }
 
 // Update language
@@ -1053,7 +1143,7 @@ function renderCheckout() {
         </div>
         </div>
         <div id="payment-customer-section" class="checkout-step" style="display: none;">
-        <h2 class="section-title" data-translate="paymentMethod" style="margin-top: 30px;"><span class="step-number-badge">3</span> ${translations[currentLanguage].paymentMethod}</h2>
+        <h2 class="section-title" id="payment-method-title" data-translate="paymentMethod" style="margin-top: 30px;"><span class="step-number-badge">3</span> ${translations[currentLanguage].paymentMethod}</h2>
         <div class="delivery-method">
             <label class="delivery-option ${paymentMethod === 'cash' ? 'active' : ''}" onclick="selectPaymentMethod('cash')">
                 <input type="radio" name="payment" value="cash" ${paymentMethod === 'cash' ? 'checked' : ''}>
@@ -1139,6 +1229,9 @@ function renderCheckout() {
     
     const { subtotal, discount, deliveryFee, freeDeliveryApplied, total } = calculateTotals();
     const minOrderAmountNow = getEffectiveMinimumOrderAmountForMethod(deliveryMethod);
+    const minCompareAmount = subtotal;
+    const minNotMet = (minOrderAmountNow > 0 && minCompareAmount < minOrderAmountNow);
+    const isClosed = (!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true);
 
     summarySection.innerHTML = `
         <div class="summary-row subtotal">
@@ -1161,15 +1254,15 @@ function renderCheckout() {
             <span data-translate="total">${translations[currentLanguage].total}</span>
             <span>${formatPrice(total)}</span>
         </div>
-        ${minOrderAmountNow > 0 && total < minOrderAmountNow ? `
+        ${minNotMet ? `
         <div class="order-warning">
             <i class="fas fa-exclamation-triangle"></i>
             ${currentLanguage === 'bg' ? 'Минимална сума за поръчка' : 'Minimum order amount'}: ${formatPrice(minOrderAmountNow)}
             <br>
-            ${currentLanguage === 'bg' ? 'Текуща сума' : 'Current amount'}: ${formatPrice(total)}
+            ${currentLanguage === 'bg' ? 'Текуща сума' : 'Current amount'}: ${formatPrice(minCompareAmount)}
         </div>
         ` : ''}
-        <button class="checkout-btn" type="button" onclick="placeOrder()" aria-disabled="${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (minOrderAmountNow > 0 && total < minOrderAmountNow) ? 'true' : 'false'}">
+        <button class="checkout-btn" type="button" onclick="placeOrder()" ${isClosed || minNotMet ? 'disabled' : ''} aria-disabled="${isClosed || minNotMet ? 'true' : 'false'}">
             ${deliveryMethod === 'delivery' 
                 ? (currentLanguage === 'bg' ? 'Поръчай с Доставка' : 'Order with Delivery')
                 : (currentLanguage === 'bg' ? 'Поръчай и Вземи' : 'Order and Pickup')}
@@ -1669,15 +1762,15 @@ function renderCartItems() {
         const itemElement = document.createElement('div');
         itemElement.className = 'cart-item';
         
-        const displayName = currentLanguage === 'bg' && item.translations?.bg?.name 
-            ? item.translations.bg.name 
-            : item.name;
+        const displayName = currentLanguage === 'bg'
+            ? (item.translations?.bg?.name || item.name)
+            : (item.translations?.en?.name || item.baseName || item.name);
 
         const displayNameForUi = displayName;
         
-        const displayCategory = currentLanguage === 'bg' && item.translations?.bg?.category 
-            ? item.translations.bg.category 
-            : item.category;
+        const displayCategory = currentLanguage === 'bg'
+            ? (item.translations?.bg?.category || item.category)
+            : (item.translations?.en?.category || item.category);
 
         const itemTotal = item.price * item.quantity;
 
@@ -1754,11 +1847,22 @@ function calculateTotals() {
     let freeDeliveryApplied = false;
     
     if (deliveryMethod === 'delivery') {
-        if (deliverySettings.freeDeliveryEnabled && subtotal >= deliverySettings.freeDeliveryAmount) {
+        const city = (customerInfo?.city || '').toString().trim();
+        const cityEntry = getCityDeliveryEntry(city);
+        const cityThreshold = cityEntry && Number.isFinite(cityEntry.freeDeliveryAmount)
+            ? Math.max(0, cityEntry.freeDeliveryAmount)
+            : null;
+
+        const globalThreshold = (deliverySettings.freeDeliveryEnabled && Number.isFinite(parseFloat(deliverySettings.freeDeliveryAmount)))
+            ? Math.max(0, parseFloat(deliverySettings.freeDeliveryAmount))
+            : null;
+
+        const threshold = (cityThreshold !== null) ? cityThreshold : globalThreshold;
+        if (threshold && subtotal >= threshold) {
             deliveryFee = 0;
             freeDeliveryApplied = true;
         } else {
-            deliveryFee = deliverySettings.deliveryFee || 5;
+            deliveryFee = getDeliveryFeeForCity(city);
         }
     }
     
@@ -1792,7 +1896,7 @@ async function applyPromoCode() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ code, category })
+                body: JSON.stringify({ code, category, deliveryMethod })
             });
 
             const data = await response.json();
@@ -1807,7 +1911,8 @@ async function applyPromoCode() {
             appliedPromo = {
                 code: code,
                 discount: validPromo.discount,
-                category: validPromo.category
+                category: validPromo.category,
+                allowedMethod: validPromo.allowedMethod || 'all'
             };
             message.textContent = translations[currentLanguage].promoSuccess;
             message.className = 'promo-message success';
@@ -1865,7 +1970,7 @@ async function placeOrder() {
     // Minimum order amount feedback (avoid a disabled button doing "nothing")
     const totalsNow = calculateTotals();
     const minAmount = getEffectiveMinimumOrderAmountForMethod(deliveryMethod);
-    if (minAmount > 0 && (totalsNow?.total || 0) < minAmount) {
+    if (minAmount > 0 && (totalsNow?.subtotal || 0) < minAmount) {
         alert(
             currentLanguage === 'bg'
                 ? `Минимална сума за поръчка: ${formatPrice(minAmount)}`
@@ -2154,6 +2259,12 @@ function selectDeliveryMethod(method) {
 
     deliveryMethod = method;
 
+    // If a promo code is restricted to a specific method, drop it when switching.
+    const promoAllowed = (appliedPromo?.allowedMethod || 'all').toString().trim().toLowerCase();
+    if (appliedPromo && (promoAllowed === 'delivery' || promoAllowed === 'pickup') && promoAllowed !== deliveryMethod) {
+        appliedPromo = null;
+    }
+
     if (deliveryMethod === 'delivery') {
         // Ensure delivery fee reflects the (possibly preselected) city.
         calculateDeliveryFee();
@@ -2224,6 +2335,18 @@ function selectOrderTime(time) {
         // After re-render, bring Step 3 (payment/customer) into the center of the viewport.
         // Use manual scrollTo because scrollIntoView({block:'center'}) is inconsistent across browsers.
         setTimeout(() => {
+            const isMobile = !!(window?.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+
+            // Delivery Step 3 is taller (city/address fields), so centering the whole step often
+            // lands the payment title at the top. For delivery+now on mobile, center the title.
+            if (deliveryMethod === 'delivery' && isMobile) {
+                const paymentTitle = document.getElementById('payment-method-title');
+                if (paymentTitle) {
+                    scrollElementToViewportCenter(paymentTitle);
+                    return;
+                }
+            }
+
             const step3 = document.getElementById('payment-customer-section');
             if (!step3) return;
             scrollElementToViewportCenter(step3);
@@ -2297,6 +2420,9 @@ function updateOrderSummary() {
     const { subtotal, discount, deliveryFee, freeDeliveryApplied, total } = calculateTotals();
     const restaurantClosedReason = getRestaurantClosedReason();
     const minOrderAmountNow = getEffectiveMinimumOrderAmountForMethod(deliveryMethod);
+    const minCompareAmount = subtotal;
+    const minNotMet = (minOrderAmountNow > 0 && minCompareAmount < minOrderAmountNow);
+    const isClosed = (!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true);
     
     summarySection.innerHTML = `
         <div class="summary-row subtotal">
@@ -2310,9 +2436,9 @@ function updateOrderSummary() {
         </div>
         ` : ''}
         ${deliveryMethod === 'delivery' ? `
-        <div class="summary-row delivery">
-            <span data-translate="deliveryFee">${translations[currentLanguage].deliveryFee}</span>
-            <span>${freeDeliveryApplied ? `<s>${formatPrice(deliveryFee)}</s> <span style="color: #27ae60; font-weight: 700;">FREE</span>` : formatPrice(deliveryFee)}</span>
+        <div class="summary-row ${freeDeliveryApplied ? 'promo' : ''}">
+            <span data-translate="deliveryFee">${freeDeliveryApplied ? translations[currentLanguage].freeDelivery : translations[currentLanguage].deliveryFee}</span>
+            <span>${freeDeliveryApplied ? formatPrice(0) : formatPrice(deliveryFee)}</span>
         </div>
         ` : ''}
         <div class="summary-row total">
@@ -2325,7 +2451,7 @@ function updateOrderSummary() {
             <span style="color: #e67e22; font-weight: 700;">${selectedTimeSlot}</span>
         </div>
         ` : ''}
-        ${minOrderAmountNow > 0 && total < minOrderAmountNow ? `
+        ${minNotMet ? `
         <div class="order-warning">
             <i class="fas fa-exclamation-triangle"></i>
             <span>${currentLanguage === 'bg' ? `Минимална сума за поръчка: ${formatPrice(minOrderAmountNow)}` : `Minimum order amount: ${formatPrice(minOrderAmountNow)}`}</span>
@@ -2337,7 +2463,7 @@ function updateOrderSummary() {
             <span>${currentLanguage === 'bg' ? 'Ресторантът е временно затворен.' : 'The restaurant is temporarily closed.'}</span>
         </div>
         ` : ''}
-        <button class="checkout-btn" type="button" onclick="placeOrder()" aria-disabled="${(!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true) || (minOrderAmountNow > 0 && total < minOrderAmountNow) ? 'true' : 'false'}">
+        <button class="checkout-btn" type="button" onclick="placeOrder()" ${isClosed || minNotMet ? 'disabled' : ''} aria-disabled="${isClosed || minNotMet ? 'true' : 'false'}">
             <i class="fas fa-${deliveryMethod === 'delivery' ? 'truck' : 'shopping-bag'}"></i>
             <span data-translate="placeOrder">${deliveryMethod === 'delivery' ? translations[currentLanguage].orderDelivery : translations[currentLanguage].orderPickup}</span>
         </button>

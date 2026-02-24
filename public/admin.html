@@ -659,6 +659,16 @@
                     <label for="city-price-input"><span data-translate="deliveryPriceEur">Delivery Price (EUR)</span>:</label>
                     <input type="number" id="city-price-input" step="0.01" min="0" placeholder="e.g., 5.00" data-translate-placeholder="deliveryPricePlaceholder">
                 </div>
+
+                <div class="form-group">
+                    <label for="city-min-order-input"><span data-translate="minimumOrderAmount">Minimum Order (EUR)</span>:</label>
+                    <input type="number" id="city-min-order-input" step="0.01" min="0" placeholder="e.g., 15.00">
+                </div>
+
+                <div class="form-group">
+                    <label for="city-free-delivery-input"><span data-translate="freeDeliveryAmount">Free Delivery Over (EUR)</span>:</label>
+                    <input type="number" id="city-free-delivery-input" step="0.01" min="0" placeholder="e.g., 30.00">
+                </div>
             </div>
 
             <button onclick="addCity()" class="btn btn-success">
@@ -815,6 +825,15 @@
                     <label for="promo-code-discount"><span data-translate="discountPercentage">Discount Percentage</span>:</label>
                     <input type="number" id="promo-code-discount" min="1" max="100" step="1" placeholder="e.g., 25" data-translate-placeholder="discountPercentPlaceholder">
                     <small data-translate="discountPercentHelp">Percentage discount (1-100%)</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="promo-code-method"><span data-translate="allowedMethod">Allowed Method</span>:</label>
+                    <select id="promo-code-method">
+                        <option value="all">All</option>
+                        <option value="delivery">Delivery</option>
+                        <option value="pickup">Pickup</option>
+                    </select>
                 </div>
 
                 <div class="form-group">

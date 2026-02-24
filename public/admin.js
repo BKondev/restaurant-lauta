@@ -4728,6 +4728,7 @@ async function savePromoCode() {
     const category = document.getElementById('promo-code-category').value;
     const discount = parseFloat(document.getElementById('promo-code-discount').value);
     const isActive = document.getElementById('promo-code-active').value === 'true';
+    const allowedMethod = (document.getElementById('promo-code-method')?.value || 'all').toString();
     
     if (!code) {
         alert(t('promoEnterCode', 'Please enter a promo code'));
@@ -4743,7 +4744,8 @@ async function savePromoCode() {
         code,
         category,
         discount,
-        isActive
+        isActive,
+        allowedMethod
     };
     
     try {
@@ -4797,6 +4799,8 @@ function editPromoCode(id) {
     document.getElementById('promo-code-category').value = promo.category;
     document.getElementById('promo-code-discount').value = promo.discount;
     document.getElementById('promo-code-active').value = promo.isActive.toString();
+    const methodSelect = document.getElementById('promo-code-method');
+    if (methodSelect) methodSelect.value = (promo.allowedMethod || 'all');
     
     document.getElementById('promo-submit-text').textContent = t('updatePromoCode', 'Update Promo Code');
     document.getElementById('cancel-promo-btn').style.display = 'inline-flex';
@@ -4838,6 +4842,8 @@ function resetPromoForm() {
     document.getElementById('promo-code-input').value = '';
     document.getElementById('promo-code-category').value = 'all';
     document.getElementById('promo-code-discount').value = '';
+    const methodSelect = document.getElementById('promo-code-method');
+    if (methodSelect) methodSelect.value = 'all';
     document.getElementById('promo-code-active').value = 'true';
     document.getElementById('promo-submit-text').textContent = t('addPromoCode', 'Add Promo Code');
     document.getElementById('cancel-promo-btn').style.display = 'none';
@@ -7257,13 +7263,41 @@ async function confirmBundleCreation() {
 
 let cities = [];
 
+function normalizeCityPriceEntry(value) {
+    if (value === undefined || value === null) return null;
+    if (typeof value === 'number' || typeof value === 'string') {
+        const fee = parseFloat(value);
+        return Number.isFinite(fee) ? { fee } : null;
+    }
+    if (typeof value !== 'object') return null;
+
+    const fee = parseFloat(value.fee ?? value.price ?? value.deliveryFee ?? value.deliveryPrice);
+    const minimumOrderAmount = parseFloat(value.minimumOrderAmount ?? value.minOrderAmount ?? value.minimumOrder ?? value.min);
+    const freeDeliveryAmount = parseFloat(value.freeDeliveryAmount ?? value.freeDeliveryOverAmount ?? value.freeOverAmount);
+
+    const out = {};
+    if (Number.isFinite(fee)) out.fee = fee;
+    if (Number.isFinite(minimumOrderAmount)) out.minimumOrderAmount = minimumOrderAmount;
+    if (Number.isFinite(freeDeliveryAmount)) out.freeDeliveryAmount = freeDeliveryAmount;
+    return Object.keys(out).length ? out : null;
+}
+
 async function loadCities() {
     try {
         const response = await fetch(`${API_URL}/settings/delivery`);
         const data = await response.json();
         
         if (data && data.cityPrices) {
-            cities = Object.entries(data.cityPrices).map(([name, price]) => ({ name, price }));
+            cities = Object.entries(data.cityPrices)
+                .map(([name, entry]) => {
+                    const norm = normalizeCityPriceEntry(entry) || {};
+                    return {
+                        name,
+                        price: Number.isFinite(norm.fee) ? norm.fee : 0,
+                        ...(Number.isFinite(norm.minimumOrderAmount) ? { minimumOrderAmount: norm.minimumOrderAmount } : {}),
+                        ...(Number.isFinite(norm.freeDeliveryAmount) ? { freeDeliveryAmount: norm.freeDeliveryAmount } : {})
+                    };
+                });
         } else {
             cities = [];
         }
@@ -7290,6 +7324,8 @@ function renderCities() {
                 <tr style="background: #f5f5f5;">
                     <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd;">${t('cityName', 'City Name')}</th>
                     <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">${t('deliveryPriceEur', 'Delivery Price (EUR)')}</th>
+                    <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">${t('minimumOrderAmount', 'Minimum Order (EUR)')}</th>
+                    <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">${t('freeDeliveryAmount', 'Free Delivery Over (EUR)')}</th>
                     <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">${t('actions', 'Actions')}</th>
                 </tr>
             </thead>
@@ -7298,6 +7334,8 @@ function renderCities() {
                     <tr style="border-bottom: 1px solid #eee;">
                         <td style="padding: 12px;">${city.name}</td>
                         <td style="padding: 12px; text-align: center;">€${parseFloat(city.price).toFixed(2)}</td>
+                        <td style="padding: 12px; text-align: center;">${Number.isFinite(parseFloat(city.minimumOrderAmount)) ? `€${parseFloat(city.minimumOrderAmount).toFixed(2)}` : '-'}</td>
+                        <td style="padding: 12px; text-align: center;">${Number.isFinite(parseFloat(city.freeDeliveryAmount)) ? `€${parseFloat(city.freeDeliveryAmount).toFixed(2)}` : '-'}</td>
                         <td style="padding: 12px; text-align: center;">
                             <button onclick="editCity(${index})" class="btn btn-sm" style="padding: 5px 10px; margin-right: 5px;">
                                 <i class="fas fa-edit"></i> ${t('edit', 'Edit')}
@@ -7316,9 +7354,13 @@ function renderCities() {
 async function addCity() {
     const nameInput = document.getElementById('city-name-input');
     const priceInput = document.getElementById('city-price-input');
+    const minInput = document.getElementById('city-min-order-input');
+    const freeInput = document.getElementById('city-free-delivery-input');
     
     const name = nameInput.value.trim();
     const price = parseFloat(priceInput.value);
+    const minimumOrderAmount = minInput && minInput.value !== '' ? parseFloat(minInput.value) : NaN;
+    const freeDeliveryAmount = freeInput && freeInput.value !== '' ? parseFloat(freeInput.value) : NaN;
     
     if (!name) {
         alert(t('enterCityName', 'Please enter a city name'));
@@ -7336,12 +7378,19 @@ async function addCity() {
         return;
     }
     
-    cities.push({ name, price });
+    cities.push({
+        name,
+        price,
+        ...(Number.isFinite(minimumOrderAmount) ? { minimumOrderAmount } : {}),
+        ...(Number.isFinite(freeDeliveryAmount) ? { freeDeliveryAmount } : {})
+    });
     
     await saveCities();
     
     nameInput.value = '';
     priceInput.value = '';
+    if (minInput) minInput.value = '';
+    if (freeInput) freeInput.value = '';
 }
 
 function editCity(index) {
@@ -7358,8 +7407,29 @@ function editCity(index) {
         alert(t('invalidPrice', 'Invalid price'));
         return;
     }
+
+    const newMin = prompt(t('minimumOrderAmount', 'Minimum Order (EUR):'), (city.minimumOrderAmount ?? '').toString());
+    if (newMin === null) return;
+    const minVal = String(newMin).trim() === '' ? NaN : parseFloat(newMin);
+    if (String(newMin).trim() !== '' && (isNaN(minVal) || minVal < 0)) {
+        alert(t('invalidPrice', 'Invalid price'));
+        return;
+    }
+
+    const newFree = prompt(t('freeDeliveryAmount', 'Free Delivery Over (EUR):'), (city.freeDeliveryAmount ?? '').toString());
+    if (newFree === null) return;
+    const freeVal = String(newFree).trim() === '' ? NaN : parseFloat(newFree);
+    if (String(newFree).trim() !== '' && (isNaN(freeVal) || freeVal < 0)) {
+        alert(t('invalidPrice', 'Invalid price'));
+        return;
+    }
     
-    cities[index] = { name: newName.trim(), price };
+    cities[index] = {
+        name: newName.trim(),
+        price,
+        ...(Number.isFinite(minVal) ? { minimumOrderAmount: minVal } : {}),
+        ...(Number.isFinite(freeVal) ? { freeDeliveryAmount: freeVal } : {})
+    };
     saveCities();
 }
 
@@ -7385,7 +7455,19 @@ async function saveCities() {
         // Convert cities array to object
         const cityPrices = {};
         cities.forEach(city => {
-            cityPrices[city.name] = city.price;
+            const fee = parseFloat(city.price);
+            const min = parseFloat(city.minimumOrderAmount);
+            const free = parseFloat(city.freeDeliveryAmount);
+            const hasExtras = Number.isFinite(min) || Number.isFinite(free);
+            if (hasExtras) {
+                cityPrices[city.name] = {
+                    fee: Number.isFinite(fee) ? fee : 0,
+                    ...(Number.isFinite(min) ? { minimumOrderAmount: min } : {}),
+                    ...(Number.isFinite(free) ? { freeDeliveryAmount: free } : {})
+                };
+            } else {
+                cityPrices[city.name] = Number.isFinite(fee) ? fee : 0;
+            }
         });
         
         const settings = {
@@ -7393,6 +7475,7 @@ async function saveCities() {
             freeDeliveryEnabled: currentSettings.freeDeliveryEnabled || false,
             freeDeliveryAmount: currentSettings.freeDeliveryAmount || 50,
             deliveryFee: currentSettings.deliveryFee || 5,
+            deliveryHours: currentSettings.deliveryHours,
             cityPrices: cityPrices
         };
         

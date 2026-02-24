@@ -178,28 +178,28 @@ function switchLanguage(lang) {
     
     // Update active button
     document.querySelectorAll('.lang-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.lang === lang);
+        btn.classList.toggle('active', btn.dataset.lang === currentLanguage);
     });
     
     // Update dropdown value
     const dropdown = document.getElementById('lang-dropdown');
     if (dropdown) {
-        dropdown.value = lang;
+        dropdown.value = currentLanguage;
     }
     
     // Update all translatable elements
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        if (translations[lang][key]) {
-            el.textContent = translations[lang][key];
+        if (translations[currentLanguage][key]) {
+            el.textContent = translations[currentLanguage][key];
         }
     });
     
     // Update placeholders
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         const key = el.getAttribute('data-i18n-placeholder');
-        if (translations[lang][key]) {
-            el.placeholder = translations[lang][key];
+        if (translations[currentLanguage][key]) {
+            el.placeholder = translations[currentLanguage][key];
         }
     });
     
@@ -211,6 +211,9 @@ function switchLanguage(lang) {
     renderProducts();
 
     renderRestaurantStatusBanner();
+
+    try { renderSiteMap(); } catch (e) {}
+    try { renderSiteFooter(); } catch (e) {}
 }
 
 function parseHHMMToMinutes(hhmm) {
@@ -1543,6 +1546,7 @@ function addToCartWithQuantity(productId, quantity) {
         cart.push({
             id: product.id,
             name: currentLanguage === 'bg' && product.translations?.bg?.name ? product.translations.bg.name : product.name,
+            baseName: product.name,
             price: effectivePrice,
             originalPrice,
             ...(discountLabel ? { discountLabel } : {}),

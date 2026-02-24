@@ -3204,19 +3204,32 @@ app.put(API_PREFIX + '/products/promo/category/:category', requireAuth, (req, re
 // Validate promo code (public route for customers)
 app.post(API_PREFIX + '/promo-codes/validate', (req, res) => {
     const db = readDatabase();
-    const { code, category } = req.body;
+    const { code, category, deliveryMethod } = req.body;
+
+    const normalizedMethod = (deliveryMethod === 'delivery' || deliveryMethod === 'pickup') ? deliveryMethod : null;
     
-    const promoCode = (db.promoCodes || []).find(pc => 
-        pc.code.toLowerCase() === code.toLowerCase() && 
-        pc.isActive &&
-        (pc.category === 'all' || pc.category === category)
-    );
+    const promoCode = (db.promoCodes || []).find(pc => {
+        if (!pc) return false;
+        const pcCode = (pc.code || '').toString().toLowerCase();
+        const inCode = (code || '').toString().toLowerCase();
+        if (!pcCode || !inCode || pcCode !== inCode) return false;
+        if (!pc.isActive) return false;
+        if (!(pc.category === 'all' || pc.category === category)) return false;
+
+        const allowed = (pc.allowedMethod || 'all').toString().trim().toLowerCase();
+        if (allowed === 'delivery' || allowed === 'pickup') {
+            if (!normalizedMethod) return false;
+            if (allowed !== normalizedMethod) return false;
+        }
+        return true;
+    });
     
     if (promoCode) {
         res.json({
             valid: true,
             discount: promoCode.discount,
-            category: promoCode.category
+            category: promoCode.category,
+            allowedMethod: (promoCode.allowedMethod || 'all')
         });
     } else {
         res.json({ valid: false });
@@ -3226,12 +3239,15 @@ app.post(API_PREFIX + '/promo-codes/validate', (req, res) => {
 // Create promo code
 app.post(API_PREFIX + '/promo-codes', requireAuth, (req, res) => {
     const db = readDatabase();
+    const allowedMethodRaw = (req.body.allowedMethod || 'all').toString().trim().toLowerCase();
+    const allowedMethod = (allowedMethodRaw === 'delivery' || allowedMethodRaw === 'pickup' || allowedMethodRaw === 'all') ? allowedMethodRaw : 'all';
     const newPromoCode = {
         id: Date.now(),
         code: req.body.code.toUpperCase(),
         category: req.body.category,
         discount: parseFloat(req.body.discount),
         isActive: req.body.isActive !== undefined ? req.body.isActive : true,
+        allowedMethod,
         createdAt: new Date().toISOString()
     };
     
@@ -3268,6 +3284,8 @@ app.post(API_PREFIX + '/promo-codes/bulk', requireAuth, (req, res) => {
     const discount = parseFloat(req.body?.discount);
     const category = (req.body?.category || 'all').toString();
     const isActive = req.body?.isActive !== undefined ? !!req.body.isActive : true;
+    const allowedMethodRaw = (req.body?.allowedMethod || 'all').toString().trim().toLowerCase();
+    const allowedMethod = (allowedMethodRaw === 'delivery' || allowedMethodRaw === 'pickup' || allowedMethodRaw === 'all') ? allowedMethodRaw : 'all';
 
     let prefix = (req.body?.codePrefix || 'FLY').toString().trim().toUpperCase();
     prefix = prefix.replace(/[^A-Z0-9]/g, '').slice(0, 10);
@@ -3306,6 +3324,7 @@ app.post(API_PREFIX + '/promo-codes/bulk', requireAuth, (req, res) => {
             category,
             discount: parseFloat(discount),
             isActive,
+            allowedMethod,
             createdAt: nowIso
         };
 
@@ -3326,12 +3345,15 @@ app.put(API_PREFIX + '/promo-codes/:id', requireAuth, (req, res) => {
     const index = (db.promoCodes || []).findIndex(pc => pc.id === parseInt(req.params.id));
     
     if (index !== -1) {
+        const allowedMethodRaw = (req.body.allowedMethod || 'all').toString().trim().toLowerCase();
+        const allowedMethod = (allowedMethodRaw === 'delivery' || allowedMethodRaw === 'pickup' || allowedMethodRaw === 'all') ? allowedMethodRaw : 'all';
         db.promoCodes[index] = {
             id: parseInt(req.params.id),
             code: req.body.code.toUpperCase(),
             category: req.body.category,
             discount: parseFloat(req.body.discount),
             isActive: req.body.isActive,
+            allowedMethod,
             createdAt: db.promoCodes[index].createdAt,
             updatedAt: new Date().toISOString()
         };
@@ -3652,6 +3674,75 @@ function recomputeOrderTotals(order) {
         order.ownerDiscountAmount = 0;
         order.finalTotal = total;
     }
+}
+
+function normalizeCityPriceEntry(value) {
+    if (value === undefined || value === null) return null;
+    if (typeof value === 'number' || typeof value === 'string') {
+        const fee = parseFloat(value);
+        return Number.isFinite(fee) ? { fee } : null;
+    }
+    if (typeof value !== 'object') return null;
+
+    const feeRaw = value.fee ?? value.price ?? value.deliveryFee ?? value.deliveryPrice;
+    const minRaw = value.minimumOrderAmount ?? value.minOrderAmount ?? value.minimumOrder ?? value.min;
+    const freeRaw = value.freeDeliveryAmount ?? value.freeDeliveryOverAmount ?? value.freeOverAmount;
+
+    const fee = parseFloat(feeRaw);
+    const minimumOrderAmount = parseFloat(minRaw);
+    const freeDeliveryAmount = parseFloat(freeRaw);
+
+    const out = {};
+    if (Number.isFinite(fee)) out.fee = fee;
+    if (Number.isFinite(minimumOrderAmount)) out.minimumOrderAmount = minimumOrderAmount;
+    if (Number.isFinite(freeDeliveryAmount)) out.freeDeliveryAmount = freeDeliveryAmount;
+    return Object.keys(out).length ? out : null;
+}
+
+function getCityDeliveryEntry(deliverySettings, cityRaw) {
+    const city = (cityRaw || '').toString().trim();
+    const prices = deliverySettings?.cityPrices || {};
+    if (!city) return null;
+
+    if (prices && prices[city] !== undefined) {
+        return normalizeCityPriceEntry(prices[city]);
+    }
+
+    const cityNorm = city.toLowerCase();
+    for (const [key, value] of Object.entries(prices)) {
+        if (String(key).trim().toLowerCase() === cityNorm) {
+            return normalizeCityPriceEntry(value);
+        }
+    }
+
+    const fallbackKeys = ['Други', 'Other', 'other', '*', 'default'];
+    for (const k of fallbackKeys) {
+        if (prices && prices[k] !== undefined) {
+            return normalizeCityPriceEntry(prices[k]);
+        }
+    }
+
+    return null;
+}
+
+function computeEffectiveDeliveryFee(deliverySettings, cityRaw, subtotal) {
+    const settings = deliverySettings || {};
+    const cityEntry = getCityDeliveryEntry(settings, cityRaw);
+    const baseFee = Number.isFinite(parseFloat(cityEntry?.fee))
+        ? parseFloat(cityEntry.fee)
+        : (Number.isFinite(parseFloat(settings.deliveryFee)) ? parseFloat(settings.deliveryFee) : 5);
+
+    const cityThreshold = Number.isFinite(parseFloat(cityEntry?.freeDeliveryAmount)) ? Math.max(0, parseFloat(cityEntry.freeDeliveryAmount)) : null;
+    const globalThreshold = (settings.freeDeliveryEnabled && Number.isFinite(parseFloat(settings.freeDeliveryAmount)))
+        ? Math.max(0, parseFloat(settings.freeDeliveryAmount))
+        : null;
+    const threshold = (cityThreshold !== null) ? cityThreshold : globalThreshold;
+
+    if (threshold && subtotal >= threshold) {
+        return 0;
+    }
+
+    return Math.max(0, baseFee);
 }
 
 function decorateOrderPayment(order) {
@@ -4357,17 +4448,54 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             trackingExpiry: trackingExpiry.toISOString()
         };
 
+        // Enforce promo allowedMethod server-side (method restriction only).
+        const promoCodeNormalized = (newOrder.promoCode || '').toString().trim().toLowerCase();
+        if (promoCodeNormalized) {
+            const promo = (data.promoCodes || []).find(pc => (pc?.code || '').toString().trim().toLowerCase() === promoCodeNormalized);
+            if (promo && promo.isActive) {
+                const allowed = (promo.allowedMethod || 'all').toString().trim().toLowerCase();
+                if ((allowed === 'delivery' || allowed === 'pickup') && allowed !== normalizedDeliveryMethod) {
+                    return res.status(400).json({
+                        error: 'Promo code not valid for delivery method',
+                        message: 'Promo code is not allowed for this delivery method',
+                        allowedMethod: allowed,
+                        deliveryMethod: normalizedDeliveryMethod
+                    });
+                }
+            }
+        }
+
+        // Enforce delivery fee/free-delivery server-side (do not trust client-provided deliveryFee).
+        const itemsSubtotal = (sanitizedItems || []).reduce((sum, it) => sum + (parseNumber(it.price, 0) * parseNumber(it.quantity, 0)), 0);
+        const deliverySettings = data.deliverySettings || {};
+        if (normalizedDeliveryMethod === 'delivery') {
+            const city = (newOrder.customerInfo?.city || '').toString().trim();
+            newOrder.deliveryFee = computeEffectiveDeliveryFee(deliverySettings, city, itemsSubtotal);
+        } else {
+            newOrder.deliveryFee = 0;
+        }
+
         // Ensure totals are consistent server-side (and rounded correctly).
         recomputeOrderTotals(newOrder);
 
         // Enforce minimum order amount per fulfillment method (server-side)
-        const effectiveMinAmount = getEffectiveMinimumOrderAmount(orderSettings, normalizedDeliveryMethod);
-        if (effectiveMinAmount > 0 && parseNumber(newOrder.total, 0) < effectiveMinAmount) {
+        let effectiveMinAmount = getEffectiveMinimumOrderAmount(orderSettings, normalizedDeliveryMethod);
+        if (normalizedDeliveryMethod === 'delivery') {
+            const city = (newOrder.customerInfo?.city || '').toString().trim();
+            const cityEntry = getCityDeliveryEntry(deliverySettings, city);
+            const cityMin = cityEntry && Number.isFinite(parseFloat(cityEntry.minimumOrderAmount)) ? Math.max(0, parseFloat(cityEntry.minimumOrderAmount)) : NaN;
+            if (Number.isFinite(cityMin)) {
+                effectiveMinAmount = cityMin;
+            }
+        }
+
+        // Minimum order compares against items subtotal (excluding delivery fee).
+        if (effectiveMinAmount > 0 && parseNumber(newOrder.subtotal, 0) < effectiveMinAmount) {
             return res.status(400).json({
                 error: 'Minimum order amount not reached',
                 message: 'Order total is below the minimum required amount',
                 minimumOrderAmount: effectiveMinAmount,
-                currentTotal: parseNumber(newOrder.total, 0),
+                currentSubtotal: parseNumber(newOrder.subtotal, 0),
                 deliveryMethod: normalizedDeliveryMethod
             });
         }
