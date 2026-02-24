@@ -6543,6 +6543,19 @@ function renderPendingOrders() {
             </div>
         `).join('');
 
+        const promoCodeAny = (
+            order.promoCode ||
+            order.promo_code ||
+            order.couponCode ||
+            order.coupon_code ||
+            (order.promo && order.promo.code) ||
+            (order.coupon && order.coupon.code) ||
+            ''
+        ).toString().trim();
+        const discountPctAny = Math.max(0, Math.min(100, Number(
+            order.discount ?? order.discountPercent ?? order.discount_percent ?? 0
+        ) || 0));
+
         const summaryLine = `${formattedDate} ${formattedTime} • ${order.customerInfo?.name || ''} • ${(order.total || 0).toFixed(2)} €`;
 
         return `
@@ -6575,7 +6588,7 @@ function renderPendingOrders() {
                         <div class="order-section">
                             <h4><i class="fas fa-shopping-cart"></i> Поръчани Продукти</h4>
                             <div class="order-items">${itemsList}</div>
-                            ${order.promoCode ? `<div class="order-info-row" style="margin-top: 10px; color: #27ae60;"><span class="order-info-label">Промо код:</span><span class="order-info-value">${order.promoCode} (-${order.discount}%)</span></div>` : ''}
+                            ${promoCodeAny ? `<div class="order-info-row" style="margin-top: 10px; color: #27ae60;"><span class="order-info-label">Промо код:</span><span class="order-info-value">${promoCodeAny}${discountPctAny ? ` (-${discountPctAny}%)` : ''}</span></div>` : ''}
                             ${(order.deliveryFee && order.deliveryFee > 0) ? `<div class="order-info-row" style="margin-top: 10px;"><span class="order-info-label">Такса доставка:</span><span class="order-info-value">${Number(order.deliveryFee || 0).toFixed(2)} €</span></div>` : ''}
                             ${method === 'delivery' && (!order.deliveryFee || order.deliveryFee === 0) ? `<div class="order-info-row" style="margin-top: 10px; color: #27ae60;"><span class="order-info-label">Безплатна доставка!</span><span class="order-info-value">0.00 €</span></div>` : ''}
                             ${order.ownerDiscount && order.ownerDiscount > 0 ? `<div class="order-info-row" style="margin-top: 10px; color: #e67e22;"><span class="order-info-label">Отстъпка от собственик:</span><span class="order-info-value">-${Number(order.ownerDiscountAmount || 0).toFixed(2)} € (${order.ownerDiscount}%)</span></div>` : ''}

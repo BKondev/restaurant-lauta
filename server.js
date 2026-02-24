@@ -4309,6 +4309,53 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
             items = [];
         }
 
+        function extractPromoCodeAny(o) {
+            const candidates = [
+                o?.promoCode,
+                o?.promo_code,
+                o?.promo,
+                o?.promo?.code,
+                o?.coupon,
+                o?.couponCode,
+                o?.coupon_code,
+                o?.coupon?.code,
+                o?.discountCode,
+                o?.discount_code
+            ];
+            for (const c of candidates) {
+                if (typeof c === 'string') {
+                    const trimmed = c.trim();
+                    if (trimmed) return trimmed;
+                }
+            }
+            return '';
+        }
+
+        // Some legacy/alternate order writers may omit computed totals or use different keys.
+        // Derive safe display values for public tracking pages.
+        const computedItemsSubtotal = (items || []).reduce((sum, it) => sum + (parseNumber(it.price, 0) * parseNumber(it.quantity, 0)), 0);
+        const subtotalRaw = order.subtotal ?? order.sub_total ?? order.itemsSubtotal ?? order.items_subtotal;
+        const subtotalNum = parseNumber(subtotalRaw, NaN);
+        const effectiveSubtotal = (Number.isFinite(subtotalNum) && subtotalNum > 0) ? subtotalNum : computedItemsSubtotal;
+
+        const discountPctRaw = order.discount ?? order.discountPercent ?? order.discount_percent ?? order.promoDiscount ?? order.promo_discount;
+        const discountPctNum = Math.max(0, Math.min(100, parseNumber(discountPctRaw, 0)));
+
+        const discountAmountRaw = order.discountAmount ?? order.discount_amount ?? order.promoDiscountAmount ?? order.promo_discount_amount;
+        const discountAmountNumRaw = parseNumber(discountAmountRaw, NaN);
+        const effectiveDiscountAmount = Number.isFinite(discountAmountNumRaw)
+            ? discountAmountNumRaw
+            : (effectiveSubtotal * (discountPctNum / 100));
+
+        const deliveryFeeRaw = order.deliveryFee ?? order.delivery_fee ?? order.deliveryPrice ?? order.delivery_price;
+        const deliveryFeeNum = Math.max(0, parseNumber(deliveryFeeRaw, 0));
+
+        const totalRaw = order.total ?? order.totalAmount ?? order.total_amount;
+        const totalNum = parseNumber(totalRaw, NaN);
+        const effectiveTotal = Number.isFinite(totalNum)
+            ? totalNum
+            : Math.max(0, effectiveSubtotal - effectiveDiscountAmount + deliveryFeeNum);
+
         function extractHHMM(value) {
             if (value == null) return '';
             const s = String(value).trim();
@@ -4338,12 +4385,12 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
             id: order.id,
             status: order.status,
             currency: 'EUR',
-            subtotal: parseNumber(order.subtotal, 0),
-            discount: Math.max(0, Math.min(100, parseNumber(order.discount, 0))),
-            discountAmount: parseNumber(order.discountAmount, 0),
-            deliveryFee: parseNumber(order.deliveryFee, 0),
-            promoCode: (order.promoCode || '').toString().trim() || null,
-            total: parseNumber(order.total, 0),
+            subtotal: parseNumber(effectiveSubtotal, 0),
+            discount: discountPctNum,
+            discountAmount: parseNumber(effectiveDiscountAmount, 0),
+            deliveryFee: parseNumber(deliveryFeeNum, 0),
+            promoCode: extractPromoCodeAny(order) || null,
+            total: parseNumber(effectiveTotal, 0),
             deliveryMethod: order.deliveryMethod,
             estimatedTime: order.estimatedTime || 60,
             createdAt: order.createdAt,
@@ -4383,6 +4430,11 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             restaurantId,
             paymentMethod
         } = req.body;
+
+        // Be tolerant of legacy/alternate clients.
+        const promoCodeAny = promoCode ?? req.body?.promo_code ?? req.body?.couponCode ?? req.body?.coupon_code;
+        const discountAny = discount ?? req.body?.discountPercent ?? req.body?.discount_percent;
+        const totalAny = total ?? req.body?.totalAmount ?? req.body?.total_amount;
         
         // Get restaurant ID from body or X-Restaurant-Id header.
         // In single-restaurant deployments we allow a safe fallback.
@@ -4529,9 +4581,9 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             restaurantId: targetRestaurantId,
             restaurantName: restaurant.name,
             items: sanitizedItems,
-            promoCode: (promoCode || '').toString().trim() || undefined,
-            discount: Math.max(0, Math.min(100, parseNumber(discount, 0))),
-            total: parseNumber(total, 0),
+            promoCode: (promoCodeAny || '').toString().trim() || undefined,
+            discount: Math.max(0, Math.min(100, parseNumber(discountAny, 0))),
+            total: parseNumber(totalAny, 0),
             // Keep existing field for backward compatibility across UI surfaces
             deliveryMethod,
             // Normalized field for future flows
