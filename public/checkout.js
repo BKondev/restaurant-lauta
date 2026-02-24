@@ -1505,15 +1505,59 @@ function getDeliveryWindowMinutes() {
     return { open, close };
 }
 
-function getMinAllowedTimeMinutes() {
+function getWindowSelectionModel() {
     const window = getAllowedWindowMinutes();
+    const open = window.open;
+    const closeRaw = window.close;
     const now = nowMinutesOfDay();
-    const minFromNow = roundUpTo15Minutes(now + 60);
+
+    if (!Number.isFinite(open) || !Number.isFinite(closeRaw)) {
+        return {
+            openExt: open,
+            closeExt: closeRaw,
+            closeRaw,
+            nowExt: now,
+            overnight: false
+        };
+    }
+
+    if (closeRaw > open) {
+        return {
+            openExt: open,
+            closeExt: closeRaw,
+            closeRaw,
+            nowExt: now,
+            overnight: false
+        };
+    }
+
+    // Overnight window: close is next day.
+    const closeExt = closeRaw + (24 * 60);
+    const nowExt = (now < closeRaw) ? (now + (24 * 60)) : now;
+    return {
+        openExt: open,
+        closeExt,
+        closeRaw,
+        nowExt,
+        overnight: true
+    };
+}
+
+function normalizePickedMinutesToSelection(pickedMinutes, model) {
+    if (!Number.isFinite(pickedMinutes)) return pickedMinutes;
+    if (!model || !model.overnight) return pickedMinutes;
+    // If picked time is in the "next day" segment (00:00 -> closeRaw), shift it.
+    return pickedMinutes < model.closeRaw ? (pickedMinutes + (24 * 60)) : pickedMinutes;
+}
+
+function getMinAllowedTimeMinutes() {
+    const model = getWindowSelectionModel();
+    const minFromNow = roundUpTo15Minutes(model.nowExt + 60);
 
     // If we're before opening, earliest selectable is (opening + 60 minutes).
-    const minFromOpening = now < window.open
-        ? roundUpTo15Minutes(window.open + 60)
-        : window.open;
+    const minFromOpening = model.nowExt < model.openExt
+        ? roundUpTo15Minutes(model.openExt + 60)
+        : model.openExt;
 
     return Math.max(minFromNow, minFromOpening);
 }
@@ -1671,7 +1715,10 @@ function showUxModal({ title, message, primaryText }) {
 function showWorkingHoursModal() {
     const restaurant = getRestaurantWindowMinutes();
     const open = minutesToHHMM(restaurant.open);
-    const close = minutesToHHMM(restaurant.close);
+    const overnight = restaurant.close <= restaurant.open;
+    const close = overnight
+        ? `${minutesToHHMM(restaurant.close)}${currentLanguage === 'bg' ? ' (утре)' : ' (next day)'}`
+        : minutesToHHMM(restaurant.close);
     showRestaurantClosedModal({
         type: 'hours',
         context: 'restaurant',
@@ -1682,11 +1729,14 @@ function showWorkingHoursModal() {
 
 function showDeliveryHoursModal() {
     const delivery = getDeliveryWindowMinutes();
+    const overnight = delivery.close <= delivery.open;
     showRestaurantClosedModal({
         type: 'hours',
         context: 'delivery',
         open: minutesToHHMM(delivery.open),
-        close: minutesToHHMM(delivery.close)
+        close: overnight
+            ? `${minutesToHHMM(delivery.close)}${currentLanguage === 'bg' ? ' (утре)' : ' (next day)'}`
+            : minutesToHHMM(delivery.close)
     });
 }
 
@@ -1757,9 +1807,9 @@ function initializeTimePicker() {
     if (getRestaurantClosedReason()) return;
     if (orderTime !== 'later') return;
 
-    const window = getAllowedWindowMinutes();
+    const model = getWindowSelectionModel();
     const minAllowed = getMinAllowedTimeMinutes();
-    const maxAllowed = window.close;
+    const maxAllowed = model.closeExt;
 
     if (maxAllowed < minAllowed) {
         selectedTimeSlot = '';
@@ -1768,7 +1818,8 @@ function initializeTimePicker() {
         return;
     }
 
-    const current = parseHHMMToMinutes(selectedTimeSlot);
+    const currentRaw = parseHHMMToMinutes(selectedTimeSlot);
+    const current = currentRaw === null ? null : normalizePickedMinutesToSelection(currentRaw, model);
     const clamped = current === null ? minAllowed : Math.min(Math.max(current, minAllowed), maxAllowed);
     selectedTimeSlot = minutesToHHMM(clamped);
     updateTimeDisplay();
@@ -1782,15 +1833,16 @@ function adjustTime(minutes) {
         return;
     }
 
-    const current = parseHHMMToMinutes(selectedTimeSlot);
+    const model = getWindowSelectionModel();
+    const currentRaw = parseHHMMToMinutes(selectedTimeSlot);
+    const current = currentRaw === null ? null : normalizePickedMinutesToSelection(currentRaw, model);
     if (current === null) {
         initializeTimePicker();
         return;
     }
 
-    const window = getAllowedWindowMinutes();
     const minAllowed = getMinAllowedTimeMinutes();
-    const maxAllowed = window.close;
+    const maxAllowed = model.closeExt;
 
     if (maxAllowed < minAllowed) {
         initializeTimePicker();
@@ -2131,14 +2183,14 @@ async function placeOrder() {
     if (orderTime === 'now') {
         const restaurant = getRestaurantWindowMinutes();
         const nowMins = nowMinutesOfDay();
-        if (nowMins < restaurant.open || nowMins >= restaurant.close) {
+        if (!isMinutesWithinWindow(nowMins, restaurant.open, restaurant.close)) {
             showWorkingHoursModal();
             return;
         }
 
         if (deliveryMethod === 'delivery') {
             const delivery = getDeliveryWindowMinutes();
-            if (nowMins < delivery.open || nowMins >= delivery.close) {
+            if (!isMinutesWithinWindow(nowMins, delivery.open, delivery.close)) {
                 showDeliveryHoursModal();
                 return;
             }
@@ -2152,9 +2204,10 @@ async function placeOrder() {
             return;
         }
 
-        const window = getAllowedWindowMinutes();
+        const model = getWindowSelectionModel();
+        const pickedExt = normalizePickedMinutesToSelection(picked, model);
         const minAllowed = getMinAllowedTimeMinutes();
-        if (picked < minAllowed || picked > window.close) {
+        if (pickedExt < minAllowed || pickedExt > model.closeExt) {
             // Force a valid time and explain constraints.
             initializeTimePicker();
             if (deliveryMethod === 'delivery' && nowMinutesOfDay() < getDeliveryWindowMinutes().open) {
