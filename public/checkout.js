@@ -221,6 +221,23 @@ function applyCheckoutStepVisibility() {
     }
 }
 
+function scrollElementToViewportCenter(el) {
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    if (!rect || !Number.isFinite(rect.top)) return;
+
+    // If element is hidden, scrolling won't work.
+    if (rect.width === 0 && rect.height === 0) return;
+
+    const scrollY = (window.pageYOffset || document.documentElement.scrollTop || 0);
+    const absoluteTop = rect.top + scrollY;
+    const elCenterOffset = rect.height / 2;
+    const target = Math.max(0, absoluteTop - (window.innerHeight / 2) + elCenterOffset);
+
+    window.scrollTo({ top: target, behavior: 'smooth' });
+}
+
 function saveCheckoutState() {
     try {
         const state = {
@@ -2203,6 +2220,14 @@ function selectOrderTime(time) {
                 block: isMobile ? 'center' : 'nearest'
             });
         }, 100);
+    } else if (time === 'now') {
+        // After re-render, bring Step 3 (payment/customer) into the center of the viewport.
+        // Use manual scrollTo because scrollIntoView({block:'center'}) is inconsistent across browsers.
+        setTimeout(() => {
+            const step3 = document.getElementById('payment-customer-section');
+            if (!step3) return;
+            scrollElementToViewportCenter(step3);
+        }, 150);
     }
 }
 

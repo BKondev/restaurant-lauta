@@ -61,6 +61,7 @@
 
       <div class="thankyou-actions">
         <a id="ty-menu" class="btn-primary" href="/">Back to menu</a>
+        <a id="ty-call" class="btn-secondary" href="#" style="display:none;">Call restaurant</a>
         <a id="ty-track" class="btn-secondary" href="#" style="display:none;">Track order</a>
       </div>
     </div>
@@ -121,6 +122,7 @@
           deliveryFee: 'Delivery fee',
            savings: 'You saved',
           orderNote: 'Order note'
+          ,callRestaurant: 'Call restaurant'
         },
         bg: {
           thankYou: 'Благодарим!',
@@ -149,6 +151,7 @@
           deliveryFee: 'Доставка',
            savings: 'Спестявате',
           orderNote: 'Бележка към поръчката'
+          ,callRestaurant: 'Обади се на ресторанта'
         }
       };
 
@@ -218,6 +221,13 @@
           if (!mount) return;
           mount.style.display = '';
           mount.innerHTML = `${t('phone')}: <a href="tel:${encodeURIComponent(phone)}">${phone}</a>`;
+
+          const callBtn = document.getElementById('ty-call');
+          if (callBtn) {
+            callBtn.href = `tel:${encodeURIComponent(phone)}`;
+            callBtn.textContent = t('callRestaurant');
+            callBtn.style.display = '';
+          }
         } catch (e) {
           // ignore
         }

@@ -1388,6 +1388,7 @@ document.addEventListener('DOMContentLoaded', function() {
         initProductSearchUI();
         loadProductsForSearch();
         loadDeliverySettings();
+        loadOrderSettings();
         loadCities();
         loadProductsForCombo();
         startOrdersPolling();
@@ -3382,7 +3383,7 @@ function applyMinimumOrderUiState() {
 }
 
 async function updateOrderSettings() {
-    const token = sessionStorage.getItem('adminToken');
+    const token = getAdminToken();
     if (!token) {
         alert('Please login first');
         return;
@@ -3410,6 +3411,8 @@ async function updateOrderSettings() {
 
         if (response.ok) {
             alert(t('orderSettingsUpdated', 'Order settings updated successfully!'));
+            // Re-load from server so the UI reflects what was persisted.
+            loadOrderSettings();
         } else {
             alert(t('orderSettingsFailedUpdate', 'Failed to update order settings'));
         }

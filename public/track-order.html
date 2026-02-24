@@ -560,6 +560,7 @@
                 orderNote: 'Order note',
                 home: 'Home',
                 newOrder: 'New order',
+                callRestaurant: 'Call restaurant',
                 error: 'Error',
                 errorLoadTitle: 'Could not load the order',
                 errorMissingId: 'Order number is missing.',
@@ -611,6 +612,7 @@
                 orderNote: 'Бележка към поръчката',
                 home: 'Начало',
                 newOrder: 'Нова поръчка',
+                callRestaurant: 'Обади се на ресторанта',
                 error: 'Грешка',
                 errorLoadTitle: 'Не можахме да заредим поръчката',
                 errorMissingId: 'Не е посочен номер на поръчка.',
@@ -986,6 +988,11 @@
                     <a href="${BASE_PATH}/" class="btn btn-secondary">
                         <i class="fas fa-home"></i> ${t('home')}
                     </a>
+                    ${contactsPhone ? `
+                        <a href="tel:${encodeURIComponent(contactsPhone)}" class="btn btn-secondary">
+                            <i class="fas fa-phone"></i> ${t('callRestaurant')}
+                        </a>
+                    ` : ''}
                     <a href="${BASE_PATH}/" class="btn btn-primary">
                         <i class="fas fa-utensils"></i> ${t('newOrder')}
                     </a>
