@@ -849,10 +849,10 @@
             }, 0));
             const totalSavings = round2(itemsSavings + Math.max(0, discountAmount));
 
-            const itemsHtml = items.length ? `
+            const itemsHtml = `
                 <div class="items-info">
                     <div class="items-title">${t('itemsTitle')}</div>
-                    ${items.map((it) => {
+                    ${items.length ? items.map((it) => {
                         const name = escapeHtml((it && it.name) ? String(it.name) : '');
                         const note = ((it && (it.note || it.notes)) ? String(it.note || it.notes) : '').replace(/\r/g, '').trim();
                         const noteHtml = note ? `<div class="item-note">${escapeHtml(note)}</div>` : '';
@@ -877,7 +877,12 @@
                                 <div class="item-price">${formatMoney(line, currency)}</div>
                             </div>
                         `;
-                    }).join('')}
+                    }).join('') : `
+                        <div class="item-row">
+                            <div class="item-name">(Няма артикули)</div>
+                            <div class="item-price">—</div>
+                        </div>
+                    `}
 
                     ${(promoCode || discountAmount > 0) ? `
                         <div class="item-row">
@@ -921,7 +926,7 @@
                         </div>
                     ` : ''}
                 </div>
-            ` : '';
+            `;
 
             const html = `
                 <div class="header">
@@ -973,6 +978,12 @@
                         <span class="order-label">${t('total')}</span>
                         <span class="order-value">${formatMoney(order.total, currency)}</span>
                     </div>
+                    ${(promoCode || discountAmount > 0) ? `
+                        <div class="order-row">
+                            <span class="order-label">${t('promo')}</span>
+                            <span class="order-value">${promoCode ? `${escapeHtml(promoCode)}${discountPct ? ` (-${escapeHtml(discountPct)}%)` : ''}` : (discountPct ? `-${escapeHtml(discountPct)}%` : '—')}</span>
+                        </div>
+                    ` : ''}
                     ${contactsPhone ? `
                         <div class="order-row">
                             <span class="order-label">${t('phone')}</span>

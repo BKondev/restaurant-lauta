@@ -337,16 +337,15 @@
           orderData = o || null;
           renderHero();
           const items = Array.isArray(o?.items) ? o.items : [];
-          if (!items.length) return;
 
           const currency = o?.currency || 'EUR';
 
           const mount = document.getElementById('ty-items');
           if (!mount) return;
 
-          const rows = items.map((it) => {
+          const rows = items.length ? items.map((it) => {
             const name = escapeHtml((it?.name || '').toString());
-            const note = ((it?.note || '').toString().replace(/\r/g, '').trim());
+            const note = ((it?.note || it?.notes || '').toString().replace(/\r/g, '').trim());
             const noteHtml = note ? `<div class="items-note">${escapeHtml(note)}</div>` : '';
             const qty = Number(it?.quantity || 0);
             const price = Number(it?.price || 0);
@@ -370,7 +369,12 @@
                 <div class="items-price">${formatMoney(lineTotal, currency)}</div>
               </div>
             `;
-          }).join('');
+          }).join('') : `
+            <div class="items-row">
+              <div class="items-name">(Няма артикули)</div>
+              <div class="items-price">—</div>
+            </div>
+          `;
 
           const subtotal = toNumber(o?.subtotal);
           const discountAmount = toNumber(o?.discountAmount);
@@ -450,6 +454,7 @@
             summary.innerHTML = `
               <div>${customerName ? `${t('hello')}, <strong>${escapeHtml(customerName)}</strong>` : `${t('hello')},`}</div>
               <div style="margin-top:6px; color:#555;">${escapeHtml(deliveryText)}</div>
+              ${promoLine ? `<div style="margin-top:6px; color:#555;"><strong>${t('promo')}:</strong> ${promoLine}</div>` : ''}
             `;
           }
         } catch (e) {

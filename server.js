@@ -2136,17 +2136,51 @@ function getRestaurantNotificationEmail(restaurant) {
 }
 
 function formatOrderItemsText(order) {
-    return (order.items || [])
+    const items = Array.isArray(order?.items) ? order.items : [];
+    if (items.length === 0) return '(Няма артикули)';
+
+    // Plain-text alignment (best-effort; email clients differ).
+    const qtyCol = 6;
+    const nameCol = 38;
+    const priceCol = 12;
+
+    return items
         .map(it => {
-            const unit = parseNumber(it.price, 0);
-            const qty = parseNumber(it.quantity, 0);
+            const unit = parseNumber(it?.price, 0);
+            const qty = Math.max(0, parseNumber(it?.quantity, 0));
             const lineTotal = roundMoneyEUR(unit * qty);
-            const base = `- ${qty}x ${it.name} = ${formatMoneyEUR(lineTotal)}`;
+
+            const qtyText = `${qty}x`;
+            const nameText = (it?.name || '').toString().trim();
+            const priceText = formatMoneyEUR(lineTotal);
+
+            const line = `${qtyText.padEnd(qtyCol)}${nameText.padEnd(nameCol)}${priceText.padStart(priceCol)}`;
+
             const note = (it?.note || it?.notes || '').toString().replace(/\r/g, '').trim();
-            if (!note) return base;
-            return `${base}\n  Бележка: ${note}`;
+            if (!note) return line;
+            return `${line}\n${' '.repeat(qtyCol)}Бележка: ${note}`;
         })
         .join('\n');
+}
+
+function formatOrderTotalsText(order) {
+    const subtotalNum = Math.max(0, parseNumber(order?.subtotal, 0));
+    const deliveryFeeNum = Math.max(0, parseNumber(order?.deliveryFee, 0));
+    const totalNum = Math.max(0, parseNumber(order?.total, 0));
+    const isDelivery = order?.deliveryMethod === 'delivery';
+
+    // Match the requested ordering: Subtotal, Delivery (if applicable), Total.
+    const labelCol = 34;
+    const lines = [];
+
+    if (subtotalNum > 0) {
+        lines.push(`${'Междинна сума:'.padEnd(labelCol)}${formatMoneyEUR(subtotalNum)}`);
+    }
+    if (isDelivery) {
+        lines.push(`${'Доставка:'.padEnd(labelCol)}${formatMoneyEUR(deliveryFeeNum)}`);
+    }
+    lines.push(`${'Общо:'.padEnd(labelCol)}${formatMoneyEUR(totalNum)}`);
+    return lines.join('\n');
 }
 
 function looksLikePlaceholderEmailTemplateText(text) {
@@ -2172,7 +2206,7 @@ function getDefaultOrderPlacedTemplate() {
             'Артикули:',
             '{{itemsText}}',
             '',
-            '{{totalText}}',
+            '{{totalsText}}',
             '{{promoText}}',
             '{{orderNoteText}}',
             '{{trackUrlLine}}',
@@ -2218,6 +2252,11 @@ function roundMoneyEUR(value) {
 
 function formatMoneyEUR(value) {
     return `${roundMoneyEUR(value).toFixed(2)} €`;
+}
+
+// Email formatting: keep currency symbol (users expect it in the email).
+function formatMoneyEmail(value) {
+    return formatMoneyEUR(value);
 }
 
 function computeItemsPromoSavingsEUR(order) {
@@ -2275,10 +2314,18 @@ function formatOrderItemsHtml(order) {
         const originalPrice = parseNumber(it?.originalPrice, NaN);
         const hasItemPromo = Number.isFinite(originalPrice) && originalPrice > price;
 
+        const lineTotal = roundMoneyEUR(Math.max(0, qty) * Math.max(0, price));
+        const lineTotalText = formatMoneyEUR(lineTotal);
+
         return `
             <tr>
-                <td style="padding:6px 0;">
-                    <div><strong>${escapeHtml(qty)}x</strong> ${name}</div>
+                <td style="padding:6px 0; vertical-align:top;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <tr>
+                            <td style="padding:0 10px 0 0; vertical-align:top; font-weight:800;"><strong>${escapeHtml(qty)}x</strong>&nbsp;&nbsp;${name}</td>
+                            <td style="padding:0; width:110px; text-align:right; white-space:nowrap; vertical-align:top; font-weight:900;">${escapeHtml(lineTotalText)}</td>
+                        </tr>
+                    </table>
                     ${(discountLabel || hasItemPromo) ? `<div style="margin-top:4px; font-size:13px;"><strong>Промо:</strong> ${escapeHtml(discountLabel || 'Промо')}</div>` : ''}
                     ${note ? `<div style="margin-top:4px; color:#c62828; font-size:13px; font-weight:700;">Бележка: ${escapeHtml(note)}</div>` : ''}
                 </td>
@@ -2287,11 +2334,6 @@ function formatOrderItemsHtml(order) {
 
     return `
         <table style="width:100%; border-collapse:collapse;">
-            <thead>
-                <tr>
-                    <th style="text-align:left; padding:6px 0;">Артикул</th>
-                </tr>
-            </thead>
             <tbody>${rows}</tbody>
         </table>`;
 }
@@ -2339,16 +2381,16 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl, contactP
         <table style="margin:16px 0 0 auto; border-collapse:collapse; width:auto;">
             ${subtotalNum > 0 ? `
             <tr>
-                <td style="padding:4px 0; text-align:right; color:#374151;">Сума</td>
+                <td style="padding:4px 0; text-align:right; color:#374151;">Междинна сума:</td>
                 <td style="padding:4px 0 4px 16px; text-align:right; font-weight:800; white-space:nowrap;">${escapeHtml(formatMoneyEUR(subtotalNum))}</td>
             </tr>` : ''}
             ${isDelivery ? `
             <tr>
-                <td style="padding:4px 0; text-align:right; color:#374151;">Доставка</td>
+                <td style="padding:4px 0; text-align:right; color:#374151;">Доставка:</td>
                 <td style="padding:4px 0 4px 16px; text-align:right; font-weight:800; white-space:nowrap;">${escapeHtml(formatMoneyEUR(deliveryFeeNum))}</td>
             </tr>` : ''}
             <tr>
-                <td style="padding:6px 0; text-align:right; color:#111827; font-size:16px; font-weight:900;">Общо</td>
+                <td style="padding:6px 0; text-align:right; color:#111827; font-size:16px; font-weight:900;">Общо:</td>
                 <td style="padding:6px 0 6px 16px; text-align:right; font-size:16px; font-weight:900; white-space:nowrap;">${total}</td>
             </tr>
         </table>
@@ -2428,6 +2470,7 @@ async function sendOrderPlacedEmails(order, restaurant) {
 
     const itemsText = formatOrderItemsText(order);
     const totalText = `Общо: ${formatMoneyEUR(order.total)}`;
+    const totalsText = formatOrderTotalsText(order);
     const deliveryText = getDeliverySummaryText(order);
     const fulfillment = getFulfillmentTimeHeader(order);
     const promoCode = (order?.promoCode || '').toString().trim();
@@ -2444,6 +2487,7 @@ async function sendOrderPlacedEmails(order, restaurant) {
         customerEmail: order.customerInfo?.email || '',
         itemsText,
         totalText,
+        totalsText,
         deliveryText,
         fulfillmentTimeLine: `${fulfillment.label}: ${fulfillment.value}`,
         promoText,
@@ -2459,15 +2503,25 @@ async function sendOrderPlacedEmails(order, restaurant) {
     const customerText = renderTemplateText(bodyCustomer, templateVars);
     const finalSubjectCustomer = renderTemplateText(subjectCustomer, templateVars);
 
-    const customerHtml = buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl, contactPhone);
+    let customerHtml = '';
+    try {
+        customerHtml = buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl, contactPhone);
+    } catch (e) {
+        console.error('[EMAIL] buildOrderPlacedCustomerEmailHtml failed; falling back to text-only:', e);
+        customerHtml = '';
+    }
 
     // Customer email
-    await sendEmail({
+    const sendResult = await sendEmail({
         to: customerTo,
         subject: finalSubjectCustomer,
         text: customerText,
         html: customerHtml
     });
+
+    if (sendResult && sendResult.success === false) {
+        console.error('[EMAIL] customer order placed email failed:', { orderId: order?.id, to: customerTo, error: sendResult.error, code: sendResult.code, response: sendResult.response });
+    }
 }
 
 async function sendOrderApprovedEmail(order) {
@@ -4205,7 +4259,55 @@ app.get(API_PREFIX + '/orders/track/:id', (req, res) => {
             });
         }
 
-        const items = sanitizeOrderItems(order.items) || [];
+        function sanitizeOrderItemsLoose(itemsLike) {
+            if (!Array.isArray(itemsLike)) return null;
+
+            const sanitized = itemsLike
+                .map(it => {
+                    const raw = (it && typeof it === 'object') ? it : {};
+                    const name = (raw.name || raw.baseName || raw.title || raw.productName || raw.itemName || '').toString().trim();
+                    const qtyRaw = raw.quantity ?? raw.qty ?? raw.count ?? raw.amount ?? raw.q;
+                    const quantity = Math.max(0, Math.floor(parseNumber(qtyRaw, 0)));
+                    const priceRaw = raw.price ?? raw.unitPrice ?? raw.unit_price ?? raw.priceEUR ?? raw.value;
+                    const price = Math.max(0, parseNumber(priceRaw, 0));
+
+                    const originalPriceRaw = raw.originalPrice ?? raw.original_price;
+                    const originalParsed = parseNumber(originalPriceRaw, NaN);
+                    const originalPrice = Number.isFinite(originalParsed) ? Math.max(0, originalParsed) : undefined;
+
+                    const noteRaw = (raw.note || raw.notes || raw.comment || raw.remark || '').toString();
+                    const note = noteRaw.replace(/\r/g, '').trim();
+                    const discountLabelRaw = (raw.discountLabel || raw.discount_label || '').toString().replace(/\r/g, '').trim();
+                    const discountLabel = discountLabelRaw ? discountLabelRaw.slice(0, 80) : '';
+
+                    const id = raw.id ?? raw.productId ?? raw.itemId;
+                    const weight = raw.weight;
+                    const image = raw.image;
+
+                    return {
+                        ...(id !== undefined ? { id } : {}),
+                        name,
+                        price,
+                        ...(originalPrice !== undefined ? { originalPrice } : {}),
+                        quantity,
+                        ...(weight !== undefined ? { weight } : {}),
+                        ...(image !== undefined ? { image } : {}),
+                        ...(note ? { note: note.slice(0, 500) } : {}),
+                        ...(discountLabel ? { discountLabel } : {})
+                    };
+                })
+                .filter(it => it.name && it.quantity > 0);
+
+            return sanitized.length ? sanitized : null;
+        }
+
+        let items = sanitizeOrderItems(order.items);
+        if (!items) {
+            items = sanitizeOrderItemsLoose(order.items);
+        }
+        if (!items) {
+            items = [];
+        }
 
         function extractHHMM(value) {
             if (value == null) return '';
