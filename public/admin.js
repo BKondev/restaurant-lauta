@@ -301,8 +301,14 @@ const translations = {
         promoTableCode: 'Code',
         promoTableCategory: 'Category',
         promoTableDiscount: 'Discount',
+        promoTableMethod: 'Method',
         promoTableStatus: 'Status',
         noPromoCodesYet: 'No promo codes yet. Create one above!',
+
+        allowedMethod: 'Allowed Method',
+        methodAll: 'All',
+        methodDelivery: 'Delivery',
+        methodPickup: 'Pickup',
 
         comboBundleOffers: 'Combo & Bundle Offers',
         comboBundleHelp: 'Create special combo and bundle deals. These will automatically appear in the "Combos & Bundles" category.',
@@ -727,8 +733,14 @@ const translations = {
         promoTableCode: 'Код',
         promoTableCategory: 'Категория',
         promoTableDiscount: 'Отстъпка',
+        promoTableMethod: 'Метод',
         promoTableStatus: 'Статус',
         noPromoCodesYet: 'Все още няма промо кодове. Създайте отгоре!',
+
+        allowedMethod: 'Позволен метод',
+        methodAll: 'Всички',
+        methodDelivery: 'Доставка',
+        methodPickup: 'Вземане',
 
         comboBundleOffers: 'Комбо и пакети',
         comboBundleHelp: 'Създайте специални комбо и пакетни оферти. Те ще се появят автоматично в категорията „Комбо и пакети“.',
@@ -4401,7 +4413,7 @@ function renderPromoCodes() {
     if (promoCodes.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" style="text-align: center; padding: 20px; color: #999;">
+                <td colspan="6" style="text-align: center; padding: 20px; color: #999;">
                     ${t('noPromoCodesYet', 'No promo codes yet. Create one above!')}
                 </td>
             </tr>
@@ -4419,6 +4431,14 @@ function renderPromoCodes() {
             </td>
             <td data-label="${t('promoTableDiscount', 'Discount')}">
                 <strong style="color: #e74c3c;">${promo.discount}% ${t('off', 'OFF')}</strong>
+            </td>
+            <td data-label="${t('promoTableMethod', 'Method')}">
+                <span class="product-category">${(() => {
+                    const allowed = (promo.allowedMethod || 'all').toString().trim().toLowerCase();
+                    if (allowed === 'delivery') return t('methodDelivery', 'Delivery');
+                    if (allowed === 'pickup') return t('methodPickup', 'Pickup');
+                    return t('methodAll', 'All');
+                })()}</span>
             </td>
             <td data-label="${t('promoTableStatus', 'Status')}">
                 <span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; 

@@ -830,9 +830,9 @@
                 <div class="form-group">
                     <label for="promo-code-method"><span data-translate="allowedMethod">Allowed Method</span>:</label>
                     <select id="promo-code-method">
-                        <option value="all">All</option>
-                        <option value="delivery">Delivery</option>
-                        <option value="pickup">Pickup</option>
+                        <option value="all" data-translate="methodAll">All</option>
+                        <option value="delivery" data-translate="methodDelivery">Delivery</option>
+                        <option value="pickup" data-translate="methodPickup">Pickup</option>
                     </select>
                 </div>
 
@@ -862,13 +862,14 @@
                             <th data-translate="promoTableCode">Code</th>
                             <th data-translate="promoTableCategory">Category</th>
                             <th data-translate="promoTableDiscount">Discount</th>
+                            <th data-translate="promoTableMethod">Method</th>
                             <th data-translate="promoTableStatus">Status</th>
                             <th data-translate="actions">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="promo-codes-table-body">
                         <tr>
-                            <td colspan="5" style="text-align: center; padding: 20px; color: #999;">
+                            <td colspan="6" style="text-align: center; padding: 20px; color: #999;">
                                 <span data-translate="noPromoCodesYet">No promo codes yet. Create one above!</span>
                             </td>
                         </tr>
@@ -1512,7 +1513,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="vendor/jszip.min.js"></script>
-    <script src="admin.js"></script>
+    <script src="admin.js?v=20260224a"></script>
 </body>
 </html>
 
