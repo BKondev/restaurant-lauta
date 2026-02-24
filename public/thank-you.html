@@ -13,7 +13,7 @@
     .thankyou-title.ok { color: var(--top-bar-color); }
     .thankyou-title.bad { color: var(--highlight-color); }
     .thankyou-meta { margin-top: 10px; color: #555; }
-    .thankyou-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .thankyou-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; justify-content: center; }
     .thankyou-actions a { display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; text-decoration: none; font-weight: 700; }
     .btn-primary { background: var(--highlight-color); color: #fff; }
     .btn-secondary { background: #ecf0f1; color: #2c3e50; }
@@ -34,6 +34,8 @@
 
     .top-actions { display:flex; align-items:center; justify-content:flex-end; gap: 10px; }
     .top-actions a { display:inline-flex; align-items:center; justify-content:center; padding: 8px 12px; border-radius: 10px; text-decoration:none; font-weight: 800; }
+
+    .ty-hero { font-size: 34px; font-weight: 900; color: #111; margin-top: 10px; line-height: 1.1; }
   </style>
 </head>
 <body>
@@ -50,6 +52,7 @@
     <div class="thankyou-card">
       <h1 id="ty-title" class="thankyou-title">Thank you!</h1>
       <div id="ty-text">Your payment is being processed.</div>
+      <div id="ty-hero-actions" class="thankyou-actions" style="display:none; margin-top: 12px;"></div>
       <div id="ty-summary" class="thankyou-meta" style="display:none;"></div>
       <div class="thankyou-meta">
         <div>Order: <code id="ty-order">—</code></div>
@@ -104,6 +107,11 @@
           processingPayment: 'Your payment is being processed.',
           processingOrder: 'Your order is being processed.',
           placedOk: 'Your order has been placed successfully.',
+          pickupNow: 'Pickup around',
+          deliveryNow: 'Delivery around',
+          pickupLater: 'Pickup for',
+          deliveryLater: 'Delivery for',
+          location: 'Location',
           failedCard: 'Your payment was not completed. You can try again from checkout.',
           failedCash: 'Your order could not be completed. You can try again from checkout.',
           orderLabel: 'Order',
@@ -133,6 +141,11 @@
           processingPayment: 'Плащането се обработва.',
           processingOrder: 'Поръчката се обработва.',
           placedOk: 'Поръчката е приета успешно.',
+          pickupNow: 'Вземане около',
+          deliveryNow: 'Доставка около',
+          pickupLater: 'Вземане за',
+          deliveryLater: 'Доставка за',
+          location: 'Локация',
           failedCard: 'Плащането не беше завършено. Можете да опитате отново от плащането.',
           failedCash: 'Поръчката не можа да бъде завършена. Можете да опитате отново.',
           orderLabel: 'Поръчка',
@@ -157,6 +170,81 @@
 
       function t(key) {
         return (i18n[lang] && i18n[lang][key]) || (i18n.en && i18n.en[key]) || key;
+      }
+
+      let siteSettings = null;
+      let orderData = null;
+
+      function formatHHMM(date) {
+        try {
+          const d = (date instanceof Date) ? date : new Date(date);
+          if (!d || !Number.isFinite(d.getTime())) return '';
+          const hh = String(d.getHours()).padStart(2, '0');
+          const mm = String(d.getMinutes()).padStart(2, '0');
+          return `${hh}:${mm}`;
+        } catch (e) {
+          return '';
+        }
+      }
+
+      function getScheduledTimeText(o) {
+        const orderTime = (o?.orderTime || '').toString().trim().toLowerCase();
+        const scheduled = (o?.scheduledTime ?? o?.scheduled_time ?? o?.scheduleTime ?? o?.scheduledAt);
+        const scheduledText = (scheduled || '').toString().trim();
+        const isLater = orderTime === 'later' || !!scheduledText;
+        return { isLater, scheduledText };
+      }
+
+      function computeEtaText(o) {
+        const createdAt = o?.createdAt || o?.timestamp || null;
+        const estimatedMinutes = Number(o?.estimatedTime);
+        const minutes = Number.isFinite(estimatedMinutes) && estimatedMinutes > 0 ? estimatedMinutes : 60;
+        if (!createdAt) return '';
+        const created = new Date(createdAt);
+        if (!Number.isFinite(created.getTime())) return '';
+        const eta = new Date(created.getTime() + minutes * 60000);
+        return formatHHMM(eta);
+      }
+
+      function renderHero() {
+        const textEl = document.getElementById('ty-text');
+        if (!textEl) return;
+        if (status !== 'success') return;
+        if (!orderData) return;
+
+        const isDelivery = orderData?.deliveryMethod === 'delivery';
+        const { isLater, scheduledText } = getScheduledTimeText(orderData);
+        const timeText = isLater ? scheduledText : computeEtaText(orderData);
+
+        const label = isDelivery
+          ? (isLater ? t('deliveryLater') : t('deliveryNow'))
+          : (isLater ? t('pickupLater') : t('pickupNow'));
+
+        textEl.classList.add('ty-hero');
+        textEl.textContent = `${label}${timeText ? ` ${timeText}` : ''}`;
+
+        // Pickup-only: location button (same mapping logic as track-order)
+        const actions = document.getElementById('ty-hero-actions');
+        if (!actions) return;
+
+        actions.innerHTML = '';
+        actions.style.display = 'none';
+
+        if (isDelivery) return;
+
+        const contactsAddress = (siteSettings?.footer?.contacts?.address || '').toString().trim();
+        const contactsMapsUrl = (siteSettings?.footer?.contacts?.addressMapsUrl || '').toString().trim();
+        const pickupMapsUrl = contactsMapsUrl || (contactsAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contactsAddress)}` : '');
+        if (!contactsAddress || !pickupMapsUrl) return;
+
+        const a = document.createElement('a');
+        a.className = 'btn-secondary';
+        a.href = pickupMapsUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = contactsAddress;
+        actions.appendChild(a);
+        actions.style.display = '';
       }
 
       function toNumber(val) {
@@ -215,19 +303,26 @@
         try {
           const base = getBasePath();
           const settings = await fetchJson(`${base}/api/settings/site`);
+          siteSettings = settings || null;
           const phone = (settings?.footer?.contacts?.phone || '').toString().trim();
-          if (!phone) return;
           const mount = document.getElementById('ty-contact');
-          if (!mount) return;
-          mount.style.display = '';
-          mount.innerHTML = `${t('phone')}: <a href="tel:${encodeURIComponent(phone)}">${phone}</a>`;
+          if (mount && phone) {
+            mount.style.display = '';
+            mount.innerHTML = `${t('phone')}: <a href="tel:${encodeURIComponent(phone)}">${phone}</a>`;
+          }
 
           const callBtn = document.getElementById('ty-call');
           if (callBtn) {
-            callBtn.href = `tel:${encodeURIComponent(phone)}`;
-            callBtn.textContent = t('callRestaurant');
-            callBtn.style.display = '';
+            if (phone) {
+              callBtn.href = `tel:${encodeURIComponent(phone)}`;
+              callBtn.textContent = t('callRestaurant');
+              callBtn.style.display = '';
+            } else {
+              callBtn.style.display = 'none';
+            }
           }
+
+          renderHero();
         } catch (e) {
           // ignore
         }
@@ -239,6 +334,8 @@
           const base = getBasePath();
           const data = await fetchJson(`${base}/api/orders/track/${encodeURIComponent(orderId)}`);
           const o = data?.order;
+          orderData = o || null;
+          renderHero();
           const items = Array.isArray(o?.items) ? o.items : [];
           if (!items.length) return;
 
@@ -419,7 +516,8 @@
       if (status === 'success') {
         title.textContent = isCash ? t('thankYouOrderPlaced') : t('thankYouPaymentOk');
         title.classList.add('ok');
-        text.textContent = t('placedOk');
+        // Replaced by large fulfillment/time hero (populated after order fetch)
+        text.textContent = '';
         try {
           localStorage.removeItem('cart');
           localStorage.removeItem('checkoutState_v1');
@@ -427,9 +525,11 @@
       } else if (status === 'failed') {
         title.textContent = isCard ? t('paymentFailed') : t('orderFailed');
         title.classList.add('bad');
+        if (text) text.classList.remove('ty-hero');
         text.textContent = isCard ? t('failedCard') : t('failedCash');
       } else {
         title.textContent = t('thankYou');
+        if (text) text.classList.remove('ty-hero');
         text.textContent = isCash ? t('processingOrder') : t('processingPayment');
       }
 

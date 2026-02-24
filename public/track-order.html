@@ -811,6 +811,34 @@
             const contactsMapsUrl = (siteSettings && siteSettings.footer && siteSettings.footer.contacts && siteSettings.footer.contacts.addressMapsUrl) ? String(siteSettings.footer.contacts.addressMapsUrl).trim() : '';
             const pickupMapsUrl = contactsMapsUrl || (contactsAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contactsAddress)}` : '');
 
+            const pickupLocationHtml = (!isDelivery && contactsAddress) ? `
+                <div class="delivery-info" style="margin-top: 14px;">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <strong>${t('pickupAddress')}</strong><br>
+                    ${pickupMapsUrl ? `<a href="${pickupMapsUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--highlight-color); font-weight: 800; text-decoration: none;">${contactsAddress}</a>` : contactsAddress}
+                </div>
+            ` : '';
+
+            const stepperHtml = `
+                <div class="stepper">
+                    <div class="steps">
+                        <div class="step ${stepIdx > 0 ? 'done' : (stepIdx === 0 ? 'active' : '')}">
+                            <div class="step-icon"><i class="fas fa-inbox"></i></div>
+                            <div class="step-label">${t('received')}</div>
+                        </div>
+                        <div class="step ${stepIdx > 1 ? 'done' : (stepIdx === 1 ? 'active' : '')}">
+                            <div class="step-icon"><i class="fas fa-check"></i></div>
+                            <div class="step-label">${t('approved')}</div>
+                        </div>
+                        <div class="step ${stepIdx === 2 ? 'done active' : ''}">
+                            <div class="step-icon"><i class="fas fa-check-circle"></i></div>
+                            <div class="step-label">${t('finished')}</div>
+                        </div>
+                    </div>
+                    <div class="stepper-hint">${statusText}</div>
+                </div>
+            `;
+
             const items = Array.isArray(order.items) ? order.items : [];
             const itemsSavings = round2(items.reduce((acc, it) => {
                 const qty = Math.max(0, toNumber(it && it.quantity));
@@ -921,6 +949,9 @@
                     `}
                 </div>
 
+                ${pickupLocationHtml}
+                ${!isDelivery ? stepperHtml : ''}
+
                 ${itemsHtml}
 
                 <div class="order-info">
@@ -958,31 +989,7 @@
                     </div>
                 ` : ''}
 
-                ${order.deliveryMethod !== 'delivery' && contactsAddress ? `
-                    <div class="delivery-info">
-                        <i class="fas fa-map-marker-alt"></i>
-                        <strong>${t('pickupAddress')}</strong><br>
-                        ${pickupMapsUrl ? `<a href="${pickupMapsUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--highlight-color); font-weight: 800; text-decoration: none;">${contactsAddress}</a>` : contactsAddress}
-                    </div>
-                ` : ''}
-
-                <div class="stepper">
-                    <div class="steps">
-                        <div class="step ${stepIdx > 0 ? 'done' : (stepIdx === 0 ? 'active' : '')}">
-                            <div class="step-icon"><i class="fas fa-inbox"></i></div>
-                            <div class="step-label">${t('received')}</div>
-                        </div>
-                        <div class="step ${stepIdx > 1 ? 'done' : (stepIdx === 1 ? 'active' : '')}">
-                            <div class="step-icon"><i class="fas fa-check"></i></div>
-                            <div class="step-label">${t('approved')}</div>
-                        </div>
-                        <div class="step ${stepIdx === 2 ? 'done active' : ''}">
-                            <div class="step-icon"><i class="fas fa-check-circle"></i></div>
-                            <div class="step-label">${t('finished')}</div>
-                        </div>
-                    </div>
-                    <div class="stepper-hint">${statusText}</div>
-                </div>
+                ${isDelivery ? stepperHtml : ''}
 
                 <div class="actions">
                     <a href="${BASE_PATH}/" class="btn btn-secondary">

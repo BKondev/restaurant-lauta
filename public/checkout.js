@@ -5,8 +5,77 @@ const API_URL = `${BASE_PATH}/api`;
 // State
 let cart = [];
 let appliedPromo = null;
+const APPLIED_PROMO_STORAGE_KEY = 'checkoutAppliedPromo_v1';
 const LANGUAGE_STORAGE_KEY = 'language';
 const LANGUAGE_USER_SELECTED_KEY = 'language_user_selected_v1';
+
+function saveAppliedPromoState() {
+    try {
+        if (!appliedPromo) {
+            localStorage.removeItem(APPLIED_PROMO_STORAGE_KEY);
+            return;
+        }
+
+        const code = (appliedPromo.code || '').toString().trim();
+        const discount = Number(appliedPromo.discount);
+        const allowedMethod = (appliedPromo.allowedMethod || 'all').toString().trim().toLowerCase();
+        if (!code) {
+            localStorage.removeItem(APPLIED_PROMO_STORAGE_KEY);
+            return;
+        }
+
+        const payload = {
+            code,
+            discount: Number.isFinite(discount) ? discount : 0,
+            category: (appliedPromo.category || '').toString(),
+            allowedMethod: (allowedMethod === 'delivery' || allowedMethod === 'pickup' || allowedMethod === 'all') ? allowedMethod : 'all'
+        };
+        localStorage.setItem(APPLIED_PROMO_STORAGE_KEY, JSON.stringify(payload));
+    } catch (e) {
+        // ignore
+    }
+}
+
+function clearAppliedPromoState() {
+    appliedPromo = null;
+    try {
+        localStorage.removeItem(APPLIED_PROMO_STORAGE_KEY);
+    } catch (e) {
+        // ignore
+    }
+}
+
+function loadAppliedPromoState() {
+    try {
+        const raw = localStorage.getItem(APPLIED_PROMO_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return;
+
+        const code = (parsed.code || '').toString().trim();
+        const discount = Number(parsed.discount);
+        const allowedMethod = (parsed.allowedMethod || 'all').toString().trim().toLowerCase();
+        if (!code) return;
+
+        const restored = {
+            code,
+            discount: Number.isFinite(discount) ? discount : 0,
+            category: (parsed.category || '').toString(),
+            allowedMethod: (allowedMethod === 'delivery' || allowedMethod === 'pickup' || allowedMethod === 'all') ? allowedMethod : 'all'
+        };
+
+        // If checkout state already has a selected delivery method, ensure the promo is compatible.
+        const dm = (deliveryMethod || '').toString().trim().toLowerCase();
+        if (dm && (restored.allowedMethod === 'delivery' || restored.allowedMethod === 'pickup') && restored.allowedMethod !== dm) {
+            localStorage.removeItem(APPLIED_PROMO_STORAGE_KEY);
+            return;
+        }
+
+        appliedPromo = restored;
+    } catch (e) {
+        // ignore
+    }
+}
 
 function getInitialLanguage() {
     const stored = (localStorage.getItem(LANGUAGE_STORAGE_KEY) || '').toString().trim().toLowerCase();
@@ -499,6 +568,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadSiteSettings();
     loadCheckoutState();
     enforceOrderSettingsConstraints();
+    loadAppliedPromoState();
     loadCart();
     // If checkout state restored a delivery order, compute the correct delivery fee right away.
     if (deliveryMethod === 'delivery') {
@@ -1020,16 +1090,13 @@ function renderCheckout() {
     cartSection.className = 'cart-section';
     
     const cartTotals = calculateTotals();
-
-    const restaurantClosedReason = getRestaurantClosedReason();
     const deliveryClosedReason = getDeliveryClosedReason();
     const pickupClosedReason = getPickupClosedReason();
-
     // If pickup was selected from saved state but is currently disabled,
     // try to fall back to delivery (if available).
     if (pickupClosedReason && deliveryMethod === 'pickup') {
         deliveryMethod = deliveryClosedReason ? '' : 'delivery';
-        resetCheckoutFlowBelowDeliveryMethod();
+        clearAppliedPromoState();
         enforceOrderSettingsConstraints();
     }
 
@@ -1217,10 +1284,10 @@ function renderCheckout() {
     promoSection.innerHTML = `
         <h3 class="section-title">${currentLanguage === 'bg' ? 'Промо код' : 'Promo code'}</h3>
         <div class="promo-input-group">
-            <input type="text" class="promo-input" id="promo-code-input" placeholder="${currentLanguage === 'bg' ? 'Въведи промо код' : 'Enter promo code'}" ${appliedPromo ? 'disabled' : ''}>
+            <input type="text" class="promo-input" id="promo-code-input" placeholder="${currentLanguage === 'bg' ? 'Въведи промо код' : 'Enter promo code'}" value="${appliedPromo ? escapeHtmlAttribute(appliedPromo.code) : ''}" ${appliedPromo ? 'disabled' : ''}>
             <button class="apply-promo-btn" onclick="applyPromoCode()" ${appliedPromo ? 'disabled' : ''}>${currentLanguage === 'bg' ? 'Приложи' : 'Apply'}</button>
         </div>
-        <div class="promo-message" id="promo-message"></div>
+        <div class="promo-message ${appliedPromo ? 'success' : ''}" id="promo-message">${appliedPromo ? translations[currentLanguage].promoSuccess : ''}</div>
         ${appliedPromo ? `<button class="remove-promo-btn" onclick="removePromoCode()">${currentLanguage === 'bg' ? 'Премахни' : 'Remove'}</button>` : ''}
     `;
 
@@ -1914,6 +1981,7 @@ async function applyPromoCode() {
                 category: validPromo.category,
                 allowedMethod: validPromo.allowedMethod || 'all'
             };
+            saveAppliedPromoState();
             message.textContent = translations[currentLanguage].promoSuccess;
             message.className = 'promo-message success';
             input.disabled = true;
@@ -1931,7 +1999,7 @@ async function applyPromoCode() {
 
 // Remove promo code
 function removePromoCode() {
-    appliedPromo = null;
+    clearAppliedPromoState();
     const input = document.getElementById('promo-code-input');
     if (input) {
         input.value = '';
@@ -2191,7 +2259,7 @@ async function placeOrder() {
 
         // Cash (or non-card) flow: clear cart and redirect immediately to thank-you.
         cart = [];
-        appliedPromo = null;
+        clearAppliedPromoState();
         customerInfo = { name: '', phone: '', email: '', city: '', address: '', notes: '' };
         saveCart();
 
@@ -2262,7 +2330,7 @@ function selectDeliveryMethod(method) {
     // If a promo code is restricted to a specific method, drop it when switching.
     const promoAllowed = (appliedPromo?.allowedMethod || 'all').toString().trim().toLowerCase();
     if (appliedPromo && (promoAllowed === 'delivery' || promoAllowed === 'pickup') && promoAllowed !== deliveryMethod) {
-        appliedPromo = null;
+        clearAppliedPromoState();
     }
 
     if (deliveryMethod === 'delivery') {
