@@ -30,6 +30,11 @@ const translations = {
         price: 'Price',
         category: 'Category',
         promo: 'Promo',
+        availability: 'Availability',
+        available: 'Available',
+        limited: 'Limited',
+        outOfStock: 'Out of stock',
+        notAvailable: 'Not available',
         actions: 'Actions',
         edit: 'Edit',
         delete: 'Delete',
@@ -462,6 +467,11 @@ const translations = {
         price: 'Цена',
         category: 'Категория',
         promo: 'Промо',
+        availability: 'Наличност',
+        available: 'Наличен',
+        limited: 'Ограничено',
+        outOfStock: 'Изчерпан',
+        notAvailable: 'Не е наличен',
         actions: 'Действия',
         edit: 'Редактирай',
         delete: 'Изтрий',
@@ -2659,6 +2669,72 @@ function resetForm() {
     togglePromoFields();
 }
 
+function normalizeAvailabilityStatus(value) {
+    if (value === undefined || value === null) return null;
+    const s = String(value).trim().toLowerCase();
+    if (!s) return null;
+    if (['available', 'in_stock', 'instock', 'active', 'enabled'].includes(s)) return 'available';
+    if (['limited', 'low_stock', 'lowstock'].includes(s)) return 'limited';
+    if (['out_of_stock', 'outofstock', 'out-of-stock', 'sold_out', 'soldout'].includes(s)) return 'out_of_stock';
+    if (['not_available', 'notavailable', 'not-available', 'inactive', 'disabled'].includes(s)) return 'not_available';
+    return null;
+}
+
+function getProductAvailabilityStatus(product) {
+    const status = normalizeAvailabilityStatus(product?.availabilityStatus ?? product?.availability_status);
+    if (status) return status;
+    if (product?.availability === undefined || product?.availability === null) return 'available';
+    return product.availability ? 'available' : 'not_available';
+}
+
+async function setProductAvailability(productId, newStatus) {
+    const token = sessionStorage.getItem('adminToken');
+    const res = await fetch(`${API_URL}/products/${productId}/availability`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ availabilityStatus: newStatus })
+    });
+
+    if (!res.ok) {
+        let detail = '';
+        try {
+            const data = await res.json();
+            detail = data?.error ? `: ${data.error}` : '';
+        } catch (e) {}
+        throw new Error(`Failed to update availability${detail}`);
+    }
+
+    return await res.json();
+}
+
+async function onAvailabilityChange(productId, selectEl) {
+    if (!selectEl) return;
+
+    const previous = (selectEl.dataset.prev || '').toString();
+    const next = selectEl.value;
+
+    selectEl.disabled = true;
+    try {
+        const updated = await setProductAvailability(productId, next);
+        const idx = products.findIndex(p => String(p.id) === String(productId));
+        if (idx !== -1) {
+            products[idx] = updated;
+        }
+        selectEl.dataset.prev = next;
+    } catch (e) {
+        console.error(e);
+        alert(e?.message || 'Failed to update availability');
+        if (previous) {
+            selectEl.value = previous;
+        }
+    } finally {
+        selectEl.disabled = false;
+    }
+}
+
 // Render products table
 function renderProducts() {
     const tbody = document.getElementById('products-table-body');
@@ -2721,6 +2797,7 @@ function renderProducts() {
             const hasPromo = !!(product.promo && product.promo.enabled && typeof product.promo.price === 'number');
             const promoDisplay = hasPromo ? `${product.promo.price.toFixed(2)} €` : '-';
             const priceDisplay = `${(product.price ?? 0).toFixed(2)} €`;
+            const availabilityStatus = getProductAvailabilityStatus(product);
 
             return `
                 <tr>
@@ -2732,6 +2809,18 @@ function renderProducts() {
                     <td data-label="${t('bgName', 'BG Name')}">${bgName}</td>
                     <td data-label="${t('category', 'Category')}"><span class="product-category">${category}</span></td>
                     <td data-label="${t('price', 'Price')}"><span class="product-price">${priceDisplay}</span></td>
+                    <td data-label="${t('availability', 'Availability')}">
+                        <select
+                            onchange="onAvailabilityChange(${product.id}, this)"
+                            data-prev="${availabilityStatus}"
+                            style="padding:6px 10px; border:2px solid #e0e0e0; border-radius:8px; background:#fff;"
+                        >
+                            <option value="available" ${availabilityStatus === 'available' ? 'selected' : ''}>${t('available', 'Available')}</option>
+                            <option value="limited" ${availabilityStatus === 'limited' ? 'selected' : ''}>${t('limited', 'Limited')}</option>
+                            <option value="out_of_stock" ${availabilityStatus === 'out_of_stock' ? 'selected' : ''}>${t('outOfStock', 'Out of stock')}</option>
+                            <option value="not_available" ${availabilityStatus === 'not_available' ? 'selected' : ''}>${t('notAvailable', 'Not available')}</option>
+                        </select>
+                    </td>
                     <td data-label="Promo">${hasPromo ? `<span class="product-price" style="background:#e74c3c; color:#fff; padding:4px 8px; border-radius:6px; font-weight:700;">${promoDisplay}</span>` : '-'}</td>
                     <td data-label="${t('image', 'Image')}">
                         ${imageUrl ? `<img src="${imageUrl}" alt="${enName}" class="product-img-thumb" onerror="this.src='https://via.placeholder.com/80x80?text=No+Image'">` : `<img src="https://via.placeholder.com/80x80?text=No+Image" alt="${enName}" class="product-img-thumb">`}
@@ -3050,6 +3139,8 @@ async function exportProductsCSV() {
                 ? Math.round(((price - Number(promoPrice)) / price) * 100)
                 : (p.promoPercentage != null ? Number(p.promoPercentage) : '');
 
+            const availabilityStatus = getProductAvailabilityStatus(p);
+
             return [
                 p.id ?? '',
                 p.code ?? '',
@@ -3060,7 +3151,7 @@ async function exportProductsCSV() {
                 promoPrice,
                 (Number.isFinite(pct) ? pct : ''),
                 isPromo ? 'true' : 'false',
-                (p.availability == null ? 'true' : (p.availability ? 'true' : 'false')),
+                availabilityStatus,
                 p.image ?? '',
                 p.description ?? ''
             ];
@@ -3162,7 +3253,9 @@ async function handleCSVImport(event) {
                     promoPrice = Math.round((price * (1 - Math.max(0, Math.min(100, promoPct)) / 100)) * 100) / 100;
                 }
 
-                const availability = availabilityRaw ? parseBoolLike(availabilityRaw) : true;
+                const availabilityStatus =
+                    normalizeAvailabilityStatus(availabilityRaw) ||
+                    (availabilityRaw ? (parseBoolLike(availabilityRaw) ? 'available' : 'not_available') : 'available');
 
                 const product = {
                     code: codeRaw,
@@ -3172,7 +3265,8 @@ async function handleCSVImport(event) {
                     price,
                     image: imgUrl,
                     description: info,
-                    availability,
+                    availabilityStatus,
+                    availability: availabilityStatus === 'available' || availabilityStatus === 'limited',
                     promoPercentage: Number.isFinite(promoPct) ? promoPct : undefined
                 };
 

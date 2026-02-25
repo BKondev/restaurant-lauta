@@ -889,12 +889,39 @@ function getCategoryDisplayName(category) {
     return productWithCategory ? productWithCategory.translations.bg.category : category;
 }
 
+function normalizeAvailabilityStatus(value) {
+    if (value === undefined || value === null) return null;
+    const s = String(value).trim().toLowerCase();
+    if (!s) return null;
+    if (['available', 'in_stock', 'instock', 'active', 'enabled'].includes(s)) return 'available';
+    if (['limited', 'low_stock', 'lowstock'].includes(s)) return 'limited';
+    if (['out_of_stock', 'outofstock', 'out-of-stock', 'sold_out', 'soldout'].includes(s)) return 'out_of_stock';
+    if (['not_available', 'notavailable', 'not-available', 'inactive', 'disabled'].includes(s)) return 'not_available';
+    return null;
+}
+
+function getProductAvailabilityStatus(product) {
+    const status = normalizeAvailabilityStatus(product?.availabilityStatus ?? product?.availability_status);
+    if (status) return status;
+    if (product?.availability === undefined || product?.availability === null) return 'available';
+    return product.availability ? 'available' : 'not_available';
+}
+
+function isProductVisible(product) {
+    return getProductAvailabilityStatus(product) !== 'not_available';
+}
+
+function isProductOrderable(product) {
+    const status = getProductAvailabilityStatus(product);
+    return status === 'available' || status === 'limited';
+}
+
 // Render products
 function renderProducts() {
     const container = document.getElementById('products-container');
     const emptyState = document.getElementById('empty-state');
     
-    let filteredProducts = products;
+    let filteredProducts = (products || []).filter(isProductVisible);
     
     // Filter by category
     if (currentCategory !== 'all') {
@@ -962,6 +989,10 @@ function createProductCard(product) {
     const hasPromo = isPromoActive(product.promo);
     const effectivePrice = getEffectivePrice(product);
     const hasSpecialLabel = product.specialLabel && product.specialLabel.trim() !== '';
+    const availabilityStatus = getProductAvailabilityStatus(product);
+    const isLimited = availabilityStatus === 'limited';
+    const isOutOfStock = availabilityStatus === 'out_of_stock';
+    const orderable = isProductOrderable(product);
     
     // Calculate discount percentage
     let discountPercent = 0;
@@ -1035,6 +1066,26 @@ function createProductCard(product) {
         // Show custom label if no discount calculated but special label exists
         badgeHTML = `<div class="badge-container"><div class="promo-badge" style="background: #27ae60;"><i class="fas fa-star"></i> ${product.specialLabel.toUpperCase()}</div></div>`;
     }
+
+    if (isLimited) {
+        const limitedText = currentLanguage === 'bg' ? 'ОГРАНИЧЕНО' : 'LIMITED';
+        const limitedBadge = `<div class="promo-badge"><i class="fas fa-hourglass-half"></i> ${limitedText}</div>`;
+        if (badgeHTML && badgeHTML.includes('badge-container')) {
+            badgeHTML = badgeHTML.replace('<div class="badge-container">', `<div class="badge-container">${limitedBadge}`);
+        } else {
+            badgeHTML = `<div class="badge-container">${limitedBadge}</div>`;
+        }
+    }
+
+    if (isOutOfStock) {
+        const outText = currentLanguage === 'bg' ? 'ИЗЧЕРПАНО' : 'OUT OF STOCK';
+        const outBadge = `<div class="promo-badge"><i class="fas fa-ban"></i> ${outText}</div>`;
+        if (badgeHTML && badgeHTML.includes('badge-container')) {
+            badgeHTML = badgeHTML.replace('<div class="badge-container">', `<div class="badge-container">${outBadge}`);
+        } else {
+            badgeHTML = `<div class="badge-container">${outBadge}</div>`;
+        }
+    }
     
     card.innerHTML = `
         ${badgeHTML}
@@ -1053,8 +1104,8 @@ function createProductCard(product) {
                 <span class="product-category">${category}</span>
             </div>
             <div class="product-actions">
-                <button onclick="event.stopPropagation(); addToCart(${product.id})" class="add-to-cart-btn">
-                    <i class="fas fa-shopping-cart"></i> ${translations[currentLanguage].addToCart}
+                <button ${orderable ? `onclick="event.stopPropagation(); addToCart(${product.id})"` : ''} class="add-to-cart-btn" ${orderable ? '' : 'disabled'} style="${orderable ? '' : 'opacity:0.6; cursor:not-allowed;'}">
+                    <i class="fas fa-shopping-cart"></i> ${orderable ? translations[currentLanguage].addToCart : (currentLanguage === 'bg' ? 'Изчерпан' : 'Out of stock')}
                 </button>
                 <button onclick="event.stopPropagation(); shareProduct(${product.id})" class="share-product-btn" title="${(currentLanguage === 'bg' ? 'Сподели' : 'Share')}">
                     <i class="fas fa-share-alt"></i>
@@ -1139,9 +1190,14 @@ function openProductModal(product) {
     updateModalPricing();
 
     const addToCartBtn = document.getElementById('modal-add-to-cart');
-    addToCartBtn.innerHTML = `<i class="fas fa-shopping-cart"></i> ${translations[currentLanguage].addToCart}`;
+    const orderable = isProductOrderable(product);
+    addToCartBtn.disabled = !orderable;
+    addToCartBtn.style.opacity = orderable ? '' : '0.6';
+    addToCartBtn.style.cursor = orderable ? '' : 'not-allowed';
+    addToCartBtn.innerHTML = `<i class="fas fa-shopping-cart"></i> ${orderable ? translations[currentLanguage].addToCart : (currentLanguage === 'bg' ? 'Изчерпан' : 'Out of stock')}`;
     addToCartBtn.onclick = () => {
         if (!modalProductId) return;
+        if (!orderable) return;
         addToCartWithQuantity(modalProductId, modalQuantity);
         closeModal();
     };
@@ -1533,6 +1589,11 @@ function addToCart(productId) {
 function addToCartWithQuantity(productId, quantity) {
     const product = products.find(p => p.id === productId);
     if (!product) return;
+
+    if (!isProductOrderable(product)) {
+        alert(currentLanguage === 'bg' ? 'Този продукт не е наличен.' : 'This product is not available.');
+        return;
+    }
     const qty = Math.max(1, Number(quantity) || 1);
 
     let effectivePrice = getEffectivePrice(product);

@@ -85,6 +85,56 @@ function parseBool(raw, fallback = false) {
     return fallback;
 }
 
+function toBoolFlag(v) {
+    if (v === true || v === false) return v;
+    if (v === 1 || v === 0) return !!v;
+    if (typeof v === 'string') {
+        const s = v.trim().toLowerCase();
+        if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
+        if (['0', 'false', 'no', 'n', 'off'].includes(s)) return false;
+    }
+    return false;
+}
+
+function pickFirstPrimitiveByKeyRe(obj, includeRe, excludeRe) {
+    if (!obj || typeof obj !== 'object') return null;
+    for (const k of Object.keys(obj)) {
+        if (excludeRe && excludeRe.test(k)) continue;
+        if (!includeRe.test(k)) continue;
+        const v = obj[k];
+        if (v === null || v === undefined) continue;
+        const t = typeof v;
+        if (t === 'string' || t === 'number' || t === 'boolean') return v;
+    }
+    return null;
+}
+
+function getReprintRequested(order) {
+    if (!order || typeof order !== 'object') return false;
+    if (order.forceReprint !== undefined) return toBoolFlag(order.forceReprint);
+    return toBoolFlag(pickFirstPrimitiveByKeyRe(order, /reprint/i, /note/i));
+}
+
+function getNoteReprintInfo(order, enableNoteReprints, orderId) {
+    if (!enableNoteReprints) return { requested: false, key: '' };
+    if (!order || typeof order !== 'object') return { requested: false, key: '' };
+
+    const requested = (order.forceReprintNote !== undefined)
+        ? toBoolFlag(order.forceReprintNote)
+        : toBoolFlag(pickFirstPrimitiveByKeyRe(order, /(reprint.*note|note.*reprint|forceReprintNote)/i));
+
+    if (!requested) return { requested: false, key: '' };
+
+    const requestedAt = String(
+        pickFirstPrimitiveByKeyRe(order, /(forceReprintNoteRequestedAt|reprintNoteRequestedAt|noteReprintRequestedAt|forceReprintNoteAt|reprintNoteAt)/i) ||
+        pickFirstPrimitiveByKeyRe(order, /(updatedAt|updated_at|modifiedAt|modified_at|lastUpdatedAt|last_updated_at)/i) ||
+        pickFirstPrimitiveByKeyRe(order, /(forceReprintRequestedAt|forceReprintAt|reprintRequestedAt|reprintAt)/i) ||
+        '1'
+    ).trim() || '1';
+
+    return { requested: true, key: `${orderId}:${requestedAt}` };
+}
+
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -462,10 +512,9 @@ async function run() {
                     const orderId = String(o?.id || '');
                     if (!orderId) return false;
 
-                    const noteRequested = enableNoteReprints && o.forceReprintNote === true;
-                    if (noteRequested) {
-                        const requestedAt = String(o.forceReprintNoteRequestedAt || o.forceReprintNoteAt || o.forceReprintRequestedAt || o.forceReprintAt || '') || '1';
-                        const noteKey = `${orderId}:${requestedAt}`;
+                    const noteInfo = getNoteReprintInfo(o, enableNoteReprints, orderId);
+                    if (noteInfo.requested) {
+                        const noteKey = noteInfo.key;
 
                         // Use separate note-state file if configured, otherwise reuse main state
                         const store = noteState ? noteState.notePrinted : state.notePrinted;
@@ -473,7 +522,7 @@ async function run() {
                         return true;
                     }
 
-                    if (o.forceReprint === true) return true;
+                    if (getReprintRequested(o)) return true;
 
                     if (o.printerPrintedAt) return false;
                     if (state.printed[orderId]) return false;
@@ -490,10 +539,9 @@ async function run() {
                 const orderId = String(order.id || '');
                 if (!orderId) continue;
 
-                const noteRequested = enableNoteReprints && order.forceReprintNote === true;
-                if (noteRequested) {
-                    const requestedAt = String(order.forceReprintNoteRequestedAt || order.forceReprintNoteAt || order.forceReprintRequestedAt || order.forceReprintAt || '') || '1';
-                    const noteKey = `${orderId}:${requestedAt}`;
+                const noteInfo = getNoteReprintInfo(order, enableNoteReprints, orderId);
+                if (noteInfo.requested) {
+                    const noteKey = noteInfo.key;
 
                     console.log(`[AGENT] Printing NOTE for order ${orderId} -> ${printerTarget.ip}:${printerTarget.port} (${printerTarget.resolvedBy})`);
 

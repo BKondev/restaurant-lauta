@@ -2634,6 +2634,8 @@ app.post(API_PREFIX + '/products', requireAuth, (req, res) => {
         ? null
         : Number(promoPercentageRaw);
 
+    const availabilityStatus = pickRequestedAvailabilityStatus(req.body, null) || 'available';
+
     const newProduct = {
         id: newId,
         code: codeRaw,
@@ -2642,7 +2644,8 @@ app.post(API_PREFIX + '/products', requireAuth, (req, res) => {
         price: parseFloat(req.body.price) || 0,
         category: req.body.category,
         subcategory: req.body.subcategory || '',
-        availability: (req.body.availability === undefined || req.body.availability === null) ? true : !!req.body.availability,
+        availabilityStatus,
+        availability: deriveAvailabilityBoolean(availabilityStatus),
         promoPercentage: (promoPercentage !== null && Number.isFinite(promoPercentage)) ? promoPercentage : null,
         image: req.body.image || 'https://via.placeholder.com/280x200?text=No+Image',
         weight: req.body.weight || '',
@@ -2684,6 +2687,8 @@ app.put(API_PREFIX + '/products/:id', requireAuth, (req, res) => {
             ? (db.products[index]?.promoPercentage ?? null)
             : Number(promoPercentageRaw);
 
+        const availabilityStatus = pickRequestedAvailabilityStatus(req.body, db.products[index]) || 'available';
+
         db.products[index] = {
             id: parseInt(req.params.id),
             code: codeRaw,
@@ -2692,9 +2697,8 @@ app.put(API_PREFIX + '/products/:id', requireAuth, (req, res) => {
             price: parseFloat(req.body.price) || 0,
             category: req.body.category,
             subcategory: req.body.subcategory || (db.products[index].subcategory || ''),
-            availability: (req.body.availability === undefined || req.body.availability === null)
-                ? (db.products[index].availability !== undefined ? !!db.products[index].availability : true)
-                : !!req.body.availability,
+            availabilityStatus,
+            availability: deriveAvailabilityBoolean(availabilityStatus),
             promoPercentage: (promoPercentage !== null && Number.isFinite(promoPercentage)) ? promoPercentage : null,
             image: req.body.image || db.products[index].image,
             weight: req.body.weight || '',
@@ -2714,6 +2718,33 @@ app.put(API_PREFIX + '/products/:id', requireAuth, (req, res) => {
         }
     } else {
         res.status(404).json({ error: 'Product not found' });
+    }
+});
+
+// Quick update: product availability only
+app.put(API_PREFIX + '/products/:id/availability', requireAuth, (req, res) => {
+    const db = readDatabase();
+    const index = db.products.findIndex(p => p.id === parseInt(req.params.id));
+
+    if (index === -1) {
+        return res.status(404).json({ error: 'Product not found' });
+    }
+
+    const availabilityStatus = pickRequestedAvailabilityStatus(req.body, db.products[index]);
+    if (!availabilityStatus) {
+        return res.status(400).json({ error: 'Invalid availability status' });
+    }
+
+    db.products[index] = {
+        ...db.products[index],
+        availabilityStatus,
+        availability: deriveAvailabilityBoolean(availabilityStatus)
+    };
+
+    if (writeDatabase(db)) {
+        res.json(db.products[index]);
+    } else {
+        res.status(500).json({ error: 'Failed to update product availability' });
     }
 });
 
@@ -3632,6 +3663,50 @@ function coerceBoolean(value, fallback = false) {
     if (['true', '1', 'yes', 'on'].includes(s)) return true;
     if (['false', '0', 'no', 'off'].includes(s)) return false;
     return fallback;
+}
+
+function normalizeAvailabilityStatus(value) {
+    if (value === undefined || value === null) return null;
+    const s = String(value).trim().toLowerCase();
+    if (!s) return null;
+
+    if (['available', 'in_stock', 'instock', 'active', 'enabled'].includes(s)) return 'available';
+    if (['limited', 'low_stock', 'lowstock'].includes(s)) return 'limited';
+    if (['out_of_stock', 'outofstock', 'out-of-stock', 'sold_out', 'soldout'].includes(s)) return 'out_of_stock';
+    if (['not_available', 'notavailable', 'not-available', 'inactive', 'disabled'].includes(s)) return 'not_available';
+
+    return null;
+}
+
+function getProductAvailabilityStatus(product) {
+    const statusFromField = normalizeAvailabilityStatus(product?.availabilityStatus ?? product?.availability_status);
+    if (statusFromField) return statusFromField;
+
+    if (product?.availability === undefined || product?.availability === null) return 'available';
+    return coerceBoolean(product.availability, true) ? 'available' : 'not_available';
+}
+
+function isProductOrderable(product) {
+    const status = getProductAvailabilityStatus(product);
+    return status === 'available' || status === 'limited';
+}
+
+function deriveAvailabilityBoolean(status) {
+    return status === 'available' || status === 'limited';
+}
+
+function pickRequestedAvailabilityStatus(body, existingProduct) {
+    const raw = body?.availabilityStatus ?? body?.availability_status ?? body?.status;
+    const parsed = normalizeAvailabilityStatus(raw);
+    if (parsed) return parsed;
+
+    // Backward compatibility: boolean availability field
+    if (body && (body.availability !== undefined && body.availability !== null)) {
+        return coerceBoolean(body.availability, true) ? 'available' : 'not_available';
+    }
+
+    // Fall back to current
+    return getProductAvailabilityStatus(existingProduct);
 }
 
 function getEffectiveMinimumOrderAmount(orderSettings, method) {
@@ -4643,6 +4718,33 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         const restaurant = data.restaurants?.find(r => r.id === targetRestaurantId && r.active);
         if (!restaurant) {
             return res.status(400).json({ error: 'Invalid restaurant ID' });
+        }
+
+        // Verify ordered items exist and are orderable
+        const unavailableItems = [];
+        for (const item of sanitizedItems) {
+            const itemId = item?.id;
+            const parsedId = (itemId === undefined || itemId === null) ? NaN : parseInt(itemId, 10);
+            if (!Number.isFinite(parsedId)) {
+                // Legacy clients might not send IDs; skip strict enforcement.
+                continue;
+            }
+
+            const product = (data.products || []).find(p => p && p.id === parsedId);
+            if (!product) {
+                unavailableItems.push({ id: parsedId, name: item?.name || '' });
+                continue;
+            }
+            if (!isProductOrderable(product)) {
+                unavailableItems.push({ id: parsedId, name: product?.name || item?.name || '', status: getProductAvailabilityStatus(product) });
+            }
+        }
+
+        if (unavailableItems.length > 0) {
+            return res.status(409).json({
+                error: 'Some items are not available',
+                items: unavailableItems
+            });
         }
 
         // Count previous orders from this phone number FOR THIS RESTAURANT ONLY
