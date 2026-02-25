@@ -48,6 +48,8 @@ if ($null -eq $config) {
         apiKey = ''
         pollIntervalMs = 5000
         stateFile = './printer-agent-state.json'
+        enableNoteReprints = $true
+        noteStateFile = './printer-agent-note-state.json'
         logFile = './printer-agent.log'
         printerIp = ''
         printerPort = 9100
@@ -177,6 +179,8 @@ $btnInstall.Add_Click({
         apiKey = $apiKey
         pollIntervalMs = $poll
         stateFile = './printer-agent-state.json'
+        enableNoteReprints = $true
+        noteStateFile = './printer-agent-note-state.json'
         logFile = $tbLogFile.Text.Trim()
         printerIp = $tbPrinterIp.Text.Trim()
         printerPort = $printerPort

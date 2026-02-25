@@ -165,6 +165,50 @@ async function printOrder(order, printerTarget = null) {
 }
 
 /**
+ * Принтиране само на ОБЩАТА БЕЛЕЖКА (customerInfo.notes)
+ */
+async function printOrderNote(order, printerTarget = null) {
+    try {
+        let printer = null;
+
+        if (printerTarget) {
+            if (typeof printerTarget === 'string') {
+                printer = { ip: printerTarget, port: 9100 };
+            } else if (typeof printerTarget === 'object' && printerTarget.ip) {
+                printer = {
+                    ip: String(printerTarget.ip).trim(),
+                    port: Number.isFinite(Number(printerTarget.port)) ? Number(printerTarget.port) : 9100
+                };
+            } else {
+                return { success: false, error: 'Invalid printer target' };
+            }
+        } else {
+            const printers = await findNetworkPrinters();
+            if (printers.length === 0) {
+                console.log('No printers found on network');
+                return { success: false, error: 'No printers found' };
+            }
+            printer = printers[0];
+            console.log(`Using printer at ${printer.ip}`);
+        }
+
+        const receipt = generateNoteReceiptText(order);
+        const printed = await sendToPrinter(printer.ip, printer.port, receipt);
+
+        if (printed) {
+            console.log('Order note printed successfully');
+            return { success: true, printer: printer.ip };
+        }
+
+        console.log('Failed to print order note');
+        return { success: false, error: 'Failed to send to printer' };
+    } catch (error) {
+        console.error('Error printing order note:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
  * Генериране на текст за касова бележка (ESC/POS команди)
  */
 function generateReceiptText(order) {
@@ -286,6 +330,56 @@ function generateReceiptText(order) {
     return receipt;
 }
 
+function generateNoteReceiptText(order) {
+    const ESC = '\x1B';
+
+    let receipt = '';
+
+    receipt += `${ESC}@`;
+    receipt += `${ESC}a\x01`;
+    receipt += `${ESC}!\x30`;
+    receipt += 'BOJOLE\n';
+    receipt += `${ESC}!\x00`;
+    receipt += '================================\n';
+
+    receipt += `${ESC}a\x00`;
+    receipt += `БЕЛЕЖКА ЗА ПОРЪЧКА\n`;
+    receipt += `Поръчка #${order?.id || ''}\n`;
+
+    try {
+        if (order?.createdAt) {
+            receipt += `Дата: ${new Date(order.createdAt).toLocaleString('bg-BG')}\n`;
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    const name = (order?.customerInfo?.name || '').toString().trim();
+    const phone = (order?.customerInfo?.phone || '').toString().trim();
+    if (name || phone) {
+        receipt += '--------------------------------\n';
+        if (name) receipt += `Клиент: ${name}\n`;
+        if (phone) receipt += `Тел: ${phone}\n`;
+    }
+
+    receipt += '================================\n';
+    receipt += `${ESC}!\x08`;
+    receipt += 'ОБЩА БЕЛЕЖКА:\n';
+    receipt += `${ESC}!\x00`;
+
+    const note = (order?.customerInfo?.notes || '').toString().replace(/\r/g, '').trim();
+    if (!note) {
+        receipt += '(Няма бележка)\n';
+    } else {
+        receipt += `${note}\n`;
+    }
+
+    receipt += '================================\n';
+    receipt += '\n\n\n';
+
+    return receipt;
+}
+
 /**
  * Изпращане на данни към принтера
  */
@@ -361,6 +455,7 @@ async function testPrinter(ip = null, port = 9100) {
 module.exports = {
     findNetworkPrinters,
     printOrder,
+    printOrderNote,
     testPrinter,
     getLocalIP
 };

@@ -4,7 +4,7 @@ const http = require('http');
 const https = require('https');
 const net = require('net');
 
-const { printOrder, findNetworkPrinters, getLocalIP } = require('./printer-service');
+const { printOrder, printOrderNote, findNetworkPrinters, getLocalIP } = require('./printer-service');
 
 function setupFileLogging() {
     const logFile = env('AGENT_LOG_FILE', '').trim();
@@ -337,6 +337,16 @@ async function clearOrderReprint(apiBaseUrl, apiKey, orderId) {
     return !!r.json?.success;
 }
 
+async function clearOrderReprintNote(apiBaseUrl, apiKey, orderId) {
+    const url = `${apiBaseUrl}/orders/${encodeURIComponent(orderId)}/clear-reprint-note`;
+    const r = await requestJson('POST', url, { 'x-api-key': apiKey }, {});
+    if (r.status !== 200) {
+        console.warn(`[REPRINT-NOTE] Failed to clear reprint-note for ${orderId} (${r.status})`, r.json || r.raw);
+        return false;
+    }
+    return !!r.json?.success;
+}
+
 async function resolvePrinterTarget(printerCfg, envOverride, state) {
     const overrideIp = (envOverride.ip || '').toString().trim();
     const overridePort = envOverride.port;
@@ -394,6 +404,8 @@ async function run() {
 
     const pollIntervalMs = Math.max(1500, parseInt(env('AGENT_POLL_INTERVAL_MS', '5000'), 10) || 5000);
     const stateFile = env('AGENT_STATE_FILE', path.join(__dirname, 'printer-agent-state.json'));
+    const enableNoteReprints = parseBool(env('AGENT_ENABLE_NOTE_REPRINTS', ''), true);
+    const noteStateFile = env('AGENT_NOTE_STATE_FILE', '');
     const dryRun = parseBool(env('AGENT_DRY_RUN', ''), false);
 
     const envPrinterIp = env('AGENT_PRINTER_IP', '').trim();
@@ -403,11 +415,22 @@ async function run() {
     const state = loadState(stateFile);
     state.printed = (state.printed && typeof state.printed === 'object') ? state.printed : {};
     state.lastPrinter = (state.lastPrinter && typeof state.lastPrinter === 'object') ? state.lastPrinter : null;
+    state.notePrinted = (state.notePrinted && typeof state.notePrinted === 'object') ? state.notePrinted : {};
+
+    const noteStatePath = noteStateFile
+        ? (path.isAbsolute(noteStateFile) ? noteStateFile : path.join(process.cwd(), noteStateFile))
+        : '';
+    const noteState = noteStatePath ? loadState(noteStatePath) : null;
+    if (noteState) {
+        noteState.notePrinted = (noteState.notePrinted && typeof noteState.notePrinted === 'object') ? noteState.notePrinted : {};
+    }
 
     console.log('[AGENT] Starting printer agent');
     console.log('[AGENT] API:', apiBaseUrl);
     console.log('[AGENT] Poll:', pollIntervalMs, 'ms');
     console.log('[AGENT] State file:', stateFile);
+    console.log('[AGENT] Note reprints:', enableNoteReprints ? 'ENABLED' : 'DISABLED');
+    if (noteStatePath) console.log('[AGENT] Note state file:', noteStatePath);
     console.log('[AGENT] Dry run:', dryRun ? 'YES' : 'NO');
 
     while (true) {
@@ -434,11 +457,27 @@ async function run() {
 
             const orders = await fetchApprovedOrders(apiBaseUrl, apiKey);
             const candidates = orders
-                .filter(o => o && (o.forceReprint === true ? true : !(o.printerPrintedAt ? true : false)))
                 .filter(o => {
+                    if (!o) return false;
                     const orderId = String(o?.id || '');
                     if (!orderId) return false;
-                    return o.forceReprint === true ? true : !state.printed[orderId];
+
+                    const noteRequested = enableNoteReprints && o.forceReprintNote === true;
+                    if (noteRequested) {
+                        const requestedAt = String(o.forceReprintNoteRequestedAt || o.forceReprintNoteAt || o.forceReprintRequestedAt || o.forceReprintAt || '') || '1';
+                        const noteKey = `${orderId}:${requestedAt}`;
+
+                        // Use separate note-state file if configured, otherwise reuse main state
+                        const store = noteState ? noteState.notePrinted : state.notePrinted;
+                        if (store[noteKey]) return false;
+                        return true;
+                    }
+
+                    if (o.forceReprint === true) return true;
+
+                    if (o.printerPrintedAt) return false;
+                    if (state.printed[orderId]) return false;
+                    return true;
                 })
                 .filter(o => {
                     const method = (o.deliveryMethod || o.deliveryType || '').toString();
@@ -450,6 +489,33 @@ async function run() {
             for (const order of candidates) {
                 const orderId = String(order.id || '');
                 if (!orderId) continue;
+
+                const noteRequested = enableNoteReprints && order.forceReprintNote === true;
+                if (noteRequested) {
+                    const requestedAt = String(order.forceReprintNoteRequestedAt || order.forceReprintNoteAt || order.forceReprintRequestedAt || order.forceReprintAt || '') || '1';
+                    const noteKey = `${orderId}:${requestedAt}`;
+
+                    console.log(`[AGENT] Printing NOTE for order ${orderId} -> ${printerTarget.ip}:${printerTarget.port} (${printerTarget.resolvedBy})`);
+
+                    if (!dryRun) {
+                        const r = await printOrderNote(order, { ip: printerTarget.ip, port: printerTarget.port });
+                        if (!r || !r.success) {
+                            console.error('[AGENT] Note print failed:', r?.error || 'unknown');
+                            continue;
+                        }
+                    }
+
+                    const store = noteState ? noteState.notePrinted : state.notePrinted;
+                    store[noteKey] = new Date().toISOString();
+                    if (noteState) {
+                        saveState(noteStatePath, noteState);
+                    } else {
+                        saveState(stateFile, state);
+                    }
+
+                    await clearOrderReprintNote(apiBaseUrl, apiKey, orderId);
+                    continue;
+                }
 
                 console.log(`[AGENT] Printing order ${orderId} -> ${printerTarget.ip}:${printerTarget.port} (${printerTarget.resolvedBy})`);
 

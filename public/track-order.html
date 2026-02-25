@@ -162,13 +162,14 @@
         }
 
         .order-id {
-            font-size: 16px;
+            font-size: 14px;
             color: var(--highlight-color);
             font-weight: bold;
             max-width: 65%;
             text-align: right;
-            overflow-wrap: anywhere;
-            word-break: break-word;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .status-container {

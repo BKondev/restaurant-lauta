@@ -33,6 +33,8 @@ if ($config.printerIp) { $env:AGENT_PRINTER_IP = [string]$config.printerIp }
 if ($config.printerPort) { $env:AGENT_PRINTER_PORT = [string]$config.printerPort }
 if ($config.subnet) { $env:AGENT_SUBNET = [string]$config.subnet }
 if ($null -ne $config.dryRun) { $env:AGENT_DRY_RUN = [string]$config.dryRun }
+if ($null -ne $config.enableNoteReprints) { $env:AGENT_ENABLE_NOTE_REPRINTS = [string]$config.enableNoteReprints }
+if ($config.noteStateFile) { $env:AGENT_NOTE_STATE_FILE = [string]$config.noteStateFile }
 
 # Resolve node.exe
 $nodePath = $null

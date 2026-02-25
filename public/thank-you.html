@@ -32,6 +32,18 @@
     .contact-box { margin-top: 14px; color:#444; }
     .contact-box a { color: var(--highlight-color); text-decoration: none; font-weight: 800; }
 
+    .delivery-info {
+      background: rgba(0, 0, 0, 0.04);
+      border-left: 4px solid var(--highlight-color);
+      padding: 15px;
+      border-radius: 8px;
+      margin: 14px 0 0 0;
+    }
+    .delivery-info i {
+      color: var(--highlight-color);
+      margin-right: 8px;
+    }
+
     .top-actions { display:flex; align-items:center; justify-content:flex-end; gap: 10px; }
     .top-actions a { display:inline-flex; align-items:center; justify-content:center; padding: 8px 12px; border-radius: 10px; text-decoration:none; font-weight: 800; }
 
@@ -447,13 +459,38 @@
             const address = (o?.customerInfo?.address || '').toString().trim();
             const city = (o?.customerInfo?.city || '').toString().trim();
             const place = [address, city].filter(Boolean).join(', ');
-            const deliveryText = (o?.deliveryMethod === 'delivery')
-              ? `${t('deliveryTo')}: ${place || '—'}`
-              : t('pickup');
+
+            const isDelivery = (o?.deliveryMethod || '').toString().trim().toLowerCase() === 'delivery';
+
+            const contactsAddress = (siteSettings?.footer?.contacts?.address || '').toString().trim();
+            const contactsMapsUrl = (siteSettings?.footer?.contacts?.addressMapsUrl || '').toString().trim();
+            const pickupMapsUrl = contactsMapsUrl || (contactsAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contactsAddress)}` : '');
+
+            const addressHtml = isDelivery
+              ? `
+                <div class="delivery-info">
+                  <i class="fas fa-map-marker-alt"></i>
+                  <strong>${escapeHtml(t('deliveryTo'))}</strong><br>
+                  ${escapeHtml(place || '—')}
+                </div>
+              `
+              : (contactsAddress ? `
+                <div class="delivery-info">
+                  <i class="fas fa-map-marker-alt"></i>
+                  <strong>${escapeHtml(t('pickup'))}</strong><br>
+                  ${pickupMapsUrl ? `<a href="${pickupMapsUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--highlight-color); font-weight: 800; text-decoration: none;">${escapeHtml(contactsAddress)}</a>` : escapeHtml(contactsAddress)}
+                </div>
+              ` : `
+                <div class="delivery-info">
+                  <i class="fas fa-map-marker-alt"></i>
+                  <strong>${escapeHtml(t('pickup'))}</strong>
+                </div>
+              `);
+
             summary.style.display = '';
             summary.innerHTML = `
               <div>${customerName ? `${t('hello')}, <strong>${escapeHtml(customerName)}</strong>` : `${t('hello')},`}</div>
-              <div style="margin-top:6px; color:#555;">${escapeHtml(deliveryText)}</div>
+              ${addressHtml}
               ${promoLine ? `<div style="margin-top:6px; color:#555;"><strong>${t('promo')}:</strong> ${promoLine}</div>` : ''}
             `;
           }

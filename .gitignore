@@ -36,5 +36,8 @@ printer-agent-state.json
 *.zip
 *.tar.gz
 
+# Extracted vendor ZIPs / working folders
+_zip/
+
 # Inno Setup build outputs
 installer/Output/

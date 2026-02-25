@@ -6,6 +6,8 @@
   "logFile": "./printer-agent.log",
   "printerIp": "",
   "printerPort": 9100,
+  "enableNoteReprints": true,
+  "noteStateFile": "./printer-agent-note-state.json",
   "subnet": "192.168.88",
   "subnetMask": "255.255.255.0",
   "gateway": "192.168.88.1",

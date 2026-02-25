@@ -2365,25 +2365,31 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl, contactP
         : '';
 
     const promoBlock = promoCode
-        ? `<p style="margin:6px 0;">Промо код: <strong>${escapeHtml(promoCode)}</strong>${discountPct ? ` (-${escapeHtml(discountPct)}%)` : ''}</p>`
+        ? `<p style="margin:6px 0; text-align:right;">Промо код: <strong>${escapeHtml(promoCode)}</strong>${discountPct ? ` (-${escapeHtml(discountPct)}%)` : ''}</p>`
         : '';
 
     const discountBlock = discountAmountNum > 0
-        ? `<p style="margin:6px 0;">Отстъпка${promoCode ? ` (${escapeHtml(promoCode)})` : ''}: <strong>-${escapeHtml(formatMoneyEUR(discountAmountNum))}</strong></p>`
+        ? `<p style="margin:6px 0; text-align:right;">Отстъпка${promoCode ? ` (${escapeHtml(promoCode)})` : ''}: <strong>-${escapeHtml(formatMoneyEUR(discountAmountNum))}</strong></p>`
         : '';
 
     const savingsBlock = totalSavingsNum > 0
-        ? `<p style="margin:6px 0;">Спестявате: <strong>${escapeHtml(formatMoneyEUR(totalSavingsNum))}</strong></p>`
+        ? `<p style="margin:6px 0; text-align:right;">Спестявате: <strong>${escapeHtml(formatMoneyEUR(totalSavingsNum))}</strong></p>`
         : '';
 
     const isDelivery = order?.deliveryMethod === 'delivery';
+    const subtotalBlock = subtotalNum > 0
+        ? `
+            <table style="margin:12px 0 0 auto; border-collapse:collapse; width:auto;">
+                <tr>
+                    <td style="padding:4px 0; text-align:right; color:#374151;">Междинна сума:</td>
+                    <td style="padding:4px 0 4px 16px; text-align:right; font-weight:800; white-space:nowrap;">${escapeHtml(formatMoneyEUR(subtotalNum))}</td>
+                </tr>
+            </table>
+        `
+        : '';
+
     const totalsBlock = `
         <table style="margin:16px 0 0 auto; border-collapse:collapse; width:auto;">
-            ${subtotalNum > 0 ? `
-            <tr>
-                <td style="padding:4px 0; text-align:right; color:#374151;">Междинна сума:</td>
-                <td style="padding:4px 0 4px 16px; text-align:right; font-weight:800; white-space:nowrap;">${escapeHtml(formatMoneyEUR(subtotalNum))}</td>
-            </tr>` : ''}
             ${isDelivery ? `
             <tr>
                 <td style="padding:4px 0; text-align:right; color:#374151;">Доставка:</td>
@@ -2427,8 +2433,10 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl, contactP
             <h3 style="margin:18px 0 8px 0;">Артикули</h3>
             ${formatOrderItemsHtml(order)}
 
+            ${subtotalBlock}
+
             ${(promoBlock || savingsBlock || discountBlock) ? `
-                <div style="margin:12px 0 0 0; padding: 12px; border-radius: 10px; background: #f9fafb;">
+                <div style="margin:12px 0 0 0; padding: 12px; border-radius: 10px; background: #f9fafb; text-align:right;">
                     ${promoBlock}
                     ${discountBlock}
                     ${savingsBlock}
@@ -4059,6 +4067,43 @@ app.post(API_PREFIX + '/orders/:id/reprint', requireAuthOrApiKey, (req, res) => 
     }
 });
 
+// Request order NOTE reprint (Bearer token or API key)
+// Used by mobile to print only the order note (customer notes) by order ID.
+app.post(API_PREFIX + '/orders/:id/reprint-note', requireAuthOrApiKey, (req, res) => {
+    try {
+        const orderId = req.params.id;
+
+        const data = readDatabase();
+        if (!data.orders) {
+            return res.status(404).json({ success: false, message: 'No orders found', expired: true });
+        }
+
+        const idx = data.orders.findIndex(o => o && o.id === orderId);
+        if (idx === -1) {
+            return res.status(404).json({ success: false, message: 'Order not found', expired: true });
+        }
+
+        const order = data.orders[idx];
+        if (!isOrderForRestaurant(order, req.restaurantId, data)) {
+            return res.status(403).json({ success: false, message: 'Access denied', expired: false });
+        }
+
+        const nowIso = new Date().toISOString();
+        order.forceReprintNote = true;
+        order.forceReprintNoteRequestedAt = nowIso;
+        order.forceReprintNoteRequestedBy = (req.username || req.restaurantName || 'api').toString();
+        order.updatedAt = nowIso;
+
+        data.orders[idx] = order;
+        writeDatabase(data);
+
+        res.json({ success: true, message: 'Note reprint requested', expired: false, orderId });
+    } catch (error) {
+        console.error('Error requesting order note reprint:', error);
+        res.status(500).json({ success: false, message: 'Failed to request note reprint', expired: false });
+    }
+});
+
 // Clear order reprint flag (Bearer token or API key)
 // Called by printer agent after a successful print so the order returns to normal printed behavior.
 app.post(API_PREFIX + '/orders/:id/clear-reprint', requireAuthOrApiKey, (req, res) => {
@@ -4093,6 +4138,43 @@ app.post(API_PREFIX + '/orders/:id/clear-reprint', requireAuthOrApiKey, (req, re
     } catch (error) {
         console.error('Error clearing reprint flag:', error);
         res.status(500).json({ success: false, message: 'Failed to clear reprint flag' });
+    }
+});
+
+// Clear order NOTE reprint flag (Bearer token or API key)
+// Called by printer agent after a successful note-only print.
+app.post(API_PREFIX + '/orders/:id/clear-reprint-note', requireAuthOrApiKey, (req, res) => {
+    try {
+        const orderId = req.params.id;
+
+        const data = readDatabase();
+        if (!data.orders) {
+            return res.status(404).json({ success: false, message: 'No orders found' });
+        }
+
+        const idx = data.orders.findIndex(o => o && o.id === orderId);
+        if (idx === -1) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        const order = data.orders[idx];
+        if (!isOrderForRestaurant(order, req.restaurantId, data)) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
+        const nowIso = new Date().toISOString();
+        order.forceReprintNote = false;
+        order.forceReprintNoteClearedAt = nowIso;
+        order.forceReprintNoteClearedBy = (req.username || req.restaurantName || 'api').toString();
+        order.updatedAt = nowIso;
+
+        data.orders[idx] = order;
+        writeDatabase(data);
+
+        res.json({ success: true, message: 'Note reprint flag cleared', orderId });
+    } catch (error) {
+        console.error('Error clearing note reprint flag:', error);
+        res.status(500).json({ success: false, message: 'Failed to clear note reprint flag' });
     }
 });
 
