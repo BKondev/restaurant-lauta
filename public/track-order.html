@@ -841,15 +841,6 @@
             `;
 
             const items = Array.isArray(order.items) ? order.items : [];
-            const itemsSavings = round2(items.reduce((acc, it) => {
-                const qty = Math.max(0, toNumber(it && it.quantity));
-                const price = Math.max(0, toNumber(it && it.price));
-                const original = Number(it && it.originalPrice);
-                if (!Number.isFinite(original) || original <= price) return acc;
-                return acc + ((original - price) * qty);
-            }, 0));
-            const totalSavings = round2(itemsSavings + Math.max(0, discountAmount));
-
             const itemsHtml = `
                 <div class="items-info">
                     <div class="items-title">${t('itemsTitle')}</div>
@@ -903,12 +894,6 @@
                             <div class="item-price">-${formatMoney(discountAmount, currency)}</div>
                         </div>
                     ` : ''}
-                    ${(totalSavings > 0) ? `
-                        <div class="item-row">
-                            <div class="item-name">${t('savings')}</div>
-                            <div class="item-price">${formatMoney(totalSavings, currency)}</div>
-                        </div>
-                    ` : ''}
                     ${(deliveryFee > 0) ? `
                         <div class="item-row">
                             <div class="item-name">${t('deliveryFee')}</div>
@@ -938,6 +923,9 @@
                     <p class="subtitle">${normalizedStatus === 'cancelled' ? t('cancelledSubtitle') : t('okSubtitle')}</p>
                 </div>
 
+                ${pickupLocationHtml}
+                ${stepperHtml}
+
                 <div class="status-container">
                     <div class="status-text">
                         ${normalizedStatus === 'cancelled' ? t('status_cancelled') : (isLater ? laterLabel : ((timeRemaining && timeRemaining.total > 0) ? t('statusHeaderEta') : t('statusHeaderReady')))}
@@ -954,9 +942,6 @@
                         </div>
                     `}
                 </div>
-
-                ${pickupLocationHtml}
-                ${!isDelivery ? stepperHtml : ''}
 
                 ${itemsHtml}
 
@@ -1000,8 +985,6 @@
                         ${escapeHtml(order.customerInfo.address)}, ${escapeHtml(order.customerInfo.city)}
                     </div>
                 ` : ''}
-
-                ${isDelivery ? stepperHtml : ''}
 
                 <div class="actions">
                     <a href="${BASE_PATH}/" class="btn btn-secondary">

@@ -242,21 +242,9 @@
         actions.innerHTML = '';
         actions.style.display = 'none';
 
-        if (isDelivery) return;
-
-        const contactsAddress = (siteSettings?.footer?.contacts?.address || '').toString().trim();
-        const contactsMapsUrl = (siteSettings?.footer?.contacts?.addressMapsUrl || '').toString().trim();
-        const pickupMapsUrl = contactsMapsUrl || (contactsAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contactsAddress)}` : '');
-        if (!contactsAddress || !pickupMapsUrl) return;
-
-        const a = document.createElement('a');
-        a.className = 'btn-secondary';
-        a.href = pickupMapsUrl;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.textContent = contactsAddress;
-        actions.appendChild(a);
-        actions.style.display = '';
+        // Pickup location is shown inside the delivery-info block in the summary.
+        // Keep hero actions hidden to avoid duplicate map buttons.
+        return;
       }
 
       function toNumber(val) {
@@ -392,14 +380,6 @@
           const discountAmount = toNumber(o?.discountAmount);
           const deliveryFee = toNumber(o?.deliveryFee);
           const total = toNumber(o?.total);
-           const itemsSavings = round2(items.reduce((acc, it) => {
-             const qty = Math.max(0, Number(it?.quantity || 0));
-             const price = Math.max(0, Number(it?.price || 0));
-             const original = Number(it?.originalPrice);
-             if (!Number.isFinite(original) || original <= price) return acc;
-             return acc + ((original - price) * qty);
-           }, 0));
-           const totalSavings = round2(itemsSavings + Math.max(0, discountAmount));
           const promoCode = (o?.promoCode || '').toString().trim();
           const discountPct = Math.max(0, Math.min(100, toNumber(o?.discount)));
           const orderNote = (o?.orderNote || '').toString().replace(/\r/g, '').trim();
@@ -428,12 +408,6 @@
                 <div class="items-price">-${formatMoney(discountAmount, currency)}</div>
               </div>
             ` : ''}
-             ${(totalSavings > 0) ? `
-               <div class="items-row">
-                 <div class="items-name">${t('savings')}</div>
-                 <div class="items-price">${formatMoney(totalSavings, currency)}</div>
-               </div>
-             ` : ''}
             ${(deliveryFee > 0) ? `
               <div class="items-row">
                 <div class="items-name">${t('deliveryFee')}</div>
