@@ -4093,6 +4093,15 @@ app.post(API_PREFIX + '/orders/:id/printed', requireAuthOrApiKey, (req, res) => 
         order.printerPrintedBy = (source || req.username || req.restaurantName || 'printer-agent').toString();
         if (printerIp) order.printerPrintedIp = String(printerIp).trim();
         if (printerPort != null) order.printerPrintedPort = parseInt(printerPort, 10) || 9100;
+
+        // If an order was reprinted via reprintRequested=true, clear the flag after a successful print.
+        // Otherwise the printer agent will keep reprinting on every poll.
+        if (order.reprintRequested === true) {
+            order.reprintRequested = false;
+            order.reprintRequestedClearedAt = nowIso;
+            order.reprintRequestedClearedBy = (source || req.username || req.restaurantName || 'printer-agent').toString();
+        }
+
         order.updatedAt = nowIso;
 
         data.orders[idx] = order;
@@ -4768,6 +4777,7 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             promoCode: (promoCodeAny || '').toString().trim() || undefined,
             discount: Math.max(0, Math.min(100, parseNumber(discountAny, 0))),
             total: parseNumber(totalAny, 0),
+            reprintRequested: false,
             // Keep existing field for backward compatibility across UI surfaces
             deliveryMethod,
             // Normalized field for future flows
@@ -4983,7 +4993,8 @@ app.put(API_PREFIX + '/orders/:id', requireAuthOrApiKey, async (req, res) => {
             discount,
             promoCode,
             customerInfo,
-            items
+            items,
+            reprintRequested
         } = req.body;
 
         const isEditOperation = (
@@ -5098,6 +5109,21 @@ app.put(API_PREFIX + '/orders/:id', requireAuthOrApiKey, async (req, res) => {
         // Save approval timestamp if provided
         if (approvedAt) {
             order.approvedAt = approvedAt;
+        }
+
+        // Allow clients (e.g. mobile app) to request a reprint without changing status.
+        // This is separate from forceReprint (used by /orders/:id/reprint).
+        if (reprintRequested !== undefined) {
+            const nowIso = new Date().toISOString();
+            const requested = coerceBoolean(reprintRequested, false);
+            order.reprintRequested = requested;
+            if (requested) {
+                order.reprintRequestedAt = nowIso;
+                order.reprintRequestedBy = (req.username || req.restaurantName || 'api').toString();
+            } else {
+                order.reprintRequestedClearedAt = nowIso;
+                order.reprintRequestedClearedBy = (req.username || req.restaurantName || 'api').toString();
+            }
         }
 
         // Set milestone timestamps when status changes
