@@ -524,8 +524,10 @@ async function run() {
 
                     if (getReprintRequested(o)) return true;
 
+                    // Backend is the source of truth for whether an order should be printed.
+                    // If printerPrintedAt is null/empty (including after a manual reprint reset),
+                    // we MUST allow printing even if the agent previously cached it as printed.
                     if (o.printerPrintedAt) return false;
-                    if (state.printed[orderId]) return false;
                     return true;
                 })
                 .filter(o => {

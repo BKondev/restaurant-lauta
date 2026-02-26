@@ -4135,16 +4135,18 @@ app.post(API_PREFIX + '/orders/:id/reprint', requireAuthOrApiKey, (req, res) => 
             return res.status(403).json({ success: false, message: 'Access denied', expired: false });
         }
 
-        const nowIso = new Date().toISOString();
-        order.forceReprint = true;
-        order.forceReprintRequestedAt = nowIso;
-        order.forceReprintRequestedBy = (req.username || req.restaurantName || 'api').toString();
-        order.updatedAt = nowIso;
+        // Professional reprint flow:
+        // - Reset the printed markers ONLY.
+        // - Do not change updatedAt, do not set timestamps, do not rely on time comparisons.
+        // The printer agent will see printerPrintedAt=null and will print exactly once,
+        // then it will call /orders/:id/printed which stores a new printerPrintedAt.
+        order.printerPrintedAt = null;
+        order.printerPrintedBy = null;
 
         data.orders[idx] = order;
         writeDatabase(data);
 
-        res.json({ success: true, message: 'Reprint requested', expired: false, orderId });
+        res.json({ success: true, expired: false, orderId });
     } catch (error) {
         console.error('Error requesting order reprint:', error);
         res.status(500).json({ success: false, message: 'Failed to request reprint', expired: false });
