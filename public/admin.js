@@ -36,8 +36,11 @@ const translations = {
         outOfStock: 'Out of stock',
         notAvailable: 'Not available',
         actions: 'Actions',
+        print: 'Print',
         edit: 'Edit',
         delete: 'Delete',
+        printRequested: 'Print requested.',
+        printFailed: 'Failed to request print',
         save: 'Save',
         cancel: 'Cancel',
         confirm: 'Confirm',
@@ -473,8 +476,11 @@ const translations = {
         outOfStock: 'Изчерпан',
         notAvailable: 'Не е наличен',
         actions: 'Действия',
+        print: 'Печат',
         edit: 'Редактирай',
         delete: 'Изтрий',
+        printRequested: 'Печатът е заявен.',
+        printFailed: 'Грешка при заявяване на печат',
         save: 'Запази',
         cancel: 'Отказ',
         confirm: 'Потвърди',
@@ -5547,6 +5553,9 @@ function renderOrdersHistory() {
                         <div class="oh-col oh-actions">
                             <div class="oh-title">${t('actions', 'Actions')}</div>
                             <div class="oh-actions-buttons">
+                                <button onclick="requestOrderReprint('${order.id}')" class="btn btn-primary" style="padding: 6px 10px;">
+                                    <i class="fas fa-print"></i> ${t('print', 'Print')}
+                                </button>
                                 <button onclick="openOrderEditModal('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
                                     <i class="fas fa-pen"></i> ${t('edit', 'Edit')}
                                 </button>
@@ -5610,6 +5619,9 @@ function renderOrdersHistory() {
 
                     <div class="order-actions">
                         <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
+                            <button onclick="requestOrderReprint('${order.id}')" class="btn btn-primary" style="padding: 6px 10px;">
+                                <i class="fas fa-print"></i> ${t('print', 'Print')}
+                            </button>
                             <button onclick="openOrderEditModal('${order.id}')" class="btn btn-secondary" style="padding: 6px 10px;">
                                 <i class="fas fa-pen"></i> ${t('edit', 'Edit')}
                             </button>
@@ -6788,6 +6800,31 @@ async function deleteOrder(orderId) {
     } catch (error) {
         console.error('Error deleting order:', error);
         alert('Грешка при изтриване на поръчката');
+    }
+}
+
+// Request a (re)print from the printer agent by resetting printerPrintedAt/By server-side
+async function requestOrderReprint(orderId) {
+    try {
+        const token = sessionStorage.getItem('adminToken');
+        const response = await fetch(`${API_URL}/orders/${orderId}/reprint`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            alert(err.error || t('printFailed', 'Failed to request print'));
+            return;
+        }
+
+        alert(t('printRequested', 'Print requested.'));
+        await loadOrders();
+    } catch (error) {
+        console.error('requestOrderReprint failed:', error);
+        alert(t('printFailed', 'Failed to request print'));
     }
 }
 
