@@ -1,6 +1,6 @@
 param(
     [string]$ServerIp = "46.62.174.218",
-    [string]$ServerUser = "root",
+    [string]$ServerUser = "adminuser",
     [string]$CommitMessage = "deploy",
     [string]$DeployDir = "",  # Auto-detected based on restaurant-config.js
     [string]$Domain = ""      # Optional; auto-detected from restaurant id
@@ -109,21 +109,35 @@ DOMAIN="{DOMAIN}"
 
 is_root() { [ "$(id -u)" -eq 0 ]; }
 
-run() {
+run() { "$@"; }
+
+run_maybe_sudo() {
+    # Try as current user; if it fails and sudo is available, retry with sudo.
+    "$@" && return 0
+    if is_root; then
+        return 1
+    fi
+    if command -v sudo >/dev/null 2>&1; then
+        sudo -n "$@"
+        return $?
+    fi
+    return 1
+}
+
+run_sudo() {
     if is_root; then
         "$@"
-    else
-        if command -v sudo >/dev/null 2>&1; then
-            sudo -n "$@"
-        else
-            echo "ERROR: sudo not available (and not running as root)" >&2
-            exit 1
-        fi
+        return 0
     fi
+    if command -v sudo >/dev/null 2>&1; then
+        sudo -n "$@"
+        return $?
+    fi
+    echo "ERROR: sudo not available (and not running as root)" >&2
+    return 1
 }
 
 pm2_bin() {
-    # sudo can drop PATH; try common locations too.
     command -v pm2 2>/dev/null || true
 }
 
@@ -137,30 +151,35 @@ fi
 
 cd "$DEPLOY_DIR"
 
+if [ ! -w "$DEPLOY_DIR" ]; then
+    echo "WARN: $DEPLOY_DIR not writable by $(id -un); will use sudo for file operations where needed." >&2
+fi
+
 # Avoid git safe.directory issues when running under sudo/root.
-run git config --global --add safe.directory "$DEPLOY_DIR" >/dev/null 2>&1 || true
+git config --global --add safe.directory "$DEPLOY_DIR" >/dev/null 2>&1 || true
+run_sudo git config --global --add safe.directory "$DEPLOY_DIR" >/dev/null 2>&1 || true
 
 # Preserve production files
 echo "  Preserving production data..."
-run mkdir -p "$PRESERVE_DIR"
-[ -f database.json ] && run cp database.json "$PRESERVE_DIR/" || true
-[ -f .env ] && run cp .env "$PRESERVE_DIR/" || true
-[ -d uploads ] && run cp -r uploads "$PRESERVE_DIR/" || true
+run_maybe_sudo mkdir -p "$PRESERVE_DIR"
+[ -f database.json ] && run_maybe_sudo cp database.json "$PRESERVE_DIR/" || true
+[ -f .env ] && run_maybe_sudo cp .env "$PRESERVE_DIR/" || true
+[ -d uploads ] && run_maybe_sudo cp -r uploads "$PRESERVE_DIR/" || true
 
 # Pull latest code
 echo "  Fetching latest code..."
-run git fetch origin
-run git reset --hard origin/main 2>/dev/null || run git reset --hard origin/master
+run_maybe_sudo git fetch origin
+run_maybe_sudo git reset --hard origin/main 2>/dev/null || run_maybe_sudo git reset --hard origin/master
 
 # Restore production files
 echo "  Restoring production data..."
-[ -f "$PRESERVE_DIR/database.json" ] && run cp "$PRESERVE_DIR/database.json" . || true
-[ -f "$PRESERVE_DIR/.env" ] && run cp "$PRESERVE_DIR/.env" . || true
-[ -d "$PRESERVE_DIR/uploads" ] && run cp -r "$PRESERVE_DIR/uploads" . || true
+[ -f "$PRESERVE_DIR/database.json" ] && run_maybe_sudo cp "$PRESERVE_DIR/database.json" . || true
+[ -f "$PRESERVE_DIR/.env" ] && run_maybe_sudo cp "$PRESERVE_DIR/.env" . || true
+[ -d "$PRESERVE_DIR/uploads" ] && run_maybe_sudo cp -r "$PRESERVE_DIR/uploads" . || true
 
 # Install dependencies
 echo "  Installing dependencies..."
-run npm ci --omit=dev 2>/dev/null || run npm install --omit=dev
+run_maybe_sudo npm ci --omit=dev 2>/dev/null || run_maybe_sudo npm install --omit=dev
 
 # Get PM2 process name from .env
 PM2_PROCESS="restaurant-backend"
@@ -168,7 +187,7 @@ if [ "$RESTAURANT_ID" = "rest_lauta_002" ]; then
     PM2_PROCESS="restaurant-backend-lauta"
 fi
 if [ -f .env ]; then
-    ENV_PM2_NAME=$(run grep -E '^(PM2_NAME|PM2_PROCESS|PM2_APP_NAME)=' .env | tail -n 1 | cut -d= -f2- | tr -d '"' | tr -d '\r' | xargs)
+        ENV_PM2_NAME=$(grep -E '^(PM2_NAME|PM2_PROCESS|PM2_APP_NAME)=' .env | tail -n 1 | cut -d= -f2- | tr -d '"' | tr -d '\r' | xargs)
   if [ -n "$ENV_PM2_NAME" ]; then
     PM2_PROCESS="$ENV_PM2_NAME"
   fi
@@ -177,26 +196,94 @@ fi
 PM2_BIN=$(pm2_bin)
 if [ -z "$PM2_BIN" ] && [ -x /usr/local/bin/pm2 ]; then PM2_BIN=/usr/local/bin/pm2; fi
 if [ -z "$PM2_BIN" ] && [ -x /usr/bin/pm2 ]; then PM2_BIN=/usr/bin/pm2; fi
-
-# Restart PM2
-echo "  Restarting PM2 process: $PM2_PROCESS"
-if [ -n "$PM2_BIN" ]; then
-    # Ensure common npm global bin locations are in PATH
-    run env PATH="$PATH:/usr/local/bin:/usr/bin" "$PM2_BIN" restart "$PM2_PROCESS" || run env PATH="$PATH:/usr/local/bin:/usr/bin" "$PM2_BIN" start server.js --name "$PM2_PROCESS"
-    run env PATH="$PATH:/usr/local/bin:/usr/bin" "$PM2_BIN" save || true
-else
-    echo "  WARNING: pm2 not found; trying systemd..."
-    if command -v systemctl >/dev/null 2>&1; then
-        run systemctl restart restaurant.service || true
-        run systemctl restart restaurant-lauta.service || true
-    fi
+if [ -z "$PM2_BIN" ] && [ -x "$HOME/.npm-global/bin/pm2" ]; then PM2_BIN="$HOME/.npm-global/bin/pm2"; fi
+if [ -z "$PM2_BIN" ] && command -v npm >/dev/null 2>&1; then
+    NPM_BIN=$(npm bin -g 2>/dev/null || true)
+    if [ -n "$NPM_BIN" ] && [ -x "$NPM_BIN/pm2" ]; then PM2_BIN="$NPM_BIN/pm2"; fi
 fi
+
+restart_via_systemd_if_present() {
+    if ! command -v systemctl >/dev/null 2>&1; then
+        return 1
+    fi
+    # Try to find a unit file that references the deploy dir.
+    UNIT_FILE=$(run_sudo sh -lc "grep -Rsl --fixed-strings '$DEPLOY_DIR' /etc/systemd/system /lib/systemd/system 2>/dev/null | head -n 1" || true)
+    if [ -n "$UNIT_FILE" ]; then
+        UNIT_NAME=$(basename "$UNIT_FILE")
+        echo "  Restarting systemd unit: $UNIT_NAME"
+        run_sudo systemctl restart "$UNIT_NAME" && return 0
+    fi
+    # Backwards-compatible guesses
+    run_sudo systemctl restart restaurant-lauta.service && return 0
+    run_sudo systemctl restart restaurant.service && return 0
+    return 1
+}
+
+restart_via_pm2_if_present() {
+    if [ -z "$PM2_BIN" ]; then
+        return 1
+    fi
+    # Prefer restarting by exec path (reliable even if the process name differs).
+    PM2_ID=$(run_sudo -u root sh -lc "env PATH='$PATH:/usr/local/bin:/usr/bin:/bin' '$PM2_BIN' jlist 2>/dev/null" \
+      | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const list=JSON.parse(d||'[]');const m=list.find(p=>p?.pm2_env?.pm_exec_path==='$DEPLOY_DIR/server.js');if(m) process.stdout.write(String(m.pm_id));}catch(e){}});")
+    if [ -n "$PM2_ID" ]; then
+        echo "  Restarting PM2 (root) process id: $PM2_ID"
+        run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" restart "$PM2_ID" || return 1
+        run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" save || true
+        return 0
+    fi
+
+    # Fallback to name-based restarts.
+    echo "  Restarting PM2 process (by name): $PM2_PROCESS"
+    env PATH="$PATH:/usr/local/bin:/usr/bin:$HOME/.npm-global/bin" "$PM2_BIN" restart "$PM2_PROCESS" \
+      || run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" restart "$PM2_PROCESS" \
+      || return 1
+    run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" save || true
+    return 0
+}
+
+restart_via_pid_fallback() {
+    # Last-resort restart if the app is a standalone node process (common when running as root).
+    PIDS=$(run_sudo pgrep -f "node .*${DEPLOY_DIR}/server\.js" 2>/dev/null || true)
+    if [ -z "$PIDS" ]; then
+        return 1
+    fi
+
+    echo "  Restarting standalone node process(es): $PIDS"
+    run_sudo kill -TERM $PIDS 2>/dev/null || true
+    # Wait up to ~10s for shutdown
+    for i in $(seq 1 20); do
+        STILL=$(run_sudo pgrep -f "node .*${DEPLOY_DIR}/server\.js" 2>/dev/null || true)
+        [ -z "$STILL" ] && break
+        sleep 0.5
+    done
+
+    # Load environment (best-effort) and start again.
+    DEFAULT_PORT=""
+    if [ "$RESTAURANT_ID" = "rest_lauta_002" ]; then DEFAULT_PORT="3005"; fi
+    if [ "$RESTAURANT_ID" = "rest_bojole_001" ]; then DEFAULT_PORT="3004"; fi
+    LOG_FILE="/var/log/resturant-website-$RESTAURANT_ID.log"
+    run_sudo sh -lc "cd '$DEPLOY_DIR'; set -a; [ -f .env ] && . ./.env >/dev/null 2>&1 || true; set +a; \
+        [ -n '$DEFAULT_PORT' ] && [ -z \"$PORT\" ] && export PORT='$DEFAULT_PORT'; \
+        [ -z \"$BASE_PATH\" ] && export BASE_PATH='/resturant-website'; \
+        nohup /usr/bin/node server.js >>'$LOG_FILE' 2>&1 & disown" || return 1
+    return 0
+}
+
+echo "  Restarting application..."
+restart_via_systemd_if_present \
+  || restart_via_pm2_if_present \
+  || restart_via_pid_fallback \
+  || echo "  WARNING: Could not determine restart mechanism; deployment may require manual restart." >&2
 
 echo "  Deployed commit: $(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
 
 if [ -n "$DOMAIN" ] && command -v curl >/dev/null 2>&1; then
-    echo "  Health check: https://$DOMAIN/api/health"
-    curl -fsS "https://$DOMAIN/api/health" || curl -fsS "https://www.$DOMAIN/api/health" || true
+    echo "  Health check: https://$DOMAIN"
+    curl -fsS "https://$DOMAIN/api/health" || true
+    curl -fsS "https://$DOMAIN/resturant-website/api/health" || true
+    curl -fsS "https://www.$DOMAIN/api/health" || true
+    curl -fsS "https://www.$DOMAIN/resturant-website/api/health" || true
     echo ""
 fi
 
@@ -209,7 +296,7 @@ $remoteScript = $remoteScript.Replace("{DEPLOY_DIR}", $targetDir).Replace("{REST
 $remoteScript = $remoteScript -replace "`r`n", "`n"
 $remoteScript = $remoteScript -replace "`r", "`n"
 
-$remoteScript | ssh "$ServerUser@$ServerIp" "bash -s"
+$remoteScript | ssh -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 "$ServerUser@$ServerIp" "bash -s"
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`n========================================" -ForegroundColor Green
