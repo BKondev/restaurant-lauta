@@ -17,6 +17,17 @@ function Require-Command([string]$name) {
 Require-Command git
 Require-Command ssh
 
+function Convert-GithubHttpsToSsh([string]$url) {
+    if (-not $url) { return $url }
+    $u = $url.Trim()
+    if ($u -match '^https://github\.com/([^/]+)/([^/]+?)(\.git)?$') {
+        $owner = $matches[1]
+        $repo = $matches[2]
+        return "git@github.com:$owner/$repo.git"
+    }
+    return $u
+}
+
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "Deploy Current Restaurant Repository" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan
@@ -99,6 +110,9 @@ git push
 # Step 2: Deploy to server
 Write-Host "`nStep 2: Deploy to server: $targetDir" -ForegroundColor Green
 
+$originUrlLocal = (git remote get-url origin).Trim()
+$originUrlForServer = Convert-GithubHttpsToSsh $originUrlLocal
+
 $remoteScript = @'
 set -e
 
@@ -106,6 +120,7 @@ DEPLOY_DIR="{DEPLOY_DIR}"
 PRESERVE_DIR="$DEPLOY_DIR/.preserve"
 RESTAURANT_ID="{RESTAURANT_ID}"
 DOMAIN="{DOMAIN}"
+REMOTE_URL="{REMOTE_URL}"
 
 is_root() { [ "$(id -u)" -eq 0 ]; }
 
@@ -170,6 +185,12 @@ fi
 # Avoid git safe.directory issues when running under sudo/root.
 git config --global --add safe.directory "$DEPLOY_DIR" >/dev/null 2>&1 || true
 run_sudo git config --global --add safe.directory "$DEPLOY_DIR" >/dev/null 2>&1 || true
+
+# Ensure the repo remote points to the correct source repository.
+if [ -n "$REMOTE_URL" ]; then
+    echo "  Ensuring git remote origin = $REMOTE_URL"
+    run_fs git remote set-url origin "$REMOTE_URL" || true
+fi
 
 # Preserve production files
 echo "  Preserving production data..."
@@ -312,7 +333,7 @@ fi
 echo "✓ {RESTAURANT_NAME} deployment complete!"
 '@
 
-$remoteScript = $remoteScript.Replace("{DEPLOY_DIR}", $targetDir).Replace("{RESTAURANT_NAME}", $restaurantName).Replace("{RESTAURANT_ID}", $restaurantId).Replace("{DOMAIN}", $Domain)
+$remoteScript = $remoteScript.Replace("{DEPLOY_DIR}", $targetDir).Replace("{RESTAURANT_NAME}", $restaurantName).Replace("{RESTAURANT_ID}", $restaurantId).Replace("{DOMAIN}", $Domain).Replace("{REMOTE_URL}", $originUrlForServer)
 
 # Convert to Unix line endings (LF only)
 $remoteScript = $remoteScript -replace "`r`n", "`n"
