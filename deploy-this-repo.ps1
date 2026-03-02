@@ -227,23 +227,9 @@ restart_via_systemd_if_present() {
             return 0
         fi
     fi
-    # Backwards-compatible guesses (only if the unit exists)
-    has_unit() {
-        systemctl list-unit-files --type=service --no-pager 2>/dev/null | awk '{print $1}' | grep -qx "$1"
-    }
-    try_restart_unit() {
-        local unit="$1"
-        if has_unit "$unit"; then
-            echo "  Restarting systemd unit: $unit"
-            if run_sudo systemctl restart "$unit"; then
-                return 0
-            fi
-        fi
-        return 1
-    }
-
-    try_restart_unit restaurant-lauta.service && return 0
-    try_restart_unit restaurant.service && return 0
+    # Don't guess unit names here.
+    # Guessing (e.g. restarting restaurant.service) can restart the wrong tenant.
+    # If there's no unit referencing DEPLOY_DIR, let PM2/PID fallbacks handle restart.
     return 1
 }
 
