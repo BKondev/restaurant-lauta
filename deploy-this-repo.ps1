@@ -86,66 +86,62 @@ git push
 # Step 2: Deploy to server
 Write-Host "`nStep 2: Deploy to server: $targetDir" -ForegroundColor Green
 
-$remoteScript = @"
+$remoteScript = @'
 set -e
 
-# Switch to root for deployment operations
-sudo su - << 'ROOTEOF'
-set -e
+DEPLOY_DIR="{DEPLOY_DIR}"
+PRESERVE_DIR="$DEPLOY_DIR/.preserve"
 
-DEPLOY_DIR="$targetDir"
-PRESERVE_DIR="`$DEPLOY_DIR/.preserve"
+echo "→ Deploying {RESTAURANT_NAME} to $DEPLOY_DIR"
 
-echo "→ Deploying $restaurantName to `$DEPLOY_DIR"
-
-if [ ! -d "`$DEPLOY_DIR" ]; then
-  echo "ERROR: Directory does not exist: `$DEPLOY_DIR"
+if [ ! -d "$DEPLOY_DIR" ]; then
+  echo "ERROR: Directory does not exist: $DEPLOY_DIR"
   echo "Please run initial setup first"
   exit 1
 fi
 
-cd "`$DEPLOY_DIR"
+cd "$DEPLOY_DIR"
 
 # Preserve production files
 echo "  Preserving production data..."
-mkdir -p "`$PRESERVE_DIR"
-[ -f database.json ] && cp database.json "`$PRESERVE_DIR/" || true
-[ -f .env ] && cp .env "`$PRESERVE_DIR/" || true
-[ -d uploads ] && cp -r uploads "`$PRESERVE_DIR/" || true
+sudo mkdir -p "$PRESERVE_DIR"
+[ -f database.json ] && sudo cp database.json "$PRESERVE_DIR/" || true
+[ -f .env ] && sudo cp .env "$PRESERVE_DIR/" || true
+[ -d uploads ] && sudo cp -r uploads "$PRESERVE_DIR/" || true
 
 # Pull latest code
 echo "  Fetching latest code..."
-git fetch origin
-git reset --hard origin/main 2>/dev/null || git reset --hard origin/master
+sudo git fetch origin
+sudo git reset --hard origin/main 2>/dev/null || sudo git reset --hard origin/master
 
 # Restore production files
 echo "  Restoring production data..."
-[ -f "`$PRESERVE_DIR/database.json" ] && cp "`$PRESERVE_DIR/database.json" . || true
-[ -f "`$PRESERVE_DIR/.env" ] && cp "`$PRESERVE_DIR/.env" . || true
-[ -d "`$PRESERVE_DIR/uploads" ] && cp -r "`$PRESERVE_DIR/uploads" . || true
+[ -f "$PRESERVE_DIR/database.json" ] && sudo cp "$PRESERVE_DIR/database.json" . || true
+[ -f "$PRESERVE_DIR/.env" ] && sudo cp "$PRESERVE_DIR/.env" . || true
+[ -d "$PRESERVE_DIR/uploads" ] && sudo cp -r "$PRESERVE_DIR/uploads" . || true
 
 # Install dependencies
 echo "  Installing dependencies..."
-npm ci --omit=dev 2>/dev/null || npm install --omit=dev
+sudo npm ci --omit=dev 2>/dev/null || sudo npm install --omit=dev
 
 # Get PM2 process name from .env
 PM2_PROCESS="restaurant-backend"
 if [ -f .env ]; then
-  ENV_PM2_NAME=`$(grep -E '^PM2_(NAME|PROCESS|APP_NAME)=' .env | cut -d= -f2 | tr -d '"' | head -1)
-  if [ -n "`$ENV_PM2_NAME" ]; then
-    PM2_PROCESS="`$ENV_PM2_NAME"
+  ENV_PM2_NAME=$(sudo grep -E '^PM2_(NAME|PROCESS|APP_NAME)=' .env | cut -d= -f2 | tr -d '"' | head -1)
+  if [ -n "$ENV_PM2_NAME" ]; then
+    PM2_PROCESS="$ENV_PM2_NAME"
   fi
 fi
 
 # Restart PM2
-echo "  Restarting PM2 process: `$PM2_PROCESS"
-pm2 restart "`$PM2_PROCESS" || pm2 start server.js --name "`$PM2_PROCESS"
-pm2 save
+echo "  Restarting PM2 process: $PM2_PROCESS"
+sudo pm2 restart "$PM2_PROCESS" || sudo pm2 start server.js --name "$PM2_PROCESS"
+sudo pm2 save
 
-echo "✓ $restaurantName deployment complete!"
+echo "✓ {RESTAURANT_NAME} deployment complete!"
+'@
 
-ROOTEOF
-"@
+$remoteScript = $remoteScript.Replace("{DEPLOY_DIR}", $targetDir).Replace("{RESTAURANT_NAME}", $restaurantName)
 
 $remoteScript | ssh "$ServerUser@$ServerIp" "bash -s"
 

@@ -89,10 +89,6 @@ Write-Host "================================`n" -ForegroundColor Green
 $remoteScript = @'
 set -e
 
-# Switch to root for deployment operations
-sudo su - << 'ROOTEOF'
-set -e
-
 echo "→ Deploying to both restaurants..."
 
 deploy_instance() {
@@ -112,30 +108,30 @@ deploy_instance() {
     
     # Preserve production files
     echo "  Preserving production data..."
-    mkdir -p "$PRESERVE_DIR"
-    [ -f database.json ] && cp database.json "$PRESERVE_DIR/" || true
-    [ -f .env ] && cp .env "$PRESERVE_DIR/" || true
-    [ -d uploads ] && cp -r uploads "$PRESERVE_DIR/" || true
+    sudo mkdir -p "$PRESERVE_DIR"
+    [ -f database.json ] && sudo cp database.json "$PRESERVE_DIR/" || true
+    [ -f .env ] && sudo cp .env "$PRESERVE_DIR/" || true
+    [ -d uploads ] && sudo cp -r uploads "$PRESERVE_DIR/" || true
     
     # Pull latest code
     echo "  Fetching latest code..."
-    git fetch origin
-    git reset --hard origin/main 2>/dev/null || git reset --hard origin/master
+    sudo git fetch origin
+    sudo git reset --hard origin/main 2>/dev/null || sudo git reset --hard origin/master
     
     # Restore production files
     echo "  Restoring production data..."
-    [ -f "$PRESERVE_DIR/database.json" ] && cp "$PRESERVE_DIR/database.json" . || true
-    [ -f "$PRESERVE_DIR/.env" ] && cp "$PRESERVE_DIR/.env" . || true
-    [ -d "$PRESERVE_DIR/uploads" ] && cp -r "$PRESERVE_DIR/uploads" . || true
+    [ -f "$PRESERVE_DIR/database.json" ] && sudo cp "$PRESERVE_DIR/database.json" . || true
+    [ -f "$PRESERVE_DIR/.env" ] && sudo cp "$PRESERVE_DIR/.env" . || true
+    [ -d "$PRESERVE_DIR/uploads" ] && sudo cp -r "$PRESERVE_DIR/uploads" . || true
     
     # Install dependencies
     echo "  Installing dependencies..."
-    npm ci --omit=dev 2>/dev/null || npm install --omit=dev
+    sudo npm ci --omit=dev 2>/dev/null || sudo npm install --omit=dev
     
     # Get PM2 process name from .env
     PM2_PROCESS="restaurant-backend"
     if [ -f .env ]; then
-        ENV_PM2_NAME=$(grep -E '^PM2_(NAME|PROCESS|APP_NAME)=' .env | cut -d= -f2 | tr -d '"' | head -1)
+        ENV_PM2_NAME=$(sudo grep -E '^PM2_(NAME|PROCESS|APP_NAME)=' .env | cut -d= -f2 | tr -d '"' | head -1)
         if [ -n "$ENV_PM2_NAME" ]; then
             PM2_PROCESS="$ENV_PM2_NAME"
         fi
@@ -143,7 +139,7 @@ deploy_instance() {
     
     # Restart PM2
     echo "  Restarting PM2 process: $PM2_PROCESS"
-    pm2 restart "$PM2_PROCESS" || pm2 start server.js --name "$PM2_PROCESS"
+    sudo pm2 restart "$PM2_PROCESS" || sudo pm2 start server.js --name "$PM2_PROCESS"
     
     echo "  ✓ $NAME deployment complete!"
     return 0
@@ -157,7 +153,7 @@ deploy_instance "/opt/resturant-website" "BOJOLE" && BOJOLE_SUCCESS=1 || BOJOLE_
 deploy_instance "/opt/resturant-website-lauta" "LAUTA" && LAUTA_SUCCESS=1 || LAUTA_SUCCESS=0
 
 # Save PM2 state
-pm2 save
+sudo pm2 save
 
 echo ""
 echo "========================================"
@@ -181,8 +177,6 @@ if [ $BOJOLE_SUCCESS -eq 1 ] || [ $LAUTA_SUCCESS -eq 1 ]; then
 else
     exit 1
 fi
-
-ROOTEOF
 '@
 
 $remoteScript | ssh "$ServerUser@$ServerIp" "bash -s"
