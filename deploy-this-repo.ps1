@@ -143,6 +143,10 @@ echo "✓ {RESTAURANT_NAME} deployment complete!"
 
 $remoteScript = $remoteScript.Replace("{DEPLOY_DIR}", $targetDir).Replace("{RESTAURANT_NAME}", $restaurantName)
 
+# Convert to Unix line endings (LF only)
+$remoteScript = $remoteScript -replace "`r`n", "`n"
+$remoteScript = $remoteScript -replace "`r", "`n"
+
 $remoteScript | ssh "$ServerUser@$ServerIp" "bash -s"
 
 if ($LASTEXITCODE -eq 0) {

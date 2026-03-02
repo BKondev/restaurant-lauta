@@ -179,6 +179,10 @@ else
 fi
 '@
 
+# Convert to Unix line endings (LF only)
+$remoteScript = $remoteScript -replace "`r`n", "`n"
+$remoteScript = $remoteScript -replace "`r", "`n"
+
 $remoteScript | ssh "$ServerUser@$ServerIp" "bash -s"
 
 if ($LASTEXITCODE -eq 0) {
