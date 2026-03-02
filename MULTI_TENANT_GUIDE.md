@@ -110,8 +110,8 @@ Customer                 Mobile App Staff         Server
     {
       "id": "rest_bojole_001",
       "name": "BOJOLE",
-      "username": "bojole_admin",
-      "password": "bojole123",
+    "username": "lauta_admin",
+    "password": "lauta123",
       "apiKey": "bojole_api_key_12345_CHANGE_THIS",
       "address": "София, бул. Витоша 100",
       "phone": "+359888123456",
@@ -148,8 +148,8 @@ Customer                 Mobile App Staff         Server
 | Поле | Описание | Пример |
 |------|----------|--------|
 | `restaurantId` | Уникален ID на ресторанта | `rest_bojole_001` |
-| `username` | За web admin login | `bojole_admin` |
-| `password` | За web admin (hash в production) | `bojole123` |
+| `username` | За web admin login | `lauta_admin` |
+| `password` | За web admin (hash в production) | `lauta123` |
 | `apiKey` | За mobile app API calls | `bojole_api_key_12345` |
 | `active` | Ресторантът активен ли е? | `true` / `false` |
 
@@ -173,7 +173,7 @@ Customer                 Mobile App Staff         Server
 ```javascript
 // Login
 POST /api/login
-Body: { "username": "bojole_admin", "password": "bojole123" }
+Body: { "username": "lauta_admin", "password": "lauta123" }
 Response: { "token": "abc123xyz", "restaurant": { "id": "rest_001" } }
 
 // Get Orders
@@ -224,7 +224,7 @@ Response: { "success": true, "order": {...} }
 # Login
 curl -X POST https://site.com/api/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "bojole_admin", "password": "bojole123"}'
+    -d '{"username": "lauta_admin", "password": "lauta123"}'
 
 # Response: {"success": true, "token": "abc123xyz", "restaurant": {...}}
 
@@ -777,8 +777,8 @@ nano database.json
     {
       "id": "rest_bojole_001",
       "name": "BOJOLE",
-      "username": "bojole_admin",
-      "password": "bojole123",
+    "username": "lauta_admin",
+    "password": "lauta123",
       "apiKey": "GENERATE_SECURE_KEY_HERE",
       "address": "...",
       "phone": "...",
@@ -958,7 +958,7 @@ apiKey: "8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7"
 
 ❌ **Plain text (current):**
 ```json
-"password": "bojole123"
+"password": "lauta123"
 ```
 
 ✅ **Hashed (production):**
@@ -966,7 +966,7 @@ apiKey: "8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7"
 const bcrypt = require('bcrypt');
 
 // When creating restaurant
-const hashedPassword = await bcrypt.hash('bojole123', 10);
+const hashedPassword = await bcrypt.hash('lauta123', 10);
 // Store: "$2b$10$KlQqV..."
 
 // When logging in

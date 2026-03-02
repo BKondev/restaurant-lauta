@@ -102,8 +102,8 @@
     {
       "id": "rest_bojole_001",
       "name": "BOJOLE",
-      "username": "bojole_admin",
-      "password": "bojole123",
+      "username": "lauta_admin",
+      "password": "lauta123",
       "apiKey": "bojole_api_key_12345",
       "active": true
     }
@@ -130,7 +130,7 @@
 ```javascript
 // Login
 POST /api/login
-{ username: "bojole_admin", password: "bojole123" }
+{ username: "lauta_admin", password: "lauta123" }
 → { token: "abc123", restaurant: { id: "rest_001" } }
 
 // All subsequent requests
@@ -366,7 +366,7 @@ npx eas build --platform android
 
 - [ ] Направи поръчка от bojole-web → вижда се само в BOJOLE mobile
 - [ ] Направи поръчка от pizza-web → вижда се само в Pizza mobile
-- [ ] Web admin login bojole_admin → вижда само BOJOLE orders
+- [ ] Web admin login lauta_admin → вижда само BOJOLE orders
 - [ ] Web admin login pizza_admin → вижда само Pizza orders
 
 ### Security

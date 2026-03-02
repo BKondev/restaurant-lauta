@@ -52,8 +52,8 @@
     {
       "id": "rest_bojole_001",
       "name": "BOJOLE",
-      "username": "bojole_admin",
-      "password": "bojole123",
+      "username": "lauta_admin",
+      "password": "lauta123",
       "apiKey": "bojole_api_key_12345",
       "active": true
     }
@@ -78,7 +78,7 @@
 ```javascript
 // Login
 POST /api/login
-Body: { username: "bojole_admin", password: "bojole123" }
+Body: { username: "lauta_admin", password: "lauta123" }
 Response: { token: "abc123", restaurant: { id: "rest_001" } }
 
 // Get Orders
@@ -308,7 +308,7 @@ npx eas build --platform android
    ```
 
 2. **Passwords:**
-   - Не използвайте прости пароли като "bojole123"
+   - Не използвайте прости пароли като "lauta123"
    - В production: hash with bcrypt
    ```javascript
    const bcrypt = require('bcrypt');
@@ -343,7 +343,7 @@ npx eas build --platform android
 - [ ] Place order на pizza-italia.site.com
 - [ ] Mobile app: select BOJOLE → вижда само BOJOLE поръчки
 - [ ] Mobile app: switch to Pizza Italia → вижда само Pizza поръчки
-- [ ] Web admin: login bojole_admin → вижда само BOJOLE поръчки
+- [ ] Web admin: login lauta_admin → вижда само BOJOLE поръчки
 - [ ] Web admin: login pizza_admin → вижда само Pizza поръчки
 
 ### Test Scenario 3: Security

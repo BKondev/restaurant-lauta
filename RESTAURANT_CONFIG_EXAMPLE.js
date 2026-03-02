@@ -238,8 +238,8 @@ const DATABASE_EXAMPLE = {
         {
             "id": "rest_bojole_001",
             "name": "BOJOLE",
-            "username": "bojole_admin",
-            "password": "bojole123",
+            "username": "lauta_admin",
+            "password": "lauta123",
             "apiKey": "bojole_api_key_12345",
             "address": "София, бул. Витоша 100",
             "phone": "+359888123456",
@@ -344,7 +344,7 @@ STEP 5: Test Each Restaurant
 1. Web: Place order from bojole.crystalautomation.eu
 2. Mobile: Select "BOJOLE" → See pending order
 3. Mobile: Approve order → Verify printing
-4. Web Admin: Login with bojole_admin/bojole123 → See only BOJOLE orders
+4. Web Admin: Login with lauta_admin/lauta123 → See only BOJOLE orders
 5. Repeat for other restaurants
 
 */

@@ -64,8 +64,8 @@ fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));  // БЕЗ 'utf8'!
     {
       "id": "rest_bojole_001",
       "name": "BOJOLE",
-      "username": "bojole_admin",
-      "password": "bojole123",
+      "username": "lauta_admin",
+      "password": "lauta123",
       "apiKey": "bojole_api_key_12345",
       // ...
     }

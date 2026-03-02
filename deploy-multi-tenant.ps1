@@ -83,7 +83,7 @@ Write-Host "`n[6/6] Testing API endpoints..." -ForegroundColor Yellow
 
 # Test login endpoint
 Write-Host "`n  Testing login endpoint..." -ForegroundColor Cyan
-$loginTest = ssh $SERVER "curl -s -X POST https://www.crystalautomation.eu/resturant-website/api/login -H 'Content-Type: application/json' -d '{\"username\":\"bojole_admin\",\"password\":\"bojole123\"}'"
+$loginTest = ssh $SERVER "curl -s -X POST https://www.crystalautomation.eu/resturant-website/api/login -H 'Content-Type: application/json' -d '{\"username\":\"lauta_admin\",\"password\":\"lauta123\"}'"
 
 if ($loginTest -like "*success*") {
     Write-Host "  ✓ Login endpoint working" -ForegroundColor Green

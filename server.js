@@ -279,8 +279,8 @@ function initDatabase() {
                 {
                     id: "rest_bojole_001",
                     name: "Restaurant Lauta",
-                    username: "bojole_admin",
-                    password: "bojole123", // In production: hash with bcrypt
+                    username: "lauta_admin",
+                    password: "lauta123", // In production: hash with bcrypt
                     apiKey: "bojole_api_key_12345",
                     address: "София, бул. Витоша 100",
                     phone: "+359888123456",

@@ -11,7 +11,7 @@ Cypress.Commands.add('visitWithCleanState', (path) => {
   });
 });
 
-Cypress.Commands.add('apiAdminLogin', (username = 'bojole_admin', password = 'bojole123') => {
+Cypress.Commands.add('apiAdminLogin', (username = 'lauta_admin', password = 'lauta123') => {
   cy.request('POST', '/api/login', { username, password }).then((resp) => {
     expect(resp.status).to.eq(200);
     expect(resp.body).to.have.property('success', true);

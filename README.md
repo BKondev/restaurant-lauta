@@ -297,7 +297,7 @@ This will:
 ```javascript
 // Login
 POST /api/login
-Body: { "username": "bojole_admin", "password": "bojole123" }
+Body: { "username": "lauta_admin", "password": "lauta123" }
 Response: { "token": "abc123", "restaurant": { "id": "rest_001" } }
 
 // Use token
