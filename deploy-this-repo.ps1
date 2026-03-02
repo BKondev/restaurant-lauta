@@ -237,23 +237,31 @@ restart_via_pm2_if_present() {
     if [ -z "$PM2_BIN" ]; then
         return 1
     fi
-    # Prefer restarting by exec path (reliable even if the process name differs).
+
+    # Preferred: restart by configured process name (explicit tenant name)
+    echo "  Restarting PM2 process (by name): $PM2_PROCESS"
+    if run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" restart "$PM2_PROCESS"; then
+        run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" save || true
+        return 0
+    fi
+    # If PM2 is running under the SSH user instead of root, try that too.
+    if env PATH="$PATH:/usr/local/bin:/usr/bin:$HOME/.npm-global/bin" "$PM2_BIN" restart "$PM2_PROCESS"; then
+        env PATH="$PATH:/usr/local/bin:/usr/bin:$HOME/.npm-global/bin" "$PM2_BIN" save || true
+        return 0
+    fi
+
+    # Secondary: restart by exec path (reliable even if the name differs)
     PM2_ID=$(run_sudo -u root sh -lc "env PATH='$PATH:/usr/local/bin:/usr/bin:/bin' '$PM2_BIN' jlist 2>/dev/null" \
       | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const list=JSON.parse(d||'[]');const m=list.find(p=>p?.pm2_env?.pm_exec_path==='$DEPLOY_DIR/server.js');if(m) process.stdout.write(String(m.pm_id));}catch(e){}});")
     if [ -n "$PM2_ID" ]; then
         echo "  Restarting PM2 (root) process id: $PM2_ID"
-        run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" restart "$PM2_ID" || return 1
-        run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" save || true
-        return 0
+        if run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" restart "$PM2_ID"; then
+            run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" save || true
+            return 0
+        fi
     fi
 
-    # Fallback to name-based restarts.
-    echo "  Restarting PM2 process (by name): $PM2_PROCESS"
-    env PATH="$PATH:/usr/local/bin:/usr/bin:$HOME/.npm-global/bin" "$PM2_BIN" restart "$PM2_PROCESS" \
-      || run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" restart "$PM2_PROCESS" \
-      || return 1
-    run_sudo -u root env PATH="$PATH:/usr/local/bin:/usr/bin:/bin" "$PM2_BIN" save || true
-    return 0
+    return 1
 }
 
 restart_via_pid_fallback() {
