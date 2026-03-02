@@ -137,6 +137,17 @@ run_sudo() {
     return 1
 }
 
+# If the deploy directory is root-owned/non-writable, prefer sudo for all filesystem operations
+# (avoids confusing permission-denied noise from a first non-sudo attempt).
+USE_SUDO_FS=0
+run_fs() {
+    if [ "${USE_SUDO_FS:-0}" -eq 1 ]; then
+        run_sudo "$@"
+    else
+        "$@"
+    fi
+}
+
 pm2_bin() {
     command -v pm2 2>/dev/null || true
 }
@@ -151,8 +162,9 @@ fi
 
 cd "$DEPLOY_DIR"
 
-if [ ! -w "$DEPLOY_DIR" ]; then
-    echo "WARN: $DEPLOY_DIR not writable by $(id -un); will use sudo for file operations where needed." >&2
+if [ ! -w "$DEPLOY_DIR" ] || [ ! -w "$DEPLOY_DIR/.git" 2>/dev/null ]; then
+    USE_SUDO_FS=1
+    echo "WARN: $DEPLOY_DIR not writable by $(id -un); will use sudo for file operations." >&2
 fi
 
 # Avoid git safe.directory issues when running under sudo/root.
@@ -161,25 +173,25 @@ run_sudo git config --global --add safe.directory "$DEPLOY_DIR" >/dev/null 2>&1 
 
 # Preserve production files
 echo "  Preserving production data..."
-run_maybe_sudo mkdir -p "$PRESERVE_DIR"
-[ -f database.json ] && run_maybe_sudo cp database.json "$PRESERVE_DIR/" || true
-[ -f .env ] && run_maybe_sudo cp .env "$PRESERVE_DIR/" || true
-[ -d uploads ] && run_maybe_sudo cp -r uploads "$PRESERVE_DIR/" || true
+run_fs mkdir -p "$PRESERVE_DIR"
+[ -f database.json ] && run_fs cp database.json "$PRESERVE_DIR/" || true
+[ -f .env ] && run_fs cp .env "$PRESERVE_DIR/" || true
+[ -d uploads ] && run_fs cp -r uploads "$PRESERVE_DIR/" || true
 
 # Pull latest code
 echo "  Fetching latest code..."
-run_maybe_sudo git fetch origin
-run_maybe_sudo git reset --hard origin/main 2>/dev/null || run_maybe_sudo git reset --hard origin/master
+run_fs git fetch origin
+run_fs git reset --hard origin/main 2>/dev/null || run_fs git reset --hard origin/master
 
 # Restore production files
 echo "  Restoring production data..."
-[ -f "$PRESERVE_DIR/database.json" ] && run_maybe_sudo cp "$PRESERVE_DIR/database.json" . || true
-[ -f "$PRESERVE_DIR/.env" ] && run_maybe_sudo cp "$PRESERVE_DIR/.env" . || true
-[ -d "$PRESERVE_DIR/uploads" ] && run_maybe_sudo cp -r "$PRESERVE_DIR/uploads" . || true
+[ -f "$PRESERVE_DIR/database.json" ] && run_fs cp "$PRESERVE_DIR/database.json" . || true
+[ -f "$PRESERVE_DIR/.env" ] && run_fs cp "$PRESERVE_DIR/.env" . || true
+[ -d "$PRESERVE_DIR/uploads" ] && run_fs cp -r "$PRESERVE_DIR/uploads" . || true
 
 # Install dependencies
 echo "  Installing dependencies..."
-run_maybe_sudo npm ci --omit=dev 2>/dev/null || run_maybe_sudo npm install --omit=dev
+run_fs npm ci --omit=dev 2>/dev/null || run_fs npm install --omit=dev
 
 # Get PM2 process name from .env
 PM2_PROCESS="restaurant-backend"
