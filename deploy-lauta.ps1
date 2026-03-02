@@ -23,8 +23,12 @@ Write-Host "========================================`n" -ForegroundColor Cyan
 
 # Step 1: Replace restaurant-config.js with LAUTA version
 Write-Host "Step 1: Configuring for LAUTA restaurant..." -ForegroundColor Green
-Copy-Item -Path "public\restaurant-config-lauta.js" -Destination "public\restaurant-config.js" -Force
-Write-Host "  ✓ LAUTA configuration applied" -ForegroundColor DarkGray
+if (Test-Path "public\restaurant-config-lauta.js") {
+    Copy-Item -Path "public\restaurant-config-lauta.js" -Destination "public\restaurant-config.js" -Force
+    Write-Host "  ✓ LAUTA configuration applied" -ForegroundColor DarkGray
+} else {
+    Write-Host "  ⊘ public\restaurant-config-lauta.js not found; using existing public\restaurant-config.js" -ForegroundColor DarkGray
+}
 
 # Step 2: Commit and push
 Write-Host "`nStep 2: Commit and push to repository" -ForegroundColor Green

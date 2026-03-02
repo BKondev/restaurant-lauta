@@ -1,8 +1,9 @@
 param(
     [string]$ServerIp = "46.62.174.218",
-    [string]$ServerUser = "adminuser",
+    [string]$ServerUser = "root",
     [string]$CommitMessage = "deploy",
-    [string]$DeployDir = ""  # Auto-detected based on restaurant-config.js
+    [string]$DeployDir = "",  # Auto-detected based on restaurant-config.js
+    [string]$Domain = ""      # Optional; auto-detected from restaurant id
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,11 +32,11 @@ $restaurantName = "UNKNOWN"
 $restaurantId = ""
 $targetDir = ""
 
-if ($configContent -match "id:\s*'(rest_\w+)'") {
+if ($configContent -match 'id:\s*''(rest_\w+)''') {
     $restaurantId = $matches[1]
 }
 
-if ($configContent -match "name:\s*'(\w+)'") {
+if ($configContent -match 'name:\s*''([^'']+)''') {
     $restaurantName = $matches[1]
 }
 
@@ -50,9 +51,21 @@ if ($DeployDir) {
     throw "Unknown restaurant ID: $restaurantId. Please specify -DeployDir manually."
 }
 
+# Auto-detect domain for post-deploy verification
+if (-not $Domain) {
+    if ($restaurantId -eq "rest_bojole_001") {
+        $Domain = "bojole.bg"
+    } elseif ($restaurantId -eq "rest_lauta_002") {
+        $Domain = "lautarestaurant.com"
+    }
+}
+
 Write-Host "Restaurant: $restaurantName" -ForegroundColor Yellow
 Write-Host "Restaurant ID: $restaurantId" -ForegroundColor Yellow
 Write-Host "Target Directory: $targetDir" -ForegroundColor Yellow
+if ($Domain) {
+    Write-Host "Domain: $Domain" -ForegroundColor Yellow
+}
 Write-Host ""
 
 # Confirm we're in a git repo
@@ -91,6 +104,28 @@ set -e
 
 DEPLOY_DIR="{DEPLOY_DIR}"
 PRESERVE_DIR="$DEPLOY_DIR/.preserve"
+RESTAURANT_ID="{RESTAURANT_ID}"
+DOMAIN="{DOMAIN}"
+
+is_root() { [ "$(id -u)" -eq 0 ]; }
+
+run() {
+    if is_root; then
+        "$@"
+    else
+        if command -v sudo >/dev/null 2>&1; then
+            sudo -n "$@"
+        else
+            echo "ERROR: sudo not available (and not running as root)" >&2
+            exit 1
+        fi
+    fi
+}
+
+pm2_bin() {
+    # sudo can drop PATH; try common locations too.
+    command -v pm2 2>/dev/null || true
+}
 
 echo "→ Deploying {RESTAURANT_NAME} to $DEPLOY_DIR"
 
@@ -102,46 +137,73 @@ fi
 
 cd "$DEPLOY_DIR"
 
+# Avoid git safe.directory issues when running under sudo/root.
+run git config --global --add safe.directory "$DEPLOY_DIR" >/dev/null 2>&1 || true
+
 # Preserve production files
 echo "  Preserving production data..."
-sudo mkdir -p "$PRESERVE_DIR"
-[ -f database.json ] && sudo cp database.json "$PRESERVE_DIR/" || true
-[ -f .env ] && sudo cp .env "$PRESERVE_DIR/" || true
-[ -d uploads ] && sudo cp -r uploads "$PRESERVE_DIR/" || true
+run mkdir -p "$PRESERVE_DIR"
+[ -f database.json ] && run cp database.json "$PRESERVE_DIR/" || true
+[ -f .env ] && run cp .env "$PRESERVE_DIR/" || true
+[ -d uploads ] && run cp -r uploads "$PRESERVE_DIR/" || true
 
 # Pull latest code
 echo "  Fetching latest code..."
-sudo git fetch origin
-sudo git reset --hard origin/main 2>/dev/null || sudo git reset --hard origin/master
+run git fetch origin
+run git reset --hard origin/main 2>/dev/null || run git reset --hard origin/master
 
 # Restore production files
 echo "  Restoring production data..."
-[ -f "$PRESERVE_DIR/database.json" ] && sudo cp "$PRESERVE_DIR/database.json" . || true
-[ -f "$PRESERVE_DIR/.env" ] && sudo cp "$PRESERVE_DIR/.env" . || true
-[ -d "$PRESERVE_DIR/uploads" ] && sudo cp -r "$PRESERVE_DIR/uploads" . || true
+[ -f "$PRESERVE_DIR/database.json" ] && run cp "$PRESERVE_DIR/database.json" . || true
+[ -f "$PRESERVE_DIR/.env" ] && run cp "$PRESERVE_DIR/.env" . || true
+[ -d "$PRESERVE_DIR/uploads" ] && run cp -r "$PRESERVE_DIR/uploads" . || true
 
 # Install dependencies
 echo "  Installing dependencies..."
-sudo npm ci --omit=dev 2>/dev/null || sudo npm install --omit=dev
+run npm ci --omit=dev 2>/dev/null || run npm install --omit=dev
 
 # Get PM2 process name from .env
 PM2_PROCESS="restaurant-backend"
+if [ "$RESTAURANT_ID" = "rest_lauta_002" ]; then
+    PM2_PROCESS="restaurant-backend-lauta"
+fi
 if [ -f .env ]; then
-  ENV_PM2_NAME=$(sudo grep -E '^PM2_(NAME|PROCESS|APP_NAME)=' .env | cut -d= -f2 | tr -d '"' | head -1)
+    ENV_PM2_NAME=$(run grep -E '^(PM2_NAME|PM2_PROCESS|PM2_APP_NAME)=' .env | tail -n 1 | cut -d= -f2- | tr -d '"' | tr -d '\r' | xargs)
   if [ -n "$ENV_PM2_NAME" ]; then
     PM2_PROCESS="$ENV_PM2_NAME"
   fi
 fi
 
+PM2_BIN=$(pm2_bin)
+if [ -z "$PM2_BIN" ] && [ -x /usr/local/bin/pm2 ]; then PM2_BIN=/usr/local/bin/pm2; fi
+if [ -z "$PM2_BIN" ] && [ -x /usr/bin/pm2 ]; then PM2_BIN=/usr/bin/pm2; fi
+
 # Restart PM2
 echo "  Restarting PM2 process: $PM2_PROCESS"
-sudo pm2 restart "$PM2_PROCESS" || sudo pm2 start server.js --name "$PM2_PROCESS"
-sudo pm2 save
+if [ -n "$PM2_BIN" ]; then
+    # Ensure common npm global bin locations are in PATH
+    run env PATH="$PATH:/usr/local/bin:/usr/bin" "$PM2_BIN" restart "$PM2_PROCESS" || run env PATH="$PATH:/usr/local/bin:/usr/bin" "$PM2_BIN" start server.js --name "$PM2_PROCESS"
+    run env PATH="$PATH:/usr/local/bin:/usr/bin" "$PM2_BIN" save || true
+else
+    echo "  WARNING: pm2 not found; trying systemd..."
+    if command -v systemctl >/dev/null 2>&1; then
+        run systemctl restart restaurant.service || true
+        run systemctl restart restaurant-lauta.service || true
+    fi
+fi
+
+echo "  Deployed commit: $(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+
+if [ -n "$DOMAIN" ] && command -v curl >/dev/null 2>&1; then
+    echo "  Health check: https://$DOMAIN/api/health"
+    curl -fsS "https://$DOMAIN/api/health" || curl -fsS "https://www.$DOMAIN/api/health" || true
+    echo ""
+fi
 
 echo "✓ {RESTAURANT_NAME} deployment complete!"
 '@
 
-$remoteScript = $remoteScript.Replace("{DEPLOY_DIR}", $targetDir).Replace("{RESTAURANT_NAME}", $restaurantName)
+$remoteScript = $remoteScript.Replace("{DEPLOY_DIR}", $targetDir).Replace("{RESTAURANT_NAME}", $restaurantName).Replace("{RESTAURANT_ID}", $restaurantId).Replace("{DOMAIN}", $Domain)
 
 # Convert to Unix line endings (LF only)
 $remoteScript = $remoteScript -replace "`r`n", "`n"
