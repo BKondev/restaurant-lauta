@@ -1815,6 +1815,16 @@ async function loadRestaurantName() {
         document.getElementById('restaurant-name-input').value = data.name;
         document.getElementById('restaurant-logo-input').value = data.logo || '';
 
+        // Prefill admin username from session (best-effort)
+        try {
+            const adminUserEl = document.getElementById('admin-username-input');
+            if (adminUserEl && !adminUserEl.value) {
+                adminUserEl.value = (sessionStorage.getItem('adminUser') || '').toString();
+            }
+        } catch (e) {
+            // ignore
+        }
+
         // Per-tenant notification email (requires auth)
         const token = sessionStorage.getItem('adminToken');
         if (token) {
@@ -2043,6 +2053,10 @@ async function updateRestaurantSettings() {
     const logo = document.getElementById('restaurant-logo-input').value.trim();
     const notificationEmail = (document.getElementById('restaurant-notification-email-input')?.value || '').toString().trim();
 
+    const adminUsername = (document.getElementById('admin-username-input')?.value || '').toString().trim();
+    const newAdminPassword = (document.getElementById('admin-password-input')?.value || '').toString();
+    const newAdminPasswordConfirm = (document.getElementById('admin-password-confirm-input')?.value || '').toString();
+
     const orderPlacedSubject = (document.getElementById('email-template-order-placed-subject')?.value || '').toString();
     const orderPlacedBody = (document.getElementById('email-template-order-placed-body')?.value || '').toString();
 
@@ -2062,6 +2076,23 @@ async function updateRestaurantSettings() {
     if (!name) {
         alert('Please enter a restaurant name');
         return;
+    }
+
+    if (adminUsername && adminUsername.length < 3) {
+        alert('Admin username must be at least 3 characters');
+        return;
+    }
+
+    const wantsPasswordChange = !!newAdminPassword.trim() || !!newAdminPasswordConfirm.trim();
+    if (wantsPasswordChange) {
+        if (newAdminPassword !== newAdminPasswordConfirm) {
+            alert('New password and confirmation do not match');
+            return;
+        }
+        if (newAdminPassword.trim().length < 6) {
+            alert('New password must be at least 6 characters');
+            return;
+        }
     }
     
     try {
@@ -2088,35 +2119,44 @@ async function updateRestaurantSettings() {
 
         // Save per-tenant notification email (optional but recommended)
         if (token) {
+            const profilePayload = {
+                orderNotificationEmail: notificationEmail,
+                emailTemplates: {
+                    orderPlaced: {
+                        subject: orderPlacedSubject,
+                        body: orderPlacedBody
+                    }
+                },
+                borica: {
+                    enabled: boricaEnabled,
+                    mode: boricaMode === 'prod' ? 'prod' : 'test',
+                    debugMode: boricaDebugMode,
+                    terminalId: boricaTerminalId,
+                    merchantId: boricaMerchantId,
+                    merchName: boricaMerchName,
+                    merchUrl: boricaMerchUrl,
+                    backrefUrl: boricaBackrefUrl,
+                    gatewayBaseUrlTest: boricaGatewayTest,
+                    gatewayBaseUrlProd: boricaGatewayProd,
+                    privateKeyPem: boricaPrivateKeyPem,
+                    publicCertPem: boricaPublicCertPem
+                }
+            };
+
+            if (adminUsername) {
+                profilePayload.username = adminUsername;
+            }
+            if (wantsPasswordChange) {
+                profilePayload.password = newAdminPassword;
+            }
+
             const profileRes = await fetch(`${API_URL}/restaurants/me`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({
-                    orderNotificationEmail: notificationEmail,
-                    emailTemplates: {
-                        orderPlaced: {
-                            subject: orderPlacedSubject,
-                            body: orderPlacedBody
-                        }
-                    },
-                    borica: {
-                        enabled: boricaEnabled,
-                        mode: boricaMode === 'prod' ? 'prod' : 'test',
-                        debugMode: boricaDebugMode,
-                        terminalId: boricaTerminalId,
-                        merchantId: boricaMerchantId,
-                        merchName: boricaMerchName,
-                        merchUrl: boricaMerchUrl,
-                        backrefUrl: boricaBackrefUrl,
-                        gatewayBaseUrlTest: boricaGatewayTest,
-                        gatewayBaseUrlProd: boricaGatewayProd,
-                        privateKeyPem: boricaPrivateKeyPem,
-                        publicCertPem: boricaPublicCertPem
-                    }
-                })
+                body: JSON.stringify(profilePayload)
             });
 
             if (!profileRes.ok) {
@@ -2137,6 +2177,16 @@ async function updateRestaurantSettings() {
                 alert(errText || fallback);
                 return;
             }
+        }
+
+        try {
+            if (adminUsername) sessionStorage.setItem('adminUser', adminUsername);
+            const pwEl = document.getElementById('admin-password-input');
+            const pw2El = document.getElementById('admin-password-confirm-input');
+            if (pwEl) pwEl.value = '';
+            if (pw2El) pw2El.value = '';
+        } catch (e) {
+            // ignore
         }
 
         alert('Restaurant settings updated successfully!');

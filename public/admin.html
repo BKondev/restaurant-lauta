@@ -119,6 +119,24 @@
                 <small>We will send order notifications to this email (per restaurant/tenant).</small>
             </div>
 
+            <div class="form-group">
+                <label for="admin-username-input">Admin Username:</label>
+                <input type="text" id="admin-username-input" placeholder="lauta_admin" autocomplete="username">
+                <small>Used to login to this admin panel.</small>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="admin-password-input">New Admin Password:</label>
+                    <input type="password" id="admin-password-input" placeholder="Leave blank to keep current" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label for="admin-password-confirm-input">Confirm New Password:</label>
+                    <input type="password" id="admin-password-confirm-input" placeholder="Repeat new password" autocomplete="new-password">
+                </div>
+            </div>
+            <small style="display:block; margin-top: -6px; color:#666;">If you change the username, you may need to login again on other devices.</small>
+
             <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
 
             <div id="email-diagnostics-panel" style="display:none;">

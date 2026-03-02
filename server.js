@@ -1004,7 +1004,7 @@ app.get(API_PREFIX + '/restaurants/me/api-key', requireAuth, (req, res) => {
 
 app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
     try {
-        const { orderNotificationEmail, borica, emailTemplates, printer } = req.body;
+        const { orderNotificationEmail, borica, emailTemplates, printer, username, password } = req.body;
         const db = readDatabase();
 
         const idx = db.restaurants?.findIndex(r => r.id === req.restaurantId);
@@ -1018,6 +1018,50 @@ app.put(API_PREFIX + '/restaurants/me', requireAuth, (req, res) => {
                 return res.status(400).json({ error: 'Invalid notification email' });
             }
             db.restaurants[idx].orderNotificationEmail = email;
+        }
+
+        if (username !== undefined) {
+            const nextUsername = (username || '').toString().trim();
+            if (!nextUsername) {
+                return res.status(400).json({ error: 'Admin username cannot be empty' });
+            }
+            if (nextUsername.length < 3 || nextUsername.length > 64) {
+                return res.status(400).json({ error: 'Admin username must be 3-64 characters' });
+            }
+            if (!/^[A-Za-z0-9_.-]+$/.test(nextUsername)) {
+                return res.status(400).json({ error: 'Admin username contains invalid characters' });
+            }
+
+            const usernameTaken = (db.restaurants || []).some(r => r && r.id !== req.restaurantId && (r.username || '') === nextUsername);
+            if (usernameTaken) {
+                return res.status(400).json({ error: 'Admin username is already taken' });
+            }
+
+            db.restaurants[idx].username = nextUsername;
+
+            // Keep current Bearer token metadata consistent
+            try {
+                const token = (req.headers.authorization || '').toString().replace('Bearer ', '').trim();
+                if (token && activeTokens.has(token)) {
+                    const tokenData = activeTokens.get(token);
+                    const updated = { ...tokenData, username: nextUsername };
+                    activeTokens.set(token, updated);
+                    persistToken(token, updated);
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        if (password !== undefined) {
+            const nextPassword = (password || '').toString();
+            if (!nextPassword.trim()) {
+                return res.status(400).json({ error: 'Admin password cannot be empty' });
+            }
+            if (nextPassword.trim().length < 6) {
+                return res.status(400).json({ error: 'Admin password must be at least 6 characters' });
+            }
+            db.restaurants[idx].password = nextPassword;
         }
 
         if (borica !== undefined) {
