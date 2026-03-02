@@ -223,11 +223,27 @@ restart_via_systemd_if_present() {
     if [ -n "$UNIT_FILE" ]; then
         UNIT_NAME=$(basename "$UNIT_FILE")
         echo "  Restarting systemd unit: $UNIT_NAME"
-        run_sudo systemctl restart "$UNIT_NAME" && return 0
+        if run_sudo systemctl restart "$UNIT_NAME"; then
+            return 0
+        fi
     fi
-    # Backwards-compatible guesses
-    run_sudo systemctl restart restaurant-lauta.service && return 0
-    run_sudo systemctl restart restaurant.service && return 0
+    # Backwards-compatible guesses (only if the unit exists)
+    has_unit() {
+        systemctl list-unit-files --type=service --no-pager 2>/dev/null | awk '{print $1}' | grep -qx "$1"
+    }
+    try_restart_unit() {
+        local unit="$1"
+        if has_unit "$unit"; then
+            echo "  Restarting systemd unit: $unit"
+            if run_sudo systemctl restart "$unit"; then
+                return 0
+            fi
+        fi
+        return 1
+    }
+
+    try_restart_unit restaurant-lauta.service && return 0
+    try_restart_unit restaurant.service && return 0
     return 1
 }
 
