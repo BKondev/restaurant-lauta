@@ -1331,6 +1331,34 @@ body {
         gap: 8px;
     }
 
+    .add-to-cart-icon {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .add-to-cart-count-badge {
+        position: absolute;
+        top: -8px;
+        right: -10px;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: #fff;
+        color: var(--highlight-color);
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 18px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        user-select: none;
+    }
+
     .add-to-cart-btn:hover {
         background: #c0392b;
         transform: translateY(-2px);

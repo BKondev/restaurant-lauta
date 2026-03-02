@@ -950,6 +950,8 @@ function renderProducts() {
         const card = createProductCard(product);
         container.appendChild(card);
     });
+
+    updateAddToCartInCartBadges();
 }
 
 // Format price (EUR only)
@@ -993,6 +995,9 @@ function createProductCard(product) {
     const isLimited = availabilityStatus === 'limited';
     const isOutOfStock = availabilityStatus === 'out_of_stock';
     const orderable = isProductOrderable(product);
+
+    const inCartQty = getCartQuantity(product.id);
+    const inCartQtyLabel = inCartQty > 99 ? '99+' : String(inCartQty);
     
     // Calculate discount percentage
     let discountPercent = 0;
@@ -1104,8 +1109,12 @@ function createProductCard(product) {
                 <span class="product-category">${category}</span>
             </div>
             <div class="product-actions">
-                <button ${orderable ? `onclick="event.stopPropagation(); addToCart(${product.id})"` : ''} class="add-to-cart-btn" ${orderable ? '' : 'disabled'} style="${orderable ? '' : 'opacity:0.6; cursor:not-allowed;'}">
-                    <i class="fas fa-shopping-cart"></i> ${orderable ? translations[currentLanguage].addToCart : (currentLanguage === 'bg' ? 'Изчерпан' : 'Out of stock')}
+                <button ${orderable ? `onclick="event.stopPropagation(); addToCart(${product.id})"` : ''} class="add-to-cart-btn" data-product-id="${product.id}" ${orderable ? '' : 'disabled'} style="${orderable ? '' : 'opacity:0.6; cursor:not-allowed;'}">
+                    <span class="add-to-cart-icon" aria-hidden="true">
+                        <i class="fas fa-shopping-cart"></i>
+                        <span class="add-to-cart-count-badge" style="${inCartQty > 0 ? 'display:inline-flex;' : 'display:none;'}">${inCartQtyLabel}</span>
+                    </span>
+                    <span class="add-to-cart-label">${orderable ? translations[currentLanguage].addToCart : (currentLanguage === 'bg' ? 'Изчерпан' : 'Out of stock')}</span>
                 </button>
                 <button onclick="event.stopPropagation(); shareProduct(${product.id})" class="share-product-btn" title="${(currentLanguage === 'bg' ? 'Сподели' : 'Share')}">
                     <i class="fas fa-share-alt"></i>
@@ -1194,7 +1203,16 @@ function openProductModal(product) {
     addToCartBtn.disabled = !orderable;
     addToCartBtn.style.opacity = orderable ? '' : '0.6';
     addToCartBtn.style.cursor = orderable ? '' : 'not-allowed';
-    addToCartBtn.innerHTML = `<i class="fas fa-shopping-cart"></i> ${orderable ? translations[currentLanguage].addToCart : (currentLanguage === 'bg' ? 'Изчерпан' : 'Out of stock')}`;
+    addToCartBtn.dataset.productId = String(product.id);
+    const inCartQty = getCartQuantity(product.id);
+    const inCartQtyLabel = inCartQty > 99 ? '99+' : String(inCartQty);
+    addToCartBtn.innerHTML = `
+        <span class="add-to-cart-icon" aria-hidden="true">
+            <i class="fas fa-shopping-cart"></i>
+            <span class="add-to-cart-count-badge" style="${inCartQty > 0 ? 'display:inline-flex;' : 'display:none;'}">${inCartQtyLabel}</span>
+        </span>
+        <span class="add-to-cart-label">${orderable ? translations[currentLanguage].addToCart : (currentLanguage === 'bg' ? 'Изчерпан' : 'Out of stock')}</span>
+    `;
     addToCartBtn.onclick = () => {
         if (!modalProductId) return;
         if (!orderable) return;
@@ -1581,6 +1599,33 @@ async function applyPromoCode() {
 
 // ========== SHOPPING CART FUNCTIONS ==========
 
+function getCartQuantity(productId) {
+    const item = cart.find(x => String(x.id) === String(productId));
+    const qty = item ? Number(item.quantity) : 0;
+    return Number.isFinite(qty) && qty > 0 ? qty : 0;
+}
+
+function updateAddToCartInCartBadges() {
+    const qtyById = new Map((cart || []).map(item => [String(item.id), Number(item.quantity) || 0]));
+    const buttons = document.querySelectorAll('.add-to-cart-btn[data-product-id]');
+    if (!buttons || !buttons.length) return;
+
+    buttons.forEach(btn => {
+        const pid = btn.dataset.productId;
+        const qty = Math.max(0, qtyById.get(String(pid)) || 0);
+        const badge = btn.querySelector('.add-to-cart-count-badge');
+        if (!badge) return;
+
+        if (qty > 0) {
+            badge.textContent = qty > 99 ? '99+' : String(qty);
+            badge.style.display = 'inline-flex';
+        } else {
+            badge.textContent = '';
+            badge.style.display = 'none';
+        }
+    });
+}
+
 // Add item to cart
 function addToCart(productId) {
     addToCartWithQuantity(productId, 1);
@@ -1679,6 +1724,8 @@ function updateCartUI() {
         cartBadge.textContent = cartCount;
         cartBadge.style.display = cartCount > 0 ? 'flex' : 'none';
     }
+
+    updateAddToCartInCartBadges();
 }
 
 function animateCartBadge() {
