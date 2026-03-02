@@ -1,6 +1,6 @@
 param(
     [string]$ServerIp = "46.62.174.218",
-    [string]$ServerUser = "root",
+    [string]$ServerUser = "adminuser",
     [string]$CommitMessage = "deploy all",
     [string]$BojoleRepoPath = "C:\Users\User\Desktop\resturant-template",
     [string]$LautaRepoPath = "C:\Users\User\Desktop\restaurant-lauta"
@@ -87,6 +87,10 @@ Write-Host "`n`nStep 2: Deploy to server" -ForegroundColor Green
 Write-Host "================================`n" -ForegroundColor Green
 
 $remoteScript = @'
+set -e
+
+# Switch to root for deployment operations
+sudo su - << 'ROOTEOF'
 set -e
 
 echo "→ Deploying to both restaurants..."
@@ -177,6 +181,8 @@ if [ $BOJOLE_SUCCESS -eq 1 ] || [ $LAUTA_SUCCESS -eq 1 ]; then
 else
     exit 1
 fi
+
+ROOTEOF
 '@
 
 $remoteScript | ssh "$ServerUser@$ServerIp" "bash -s"

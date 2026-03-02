@@ -1,6 +1,6 @@
 param(
     [string]$ServerIp = "46.62.174.218",
-    [string]$ServerUser = "root",
+    [string]$ServerUser = "adminuser",
     [string]$CommitMessage = "deploy",
     [string]$DeployDir = ""  # Auto-detected based on restaurant-config.js
 )
@@ -89,6 +89,10 @@ Write-Host "`nStep 2: Deploy to server: $targetDir" -ForegroundColor Green
 $remoteScript = @"
 set -e
 
+# Switch to root for deployment operations
+sudo su - << 'ROOTEOF'
+set -e
+
 DEPLOY_DIR="$targetDir"
 PRESERVE_DIR="`$DEPLOY_DIR/.preserve"
 
@@ -139,6 +143,8 @@ pm2 restart "`$PM2_PROCESS" || pm2 start server.js --name "`$PM2_PROCESS"
 pm2 save
 
 echo "✓ $restaurantName deployment complete!"
+
+ROOTEOF
 "@
 
 $remoteScript | ssh "$ServerUser@$ServerIp" "bash -s"
