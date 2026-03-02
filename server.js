@@ -264,7 +264,7 @@ function initDatabase() {
             // ignore; writeFileSync will surface errors if it still fails
         }
         const initialData = {
-            restaurantName: "Restaurant Name",
+            restaurantName: "Restaurant Lauta",
             restaurantLogo: "",
             slideshowEnabled: false,
             slideshowInterval: 5000,
@@ -278,14 +278,14 @@ function initDatabase() {
             restaurants: [
                 {
                     id: "rest_bojole_001",
-                    name: "BOJOLE",
+                    name: "Restaurant Lauta",
                     username: "bojole_admin",
                     password: "bojole123", // In production: hash with bcrypt
                     apiKey: "bojole_api_key_12345",
                     address: "София, бул. Витоша 100",
                     phone: "+359888123456",
-                    email: "contact@bojole.bg",
-                    orderNotificationEmail: "contact@bojole.bg",
+                    email: "contact@restaurant-lauta.bg",
+                    orderNotificationEmail: "contact@restaurant-lauta.bg",
                     borica: {
                         enabled: false,
                         debugMode: true,
@@ -2457,7 +2457,7 @@ function getPublicOrderTrackUrl(orderId) {
     if (!base) return '';
 
     // PUBLIC_BASE_PATH controls how links are rendered to the outside world.
-    // This allows nginx to expose the app at '/' (e.g. https://bojole.bg/checkout)
+    // This allows nginx to expose the app at '/' (e.g. https://restaurant-lauta.bg/checkout)
     // while the internal Express mount path stays at /resturant-website.
     const rawPublicBasePath = (process.env.PUBLIC_BASE_PATH ?? BASE_PATH ?? '').toString().trim();
     let publicBasePath = rawPublicBasePath;

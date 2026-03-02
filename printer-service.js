@@ -223,7 +223,7 @@ function generateReceiptText(order) {
     // Заглавие - голям шрифт, центрирано
     receipt += `${ESC}a\x01`; // Center align
     receipt += `${ESC}!\x30`; // Double height + double width
-    receipt += 'BOJOLE\n';
+    receipt += 'Restaurant Lauta\n';
     receipt += `${ESC}!\x00`; // Normal text
     receipt += '================================\n';
     
@@ -321,7 +321,7 @@ function generateReceiptText(order) {
     
     receipt += `${ESC}a\x01`; // Center
     receipt += 'Благодарим Ви!\n';
-    receipt += 'www.bojole.bg\n';
+    receipt += 'www.restaurant-lauta.bg\n';
     
     // Изрязване на хартията
     receipt += '\n\n\n';
@@ -338,7 +338,7 @@ function generateNoteReceiptText(order) {
     receipt += `${ESC}@`;
     receipt += `${ESC}a\x01`;
     receipt += `${ESC}!\x30`;
-    receipt += 'BOJOLE\n';
+    receipt += 'Restaurant Lauta\n';
     receipt += `${ESC}!\x00`;
     receipt += '================================\n';
 
