@@ -1336,6 +1336,7 @@ body {
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        transform: translateX(-4px);
     }
 
     .add-to-cart-count-badge {
