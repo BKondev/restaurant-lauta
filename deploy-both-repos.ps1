@@ -30,12 +30,12 @@ function Deploy-Repo {
         [string]$Message
     )
     
-    Write-Host "`n→ Deploying $RestaurantName..." -ForegroundColor Yellow
+    Write-Host "`n-> Deploying $RestaurantName..." -ForegroundColor Yellow
     Write-Host "  Repo: $RepoPath" -ForegroundColor DarkGray
     Write-Host "  Server: $ServerDir" -ForegroundColor DarkGray
     
     if (!(Test-Path $RepoPath)) {
-        Write-Host "  ⚠ Repository not found: $RepoPath" -ForegroundColor Red
+        Write-Host "  WARNING: Repository not found: $RepoPath" -ForegroundColor Red
         Write-Host "  Skipping $RestaurantName" -ForegroundColor Red
         return $false
     }
@@ -58,11 +58,11 @@ function Deploy-Repo {
         Write-Host "  Pushing to remote..." -ForegroundColor Gray
         git push
         
-        Write-Host "  ✓ $RestaurantName code pushed" -ForegroundColor Green
+        Write-Host "  OK: $RestaurantName code pushed" -ForegroundColor Green
         return $true
     }
     catch {
-        Write-Host "  ✗ Failed to push $RestaurantName : $_" -ForegroundColor Red
+        Write-Host "  FAILED to push $RestaurantName : $_" -ForegroundColor Red
         return $false
     }
     finally {
@@ -86,98 +86,81 @@ if (!$bojoleSuccess -and !$lautaSuccess) {
 Write-Host "`n`nStep 2: Deploy to server" -ForegroundColor Green
 Write-Host "================================`n" -ForegroundColor Green
 
-$remoteScript = @'
-set -e
+$remoteScriptLines = @(
+    'set -e',
+    '',
+    'echo "Deploying to both restaurants..."',
+    '',
+    'deploy_instance() {',
+    '  local DIR="$1"',
+    '  local NAME="$2"',
+    '  local PRESERVE_DIR="${DIR}/.preserve"',
+    '',
+    '  echo ""',
+    '  echo "Deploying ${NAME}: ${DIR}"',
+    '',
+    '  if [ ! -d "${DIR}" ]; then',
+    '    echo "  Directory not found: ${DIR} - Skipping"',
+    '    return 1',
+    '  fi',
+    '',
+    '  cd "${DIR}"',
+    '',
+    '  echo "  Preserving production data..."',
+    '  sudo mkdir -p "${PRESERVE_DIR}"',
+    '  [ -f database.json ] && sudo cp database.json "${PRESERVE_DIR}/" || true',
+    '  [ -f .env ] && sudo cp .env "${PRESERVE_DIR}/" || true',
+    '  [ -d uploads ] && sudo cp -r uploads "${PRESERVE_DIR}/" || true',
+    '',
+    '  echo "  Fetching latest code..."',
+    '  sudo git fetch origin',
+    '  sudo git reset --hard origin/main 2>/dev/null || sudo git reset --hard origin/master',
+    '',
+    '  echo "  Restoring production data..."',
+    '  [ -f "${PRESERVE_DIR}/database.json" ] && sudo cp "${PRESERVE_DIR}/database.json" . || true',
+    '  [ -f "${PRESERVE_DIR}/.env" ] && sudo cp "${PRESERVE_DIR}/.env" . || true',
+    '  [ -d "${PRESERVE_DIR}/uploads" ] && sudo cp -r "${PRESERVE_DIR}/uploads" . || true',
+    '',
+    '  echo "  Installing dependencies..."',
+    '  sudo npm ci --omit=dev 2>/dev/null || sudo npm install --omit=dev',
+    '',
+    '  PM2_PROCESS="restaurant-backend"',
+    '  if [ -f .env ]; then',
+    '    ENV_PM2_NAME=$(sudo grep -E "^PM2_(NAME|PROCESS|APP_NAME)=" .env | cut -d= -f2 | head -1)',
+    '    ENV_PM2_NAME=${ENV_PM2_NAME%\"}',
+    '    ENV_PM2_NAME=${ENV_PM2_NAME#\"}',
+    '    if [ -n "${ENV_PM2_NAME}" ]; then',
+    '      PM2_PROCESS="${ENV_PM2_NAME}"',
+    '    fi',
+    '  fi',
+    '',
+    '  echo "  Restarting PM2 process: ${PM2_PROCESS}"',
+    '  sudo pm2 restart "${PM2_PROCESS}" || sudo pm2 start server.js --name "${PM2_PROCESS}"',
+    '',
+    '  echo "  ${NAME} deployment complete"',
+    '  return 0',
+    '}',
+    '',
+    'BOJOLE_SUCCESS=0',
+    'LAUTA_SUCCESS=0',
+    '',
+    'if deploy_instance "/opt/resturant-website" "BOJOLE"; then BOJOLE_SUCCESS=1; fi',
+    'if deploy_instance "/opt/resturant-website-lauta" "LAUTA"; then LAUTA_SUCCESS=1; fi',
+    '',
+    'sudo pm2 save',
+    '',
+    'echo ""',
+    'echo "========================================"',
+    'echo "DEPLOYMENT SUMMARY"',
+    'echo "========================================"',
+    'if [ ${BOJOLE_SUCCESS} -eq 1 ]; then echo "BOJOLE: Success"; else echo "BOJOLE: Failed"; fi',
+    'if [ ${LAUTA_SUCCESS} -eq 1 ]; then echo "LAUTA: Success"; else echo "LAUTA: Failed"; fi',
+    'echo "========================================"',
+    '',
+    'if [ ${BOJOLE_SUCCESS} -eq 1 ] || [ ${LAUTA_SUCCESS} -eq 1 ]; then exit 0; else exit 1; fi'
+)
 
-echo "→ Deploying to both restaurants..."
-
-deploy_instance() {
-    local DIR=$1
-    local NAME=$2
-    local PRESERVE_DIR="$DIR/.preserve"
-    
-    echo ""
-    echo "→ Deploying $NAME: $DIR"
-    
-    if [ ! -d "$DIR" ]; then
-        echo "  ⚠ Directory not found: $DIR - Skipping"
-        return 1
-    fi
-    
-    cd "$DIR"
-    
-    # Preserve production files
-    echo "  Preserving production data..."
-    sudo mkdir -p "$PRESERVE_DIR"
-    [ -f database.json ] && sudo cp database.json "$PRESERVE_DIR/" || true
-    [ -f .env ] && sudo cp .env "$PRESERVE_DIR/" || true
-    [ -d uploads ] && sudo cp -r uploads "$PRESERVE_DIR/" || true
-    
-    # Pull latest code
-    echo "  Fetching latest code..."
-    sudo git fetch origin
-    sudo git reset --hard origin/main 2>/dev/null || sudo git reset --hard origin/master
-    
-    # Restore production files
-    echo "  Restoring production data..."
-    [ -f "$PRESERVE_DIR/database.json" ] && sudo cp "$PRESERVE_DIR/database.json" . || true
-    [ -f "$PRESERVE_DIR/.env" ] && sudo cp "$PRESERVE_DIR/.env" . || true
-    [ -d "$PRESERVE_DIR/uploads" ] && sudo cp -r "$PRESERVE_DIR/uploads" . || true
-    
-    # Install dependencies
-    echo "  Installing dependencies..."
-    sudo npm ci --omit=dev 2>/dev/null || sudo npm install --omit=dev
-    
-    # Get PM2 process name from .env
-    PM2_PROCESS="restaurant-backend"
-    if [ -f .env ]; then
-        ENV_PM2_NAME=$(sudo grep -E '^PM2_(NAME|PROCESS|APP_NAME)=' .env | cut -d= -f2 | tr -d '"' | head -1)
-        if [ -n "$ENV_PM2_NAME" ]; then
-            PM2_PROCESS="$ENV_PM2_NAME"
-        fi
-    fi
-    
-    # Restart PM2
-    echo "  Restarting PM2 process: $PM2_PROCESS"
-    sudo pm2 restart "$PM2_PROCESS" || sudo pm2 start server.js --name "$PM2_PROCESS"
-    
-    echo "  ✓ $NAME deployment complete!"
-    return 0
-}
-
-# Deploy both instances
-BOJOLE_SUCCESS=0
-LAUTA_SUCCESS=0
-
-deploy_instance "/opt/resturant-website" "BOJOLE" && BOJOLE_SUCCESS=1 || BOJOLE_SUCCESS=0
-deploy_instance "/opt/resturant-website-lauta" "LAUTA" && LAUTA_SUCCESS=1 || LAUTA_SUCCESS=0
-
-# Save PM2 state
-sudo pm2 save
-
-echo ""
-echo "========================================"
-echo "DEPLOYMENT SUMMARY"
-echo "========================================"
-if [ $BOJOLE_SUCCESS -eq 1 ]; then
-    echo "✓ BOJOLE: Success"
-else
-    echo "✗ BOJOLE: Failed"
-fi
-
-if [ $LAUTA_SUCCESS -eq 1 ]; then
-    echo "✓ LAUTA: Success"
-else
-    echo "✗ LAUTA: Failed"
-fi
-echo "========================================"
-
-if [ $BOJOLE_SUCCESS -eq 1 ] || [ $LAUTA_SUCCESS -eq 1 ]; then
-    exit 0
-else
-    exit 1
-fi
-'@
+$remoteScript = ($remoteScriptLines -join "`n")
 
 # Convert to Unix line endings (LF only)
 $remoteScript = $remoteScript -replace "`r`n", "`n"
@@ -202,5 +185,5 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 Write-Host "`n========================================" -ForegroundColor Cyan
-Write-Host "Done! 🎉" -ForegroundColor Cyan
+Write-Host "Done!" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan

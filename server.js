@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -247,6 +248,103 @@ const upload = multer({
         cb(new Error('Only image files are allowed!'));
     }
 });
+
+// In-memory upload for small XLSX files (product import/template workflows)
+const uploadXlsx = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: function (req, file, cb) {
+        const name = (file?.originalname ?? '').toString().toLowerCase();
+        const ok = file && (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || name.endsWith('.xlsx'));
+        if (!ok) return cb(new Error('Only .xlsx files are allowed'));
+        cb(null, true);
+    }
+});
+
+function normalizeXlsxHeaderKey(value) {
+    return (value ?? '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '');
+}
+
+function parseBoolLikeServer(value) {
+    const v = (value ?? '').toString().trim().toLowerCase();
+    if (!v) return false;
+    if (['1', 'true', 'yes', 'y', 'on', 'да', 'ok'].includes(v)) return true;
+    if (['0', 'false', 'no', 'n', 'off', 'не'].includes(v)) return false;
+    return false;
+}
+
+function parsePriceLike(value) {
+    const raw = (value ?? '').toString().trim();
+    if (!raw) return NaN;
+    const cleaned = raw
+        .replace(/\s+/g, '')
+        .replace(/[€$£]/g, '')
+        .replace(/(eur|bgn|lv|usd|gbp)$/i, '')
+        .replace(/,/g, '.');
+    const match = cleaned.match(/-?\d+(?:\.\d+)?/);
+    if (!match) return NaN;
+    const num = Number(match[0]);
+    return Number.isFinite(num) ? num : NaN;
+}
+
+function buildXlsxHeaderIndexMap(headerRow) {
+    const idx = {};
+    const aliases = {
+        id: ['id'],
+        code: ['code', 'код', 'product code'],
+        name: ['name', 'име', 'наименование', 'продукт'],
+        category: ['category', 'категория'],
+        subcategory: ['subcategory', 'подкатегория', 'подкат.', 'група', 'подгрупа'],
+        price: ['price', 'цена'],
+        promo_price: ['promo price', 'promo_price', 'промо цена', 'цена промо'],
+        promo_percentage: ['promo %', 'promo%', 'promo_percentage', 'промо %', 'отстъпка %', 'discount %'],
+        is_promo: ['is promo', 'is_promo', 'промо', 'promo'],
+        available: ['available', 'availability', 'наличност'],
+        img_url: ['img / url', 'img_url', 'image', 'image url', 'снимка', 'снимки', 'линк', 'снимки / линк'],
+        info: ['info', 'описание', 'description', 'описание/състав', 'състав']
+    };
+
+    const normalizedCells = (headerRow || []).map(h => normalizeXlsxHeaderKey(h));
+    for (let i = 0; i < normalizedCells.length; i++) {
+        const cell = normalizedCells[i];
+        if (!cell) continue;
+        for (const [key, keys] of Object.entries(aliases)) {
+            if (idx[key] != null) continue;
+            if (keys.includes(cell)) idx[key] = i;
+        }
+    }
+    return idx;
+}
+
+function findLikelyHeaderRowIndex(rows) {
+    const maxScan = Math.min(10, rows.length);
+    for (let i = 0; i < maxScan; i++) {
+        const idx = buildXlsxHeaderIndexMap(rows[i] || []);
+        if (idx.code != null && idx.name != null && idx.category != null && idx.price != null) return i;
+    }
+    return -1;
+}
+
+function coerceCellString(row, i) {
+    if (!row || i == null || i < 0) return '';
+    return (row[i] ?? '').toString().trim();
+}
+
+function generateUniqueProductId(db, requestedId) {
+    const parsed = (requestedId !== undefined && requestedId !== null && requestedId !== '') ? parseInt(requestedId, 10) : NaN;
+    let nextId = Number.isFinite(parsed) ? parsed : Date.now();
+    const used = new Set((db.products || []).map(p => p?.id).filter(v => v !== undefined && v !== null));
+    if (used.has(nextId)) {
+        nextId = Date.now() + Math.floor(Math.random() * 1000);
+        while (used.has(nextId)) nextId += 1;
+    }
+    return nextId;
+}
 
 // Database file path
 // Allows tests to run against an isolated DB file without touching production/local data.
@@ -2639,6 +2737,197 @@ async function sendOrderStatusEmail(order, status) {
 app.get(API_PREFIX + '/products', (req, res) => {
     const db = readDatabase();
     res.json(db.products);
+});
+
+// Download product import template (XLSX)
+// Matches the commonly used customer file layout (two header rows).
+app.get(API_PREFIX + '/products/template-xlsx', requireAuth, (req, res) => {
+    try {
+        const row0 = ['', '', '', '', '', '', '', '', '', '', 'Снимки / линк', 'Описание'];
+        const row1 = ['ID', 'CODE', 'NAME', 'Category', 'Subcategory', 'Price', 'Promo Price', 'Promo %', 'Is promo', 'available', 'Img / URL', 'Info'];
+        const example = [
+            '1',
+            'PIZZA_MARGHERITA',
+            'Шопска салата 300гр.',
+            'Салати',
+            'Салата',
+            '7.60 €',
+            '',
+            '0',
+            '0',
+            '1',
+            '',
+            'домат, краставица, лук, чушка, сирене, маслини'
+        ];
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet([row0, row1, example]);
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+
+        const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+        const fileName = 'Асортимент- доставка.xlsx';
+        const fileNameStar = encodeURIComponent(fileName);
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="products-template.xlsx"; filename*=UTF-8''${fileNameStar}`);
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(buf);
+    } catch (e) {
+        console.error('Failed to generate XLSX template:', e);
+        res.status(500).json({ error: 'Failed to generate template' });
+    }
+});
+
+// Import products from XLSX (bulk)
+// - Skips duplicates by code (case-insensitive)
+// - Populates translations.bg.{name,description,category} from the file's NAME/Info/Category columns
+app.post(API_PREFIX + '/products/import-xlsx', requireAuth, uploadXlsx.single('file'), (req, res) => {
+    try {
+        if (!req.file || !req.file.buffer) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        const wb = XLSX.read(req.file.buffer, { type: 'buffer', raw: false, cellDates: false });
+        const sheetName = wb.SheetNames?.[0];
+        if (!sheetName) {
+            return res.status(400).json({ error: 'XLSX contains no sheets' });
+        }
+
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+        if (!Array.isArray(rows) || rows.length < 2) {
+            return res.status(400).json({ error: 'XLSX is empty or invalid' });
+        }
+
+        const headerRowIndex = findLikelyHeaderRowIndex(rows);
+        if (headerRowIndex < 0) {
+            return res.status(400).json({
+                error: 'Could not find a header row. Expected columns like CODE, NAME, Category, Price.'
+            });
+        }
+
+        const headerRow = rows[headerRowIndex] || [];
+        const idx = buildXlsxHeaderIndexMap(headerRow);
+
+        const db = readDatabase();
+        const existingCodes = new Set((db.products || [])
+            .map(p => (p?.code ?? '').toString().trim().toLowerCase())
+            .filter(Boolean));
+
+        const created = [];
+        let duplicateCount = 0;
+        let invalidCount = 0;
+
+        for (let r = headerRowIndex + 1; r < rows.length; r++) {
+            const row = rows[r] || [];
+            const hasAny = row.some(v => (v ?? '').toString().trim() !== '');
+            if (!hasAny) continue;
+
+            const codeRaw = coerceCellString(row, idx.code);
+            if (!codeRaw) continue;
+            const codeNorm = codeRaw.toLowerCase();
+            if (existingCodes.has(codeNorm)) {
+                duplicateCount++;
+                continue;
+            }
+
+            const name = coerceCellString(row, idx.name);
+            const category = coerceCellString(row, idx.category) || 'Other';
+            const subcategory = coerceCellString(row, idx.subcategory);
+            const description = coerceCellString(row, idx.info);
+
+            const price = parsePriceLike(row[idx.price]);
+            if (!Number.isFinite(price) || price <= 0) {
+                invalidCount++;
+                continue;
+            }
+
+            const image = (coerceCellString(row, idx.img_url) || 'https://via.placeholder.com/300x200?text=No+Image');
+
+            const promoPrice = (idx.promo_price != null) ? parsePriceLike(row[idx.promo_price]) : NaN;
+            const promoPctRaw = (idx.promo_percentage != null) ? coerceCellString(row, idx.promo_percentage) : '';
+            const promoPct = promoPctRaw ? Number(String(promoPctRaw).replace(',', '.')) : NaN;
+            const isPromoCell = (idx.is_promo != null) ? row[idx.is_promo] : '';
+            const isPromo = parseBoolLikeServer(isPromoCell) || (Number.isFinite(promoPrice) && promoPrice > 0) || (Number.isFinite(promoPct) && promoPct > 0);
+
+            const availableCell = (idx.available != null) ? row[idx.available] : '';
+            const availabilityStatus = (idx.available != null)
+                ? (parseBoolLikeServer(availableCell) ? 'available' : 'not_available')
+                : 'available';
+
+            const requestedId = (idx.id != null) ? coerceCellString(row, idx.id) : '';
+
+            const newProduct = {
+                id: generateUniqueProductId(db, requestedId),
+                code: codeRaw,
+                name: name,
+                description: description,
+                price: price,
+                category: category,
+                subcategory: subcategory || '',
+                availabilityStatus,
+                availability: deriveAvailabilityBoolean(availabilityStatus),
+                promoPercentage: Number.isFinite(promoPct) ? promoPct : null,
+                image,
+                weight: '',
+                promo: null,
+                translations: {
+                    bg: {
+                        name: name || '',
+                        description: description || '',
+                        category: category || ''
+                    }
+                },
+                isCombo: false,
+                comboType: null,
+                comboProducts: null,
+                specialLabel: null
+            };
+
+            if (isPromo) {
+                let finalPromoPrice = promoPrice;
+                if (!Number.isFinite(finalPromoPrice) && Number.isFinite(promoPct) && promoPct > 0) {
+                    finalPromoPrice = Math.round((price * (1 - Math.max(0, Math.min(100, promoPct)) / 100)) * 100) / 100;
+                }
+                if (Number.isFinite(finalPromoPrice) && finalPromoPrice > 0 && finalPromoPrice < price) {
+                    newProduct.promo = {
+                        enabled: true,
+                        isActive: true,
+                        price: finalPromoPrice,
+                        type: 'permanent',
+                        startDate: null,
+                        endDate: null
+                    };
+                }
+            }
+
+            db.products.push(newProduct);
+            created.push(newProduct);
+            existingCodes.add(codeNorm);
+        }
+
+        if (created.length === 0) {
+            return res.status(400).json({
+                error: 'No valid products found in XLSX',
+                duplicates: duplicateCount,
+                invalid: invalidCount
+            });
+        }
+
+        if (!writeDatabase(db)) {
+            return res.status(500).json({ error: 'Failed to save products' });
+        }
+
+        return res.json({
+            ok: true,
+            imported: created.length,
+            duplicates: duplicateCount,
+            invalid: invalidCount
+        });
+    } catch (e) {
+        console.error('XLSX import failed:', e);
+        return res.status(500).json({ error: 'XLSX import failed' });
+    }
 });
 
 // Get single product

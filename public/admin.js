@@ -3110,55 +3110,40 @@ async function resetData() {
 // ========== CSV IMPORT/EXPORT FUNCTIONS ==========
 
 // Download CSV Template
-function downloadCSVTemplate() {
-    const headers = [
-        'id',
-        'code',
-        'name',
-        'category',
-        'subcategory',
-        'price',
-        'promo_price',
-        'promo_percentage',
-        'is_promo',
-        'availability',
-        'img_url',
-        'info'
-    ];
+async function downloadCSVTemplate() {
+    // Backward-compat name: now downloads the XLSX template that customers actually use.
+    try {
+        const token = sessionStorage.getItem('adminToken');
+        if (!token) {
+            alert('Please login first');
+            return;
+        }
 
-    const exampleRow = [
-        '',
-        'PIZZA_MARGHERITA',
-        'Margherita Pizza',
-        'Pizza',
-        'Classic',
-        '12.99',
-        '9.99',
-        '23',
-        'true',
-        'true',
-        'https://example.com/pizza.jpg',
-        'Classic pizza with tomato sauce, mozzarella and basil'
-    ];
+        const response = await fetch(`${API_URL}/products/template-xlsx`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
 
-    const quote = (cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`;
-    const emptyRow = headers.map(() => '').join(',');
-    const csvContent = [
-        headers.join(','),
-        exampleRow.map(quote).join(','),
-        emptyRow,
-        emptyRow
-    ].join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'products-template.csv';
-    link.click();
-    URL.revokeObjectURL(url);
-    
-    alert('Template downloaded! Fill it with your products and upload it back.');
+        if (!response.ok) {
+            const err = await response.json().catch(() => null);
+            alert(err?.error || 'Failed to download template');
+            return;
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'Асортимент- доставка.xlsx';
+        link.click();
+        URL.revokeObjectURL(url);
+
+        alert('Template downloaded! Fill it with your products and upload it back.');
+    } catch (error) {
+        console.error('Error downloading template:', error);
+        alert('Error downloading template');
+    }
 }
 
 // Export Products to CSV
@@ -3237,6 +3222,47 @@ async function exportProductsCSV() {
 async function handleCSVImport(event) {
     const file = event.target.files[0];
     if (!file) return;
+
+    // XLSX import (server-side parsing)
+    const fileName = (file.name || '').toLowerCase();
+    if (fileName.endsWith('.xlsx')) {
+        try {
+            const token = sessionStorage.getItem('adminToken');
+            if (!token) {
+                alert('Please login first');
+                return;
+            }
+
+            if (!confirm(`Import products from Excel file "${file.name}"?\n\nDuplicates by CODE will be skipped.`)) {
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            const response = await fetch(`${API_URL}/products/import-xlsx`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData
+            });
+
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                alert(result?.error || 'XLSX import failed');
+                return;
+            }
+
+            alert(`Import completed!\nImported: ${result.imported ?? 0}\nSkipped duplicates: ${result.duplicates ?? 0}\nInvalid rows: ${result.invalid ?? 0}`);
+            await loadProducts();
+        } catch (error) {
+            console.error('Error importing XLSX:', error);
+            alert('Error importing XLSX: ' + error.message);
+        } finally {
+            event.target.value = '';
+        }
+        return;
+    }
     
     const reader = new FileReader();
     reader.onload = async function(e) {
@@ -3251,15 +3277,22 @@ async function handleCSVImport(event) {
 
             const headerLine = lines[0];
             const delimiter = (headerLine.split(';').length > headerLine.split(',').length) ? ';' : ',';
-            const headers = parseCSVLine(headerLine, delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
+            const headers = parseCSVLine(headerLine, delimiter)
+                .map(h => h.trim().replace(/^"|"$/g, '').trim());
 
-            const idx = Object.fromEntries(headers.map((h, i) => [h, i]));
+            const headerKeys = headers.map(h => h.toLowerCase());
+            const idx = Object.fromEntries(headerKeys.map((h, i) => [h, i]));
             const required = ['code', 'name', 'category', 'price'];
             const missing = required.filter(k => !(k in idx));
             if (missing.length) {
                 alert(`Missing required columns: ${missing.join(', ')}`);
                 return;
             }
+
+            // Optional BG columns (if provided)
+            const idxNameBg = idx.name_bg ?? idx.bg_name ?? idx.namebg ?? idx['bg name'];
+            const idxInfoBg = idx.info_bg ?? idx.description_bg ?? idx.bg_description ?? idx.infobg ?? idx['bg description'];
+            const idxCategoryBg = idx.category_bg ?? idx.bg_category ?? idx.categorybg ?? idx['bg category'];
 
             // Load existing products so we can skip duplicates by code
             const existingRes = await fetch(`${API_URL}/products`);
@@ -3297,6 +3330,10 @@ async function handleCSVImport(event) {
                     || 'https://via.placeholder.com/300x200?text=No+Image';
                 const info = (idx.info != null ? (values[idx.info] ?? '').toString() : '');
 
+                const nameBg = (idxNameBg != null ? (values[idxNameBg] ?? '').toString().trim() : '');
+                const infoBg = (idxInfoBg != null ? (values[idxInfoBg] ?? '').toString().trim() : '');
+                const categoryBg = (idxCategoryBg != null ? (values[idxCategoryBg] ?? '').toString().trim() : '');
+
                 const promoPriceRaw = (idx.promo_price != null ? (values[idx.promo_price] ?? '').toString().trim() : '');
                 const promoPctRaw = (idx.promo_percentage != null ? (values[idx.promo_percentage] ?? '').toString().trim() : '');
                 const isPromoRaw = (idx.is_promo != null ? (values[idx.is_promo] ?? '').toString().trim() : '');
@@ -3323,7 +3360,14 @@ async function handleCSVImport(event) {
                     description: info,
                     availabilityStatus,
                     availability: availabilityStatus === 'available' || availabilityStatus === 'limited',
-                    promoPercentage: Number.isFinite(promoPct) ? promoPct : undefined
+                    promoPercentage: Number.isFinite(promoPct) ? promoPct : undefined,
+                    translations: {
+                        bg: {
+                            name: nameBg || name,
+                            description: infoBg || info || '',
+                            category: categoryBg || category
+                        }
+                    }
                 };
 
                 if (id != null) {
