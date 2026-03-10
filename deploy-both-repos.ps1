@@ -166,7 +166,20 @@ $remoteScript = ($remoteScriptLines -join "`n")
 $remoteScript = $remoteScript -replace "`r`n", "`n"
 $remoteScript = $remoteScript -replace "`r", "`n"
 
-$remoteScript | ssh "$ServerUser@$ServerIp" "bash -s"
+$tmpRemoteScriptPath = Join-Path $env:TEMP ("deploy-both-repos-remote-{0}.sh" -f ([Guid]::NewGuid().ToString("N")))
+try {
+    # Write as UTF-8 without BOM to avoid remote bash parsing issues.
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($tmpRemoteScriptPath, ($remoteScript + "`n"), $utf8NoBom)
+
+    # Windows PowerShell 5.1 does not support `< file` redirection; use cmd.exe for that.
+    $sshTarget = "$ServerUser@$ServerIp"
+    $cmdLine = "ssh $sshTarget `"bash -s`" < `"$tmpRemoteScriptPath`""
+    cmd /c $cmdLine
+}
+finally {
+    Remove-Item -LiteralPath $tmpRemoteScriptPath -ErrorAction SilentlyContinue
+}
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`n========================================" -ForegroundColor Green
