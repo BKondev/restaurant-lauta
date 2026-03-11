@@ -28,6 +28,67 @@ const PORT = process.env.PORT || 3003;
 const BASE_PATH = (process.env.BASE_PATH ?? '/resturant-website');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
+function resolveUploadsPathFromImageUrl(imageUrl) {
+    const raw = (imageUrl ?? '').toString().trim();
+    if (!raw) return null;
+    if (/^https?:\/\//i.test(raw)) return null;
+
+    const prefixes = [
+        `${BASE_PATH}/uploads/`,
+        '/uploads/',
+        'uploads/'
+    ];
+
+    let filename = null;
+    for (const p of prefixes) {
+        if (raw.startsWith(p)) {
+            filename = raw.slice(p.length);
+            break;
+        }
+    }
+    if (!filename) return null;
+
+    filename = filename.split('?')[0].split('#')[0].trim();
+    if (!filename) return null;
+    // Only allow direct filenames, not nested paths.
+    filename = filename.replace(/\\/g, '/');
+    if (filename.includes('/') || filename.includes('..')) return null;
+
+    const full = path.resolve(path.join(UPLOADS_DIR, filename));
+    const root = path.resolve(UPLOADS_DIR);
+    if (!(full === root || full.startsWith(root + path.sep))) return null;
+    return full;
+}
+
+function deleteLocalProductImages(product) {
+    const deleted = [];
+    const tryUnlink = (fullPath) => {
+        if (!fullPath) return;
+        try {
+            if (fs.existsSync(fullPath)) {
+                fs.unlinkSync(fullPath);
+                deleted.push(path.basename(fullPath));
+            }
+        } catch (e) {
+            // Best-effort: never fail the API because file delete failed.
+            console.warn('[DELETE] Failed to delete image:', fullPath, e?.message || e);
+        }
+    };
+
+    // Delete the currently referenced file (if local)
+    tryUnlink(resolveUploadsPathFromImageUrl(product?.image));
+
+    // Also delete id-based bulk images (e.g. 1.jpg) for this product.
+    const id = parseInt(product?.id, 10);
+    if (Number.isFinite(id)) {
+        for (const ext of ['.jpg', '.jpeg', '.png', '.gif', '.webp']) {
+            tryUnlink(path.join(UPLOADS_DIR, `${id}${ext}`));
+        }
+    }
+
+    return deleted;
+}
+
 // Multi-tenant authentication system
 // Each restaurant has its own credentials and API key
 // In production: use environment variables, hash passwords with bcrypt, use proper JWT tokens
@@ -3217,6 +3278,8 @@ app.delete(API_PREFIX + '/products/batch', requireAuth, (req, res) => {
     });
     
     if (writeDatabase(db)) {
+        // Best-effort local image cleanup
+        for (const p of deleted) deleteLocalProductImages(p);
         res.json({ message: 'Products deleted', count: deleted.length, deleted });
     } else {
         res.status(500).json({ error: 'Failed to delete products' });
@@ -3232,6 +3295,8 @@ app.delete(API_PREFIX + '/products/:id', requireAuth, (req, res) => {
         const deletedProduct = db.products.splice(index, 1);
         
         if (writeDatabase(db)) {
+            // Best-effort local image cleanup
+            deleteLocalProductImages(deletedProduct[0]);
             res.json({ message: 'Product deleted', product: deletedProduct[0] });
         } else {
             res.status(500).json({ error: 'Failed to delete product' });
