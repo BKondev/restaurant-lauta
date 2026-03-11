@@ -3218,6 +3218,54 @@ async function exportProductsCSV() {
     }
 }
 
+// Bulk upload product images (match by product id)
+async function handleBulkProductImagesUpload(event) {
+    const files = Array.from(event?.target?.files || []);
+    if (!files.length) return;
+
+    try {
+        const token = sessionStorage.getItem('adminToken');
+        if (!token) {
+            alert('Please login first');
+            return;
+        }
+
+        const exampleNames = files.slice(0, 8).map(f => f.name).join(', ');
+        const more = files.length > 8 ? ` (+${files.length - 8} more)` : '';
+
+        if (!confirm(`Upload ${files.length} image(s) and match them to products by ID?\n\nExample: 1.jpg -> product id 1\n\nSelected: ${exampleNames}${more}`)) {
+            return;
+        }
+
+        const formData = new FormData();
+        for (const file of files) {
+            formData.append('images', file);
+        }
+
+        const response = await fetch(`${API_URL}/products/upload-images`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            alert(result?.error || 'Bulk image upload failed');
+            return;
+        }
+
+        alert(`Images uploaded!\nUploaded: ${result.uploaded ?? files.length}\nUpdated products: ${result.updated ?? 0}\nSkipped/unmatched: ${result.skipped ?? 0}`);
+        await loadProducts();
+    } catch (error) {
+        console.error('Bulk image upload failed:', error);
+        alert('Bulk image upload failed: ' + error.message);
+    } finally {
+        if (event?.target) event.target.value = '';
+    }
+}
+
 // Handle CSV Import
 async function handleCSVImport(event) {
     const file = event.target.files[0];

@@ -249,6 +249,44 @@ const upload = multer({
     }
 });
 
+// Bulk product image upload: filename base must match product id (e.g. 1.jpg -> id 1)
+const productImageStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        const ext = path.extname(file.originalname).toLowerCase();
+        const base = path.basename(file.originalname, ext).trim();
+        const parsedId = parseInt(base, 10);
+
+        // If the base name is a clean integer, normalize to <id><ext>.
+        if (Number.isFinite(parsedId) && String(parsedId) === base) {
+            return cb(null, `${parsedId}${ext}`);
+        }
+
+        // Otherwise keep a sanitized version (won't be auto-matched).
+        const safe = file.originalname
+            .toString()
+            .replace(/[^a-zA-Z0-9._-]/g, '_');
+        cb(null, safe);
+    }
+});
+
+const uploadProductImages = multer({
+    storage: productImageStorage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
+    fileFilter: function (req, file, cb) {
+        const filetypes = /jpeg|jpg|png|gif|webp/;
+        const mimetype = filetypes.test(file.mimetype);
+        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+
+        if (mimetype && extname) {
+            return cb(null, true);
+        }
+        cb(new Error('Only image files are allowed!'));
+    }
+});
+
 // In-memory upload for small XLSX files (product import/template workflows)
 const uploadXlsx = multer({
     storage: multer.memoryStorage(),
@@ -297,16 +335,29 @@ function buildXlsxHeaderIndexMap(headerRow) {
     const aliases = {
         id: ['id'],
         code: ['code', 'код', 'product code'],
-        name: ['name', 'име', 'наименование', 'продукт'],
-        category: ['category', 'категория'],
+        // Legacy single-language columns
+        name: ['name', 'наименование', 'продукт', 'name (legacy)', 'име (legacy)'],
+        category: ['category', 'категория (legacy)'],
+        info: ['info', 'описание/състав', 'състав'],
+
+        // Bilingual columns (preferred)
+        name_bg: ['име', 'име bg', 'име (bg)'],
+        name_en: ['name', 'name en', 'name (en)'],
+        category_bg: ['категория', 'категория bg', 'категория (bg)'],
+        category_en: ['category', 'category en', 'category (en)'],
+        description_bg: ['описание', 'описание bg', 'описание (bg)'],
+        description_en: ['description', 'description en', 'description (en)'],
+        weight: ['weight/quantity', 'weight', 'quantity', 'грамаж', 'тегло', 'количество'],
+
         subcategory: ['subcategory', 'подкатегория', 'подкат.', 'група', 'подгрупа'],
         price: ['price', 'цена'],
         promo_price: ['promo price', 'promo_price', 'промо цена', 'цена промо'],
         promo_percentage: ['promo %', 'promo%', 'promo_percentage', 'промо %', 'отстъпка %', 'discount %'],
         is_promo: ['is promo', 'is_promo', 'промо', 'promo'],
-        available: ['available', 'availability', 'наличност'],
+        available: ['available', 'availability', 'наличност', 'наличен', 'активен'],
         img_url: ['img / url', 'img_url', 'image', 'image url', 'снимка', 'снимки', 'линк', 'снимки / линк'],
-        info: ['info', 'описание', 'description', 'описание/състав', 'състав']
+        // Keep old keys for compatibility (some files might still use these)
+        description: ['description']
     };
 
     const normalizedCells = (headerRow || []).map(h => normalizeXlsxHeaderKey(h));
@@ -325,7 +376,10 @@ function findLikelyHeaderRowIndex(rows) {
     const maxScan = Math.min(10, rows.length);
     for (let i = 0; i < maxScan; i++) {
         const idx = buildXlsxHeaderIndexMap(rows[i] || []);
-        if (idx.code != null && idx.name != null && idx.category != null && idx.price != null) return i;
+        const hasIdOrCode = (idx.code != null || idx.id != null);
+        const hasName = (idx.name_bg != null || idx.name_en != null || idx.name != null);
+        const hasCategory = (idx.category_bg != null || idx.category_en != null || idx.category != null);
+        if (hasIdOrCode && hasName && hasCategory && idx.price != null) return i;
     }
     return -1;
 }
@@ -2743,21 +2797,42 @@ app.get(API_PREFIX + '/products', (req, res) => {
 // Matches the commonly used customer file layout (two header rows).
 app.get(API_PREFIX + '/products/template-xlsx', requireAuth, (req, res) => {
     try {
-        const row0 = ['', '', '', '', '', '', '', '', '', '', 'Снимки / линк', 'Описание'];
-        const row1 = ['ID', 'CODE', 'NAME', 'Category', 'Subcategory', 'Price', 'Promo Price', 'Promo %', 'Is promo', 'available', 'Img / URL', 'Info'];
+        const row0 = ['', '', '', '', '', '', '', '', '', '', '', '', 'Снимки / линк', 'Описание', '', ''];
+        const row1 = [
+            'ID',
+            'CODE',
+            'Име',
+            'Name',
+            'Категория',
+            'Category',
+            'Subcategory',
+            'Price',
+            'Promo Price',
+            'Promo %',
+            'Is promo',
+            'available',
+            'Img / URL',
+            'Описание',
+            'Description',
+            'Weight/Quantity'
+        ];
         const example = [
             '1',
             'PIZZA_MARGHERITA',
             'Шопска салата 300гр.',
+            'Shopska salad 300g',
             'Салати',
+            'Salads',
             'Салата',
             '7.60 €',
-            '',
-            '0',
-            '0',
+            '6.80 €',
+            '10',
+            '1',
             '1',
             '',
-            'домат, краставица, лук, чушка, сирене, маслини'
+            'домат, краставица, лук, чушка, сирене, маслини',
+            'tomato, cucumber, onion, pepper, cheese, olives',
+            '300 g'
         ];
 
         const wb = XLSX.utils.book_new();
@@ -2848,12 +2923,22 @@ app.post(API_PREFIX + '/products/import-xlsx', requireAuth, uploadXlsx.single('f
                 codeNorm = codeRaw.toLowerCase();
             }
 
-            let name = coerceCellString(row, idx.name);
-            const category = coerceCellString(row, idx.category) || 'Other';
-            const subcategory = coerceCellString(row, idx.subcategory);
-            const description = coerceCellString(row, idx.info);
+            const nameBg = coerceCellString(row, idx.name_bg) || coerceCellString(row, idx.name);
+            const nameEn = coerceCellString(row, idx.name_en);
 
-            if (!name) name = codeRaw;
+            const categoryBg = coerceCellString(row, idx.category_bg) || coerceCellString(row, idx.category);
+            const categoryEn = coerceCellString(row, idx.category_en);
+
+            const descBg = coerceCellString(row, idx.description_bg) || coerceCellString(row, idx.info) || coerceCellString(row, idx.description);
+            const descEn = coerceCellString(row, idx.description_en);
+
+            const category = (categoryBg || categoryEn || 'Other');
+            const subcategory = coerceCellString(row, idx.subcategory);
+            const description = (descBg || descEn || '');
+
+            const weight = coerceCellString(row, idx.weight);
+
+            const name = (nameBg || nameEn || codeRaw);
 
             let price = parsePriceLike(row[idx.price]);
             // Allow blank/zero prices so every row can be imported.
@@ -2868,7 +2953,8 @@ app.post(API_PREFIX + '/products/import-xlsx', requireAuth, uploadXlsx.single('f
             const promoPctParsed = promoPctMatch ? Number(promoPctMatch[0]) : NaN;
             const promoPct = Number.isFinite(promoPctParsed) ? Math.max(0, Math.min(100, promoPctParsed)) : NaN;
             const isPromoCell = (idx.is_promo != null) ? row[idx.is_promo] : '';
-            const isPromo = parseBoolLikeServer(isPromoCell) || (Number.isFinite(promoPrice) && promoPrice > 0) || (Number.isFinite(promoPct) && promoPct > 0);
+            // Per spec: Is promo == 1 means promo; 0 means no promo.
+            const isPromo = parseBoolLikeServer(isPromoCell);
 
             const availableCell = (idx.available != null) ? row[idx.available] : '';
             const availabilityStatus = (idx.available != null)
@@ -2885,15 +2971,20 @@ app.post(API_PREFIX + '/products/import-xlsx', requireAuth, uploadXlsx.single('f
                 subcategory: subcategory || '',
                 availabilityStatus,
                 availability: deriveAvailabilityBoolean(availabilityStatus),
-                promoPercentage: Number.isFinite(promoPct) ? promoPct : null,
+                promoPercentage: (isPromo && Number.isFinite(promoPct) && promoPct > 0) ? promoPct : null,
                 image,
-                weight: '',
+                weight: weight || '',
                 promo: null,
                 translations: {
                     bg: {
-                        name: name || '',
-                        description: description || '',
-                        category: category || ''
+                        name: nameBg || name || '',
+                        description: descBg || description || '',
+                        category: categoryBg || category || ''
+                    },
+                    en: {
+                        name: nameEn || '',
+                        description: descEn || '',
+                        category: categoryEn || ''
                     }
                 },
                 isCombo: false,
@@ -2904,10 +2995,11 @@ app.post(API_PREFIX + '/products/import-xlsx', requireAuth, uploadXlsx.single('f
 
             if (isPromo) {
                 let finalPromoPrice = promoPrice;
-                if (!Number.isFinite(finalPromoPrice) && Number.isFinite(promoPct) && promoPct > 0) {
+                // Promo Price is the discounted price. If empty, derive from promo %.
+                if (!Number.isFinite(finalPromoPrice) && Number.isFinite(promoPct) && promoPct > 0 && price > 0) {
                     finalPromoPrice = Math.round((price * (1 - Math.max(0, Math.min(100, promoPct)) / 100)) * 100) / 100;
                 }
-                if (Number.isFinite(finalPromoPrice) && finalPromoPrice > 0 && finalPromoPrice < price) {
+                if (Number.isFinite(finalPromoPrice) && finalPromoPrice > 0 && (price <= 0 || finalPromoPrice < price)) {
                     newProduct.promo = {
                         enabled: true,
                         isActive: true,
@@ -3152,6 +3244,63 @@ app.post(API_PREFIX + '/upload', requireAuth, upload.single('image'), (req, res)
     
     const imageUrl = `${BASE_PATH}/uploads/${req.file.filename}`;
     res.json({ imageUrl: imageUrl });
+});
+
+// Bulk upload product images (match by product id)
+// - Upload multiple files at once
+// - Filenames must be like: 1.jpg, 2.png, 3.webp ...
+// - Each file updates the product with matching numeric id
+app.post(API_PREFIX + '/products/upload-images', requireAuth, uploadProductImages.array('images', 500), (req, res) => {
+    try {
+        const files = Array.isArray(req.files) ? req.files : [];
+        if (!files.length) {
+            return res.status(400).json({ error: 'No files uploaded' });
+        }
+
+        const db = readDatabase();
+        const products = Array.isArray(db.products) ? db.products : [];
+
+        let updated = 0;
+        let skipped = 0;
+        const unmatched = [];
+
+        for (const file of files) {
+            const filename = (file?.filename ?? '').toString();
+            const ext = path.extname(filename);
+            const base = path.basename(filename, ext).trim();
+            const id = parseInt(base, 10);
+            if (!Number.isFinite(id) || String(id) !== base) {
+                skipped++;
+                unmatched.push(filename);
+                continue;
+            }
+
+            const product = products.find(p => p && p.id === id);
+            if (!product) {
+                skipped++;
+                unmatched.push(filename);
+                continue;
+            }
+
+            product.image = `${BASE_PATH}/uploads/${filename}`;
+            updated++;
+        }
+
+        if (!writeDatabase(db)) {
+            return res.status(500).json({ error: 'Failed to save products' });
+        }
+
+        return res.json({
+            ok: true,
+            uploaded: files.length,
+            updated,
+            skipped,
+            unmatched
+        });
+    } catch (e) {
+        console.error('Bulk product image upload failed:', e);
+        return res.status(500).json({ error: 'Bulk image upload failed' });
+    }
 });
 
 // Get restaurant settings (name and logo)
