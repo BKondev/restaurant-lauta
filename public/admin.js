@@ -3250,8 +3250,23 @@ async function handleBulkProductImagesUpload(event) {
             body: formData
         });
 
-        const result = await response.json().catch(() => ({}));
+        let result = {};
+        try {
+            const contentType = (response.headers.get('content-type') || '').toLowerCase();
+            if (contentType.includes('application/json')) {
+                result = await response.json();
+            } else {
+                result = await response.json().catch(() => ({}));
+            }
+        } catch (e) {
+            result = {};
+        }
+
         if (!response.ok) {
+            if (response.status === 413) {
+                alert('Upload is too large (Payload Too Large). Try smaller images, or upload fewer at a time.');
+                return;
+            }
             alert(result?.error || 'Bulk image upload failed');
             return;
         }
