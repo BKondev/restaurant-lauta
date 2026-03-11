@@ -197,6 +197,9 @@ if (BASE_PATH) {
         }
     }));
     app.use(BASE_PATH + '/uploads', express.static(path.join(__dirname, 'uploads')));
+    // Also expose uploads at the root. Frontend auto-detects BASE_PATH from the URL,
+    // and on root-mounted deployments it will request /uploads/... directly.
+    app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
     // Minimal vendor assets (served from node_modules)
     app.use(BASE_PATH + '/vendor', express.static(path.join(__dirname, 'node_modules', 'jszip', 'dist')));
 } else {
@@ -3243,7 +3246,7 @@ app.post(API_PREFIX + '/upload', requireAuth, upload.single('image'), (req, res)
         return res.status(400).json({ error: 'No file uploaded' });
     }
     
-    const imageUrl = `${BASE_PATH}/uploads/${req.file.filename}`;
+    const imageUrl = `/uploads/${req.file.filename}`;
     res.json({ imageUrl: imageUrl });
 });
 
@@ -3283,7 +3286,7 @@ app.post(API_PREFIX + '/products/upload-images', requireAuth, uploadProductImage
                 continue;
             }
 
-            product.image = `${BASE_PATH}/uploads/${filename}`;
+            product.image = `/uploads/${filename}`;
             updated++;
         }
 
