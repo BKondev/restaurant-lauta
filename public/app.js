@@ -954,15 +954,26 @@ function renderProducts() {
     updateAddToCartInCartBadges();
 }
 
-// Format price (EUR only)
+// Format price
 function round2(n) {
     const x = Number(n);
     if (!Number.isFinite(x)) return 0;
     return Math.round((x + Number.EPSILON) * 100) / 100;
 }
 
-function formatPrice(priceEUR) {
-    return `<span class="price-eur">${round2(priceEUR || 0).toFixed(2)} €</span>`;
+function formatPrice(priceEUR, { showBgn = true } = {}) {
+    const eur = round2(priceEUR || 0);
+    const eurHtml = `<span class="price-eur">${eur.toFixed(2)} €</span>`;
+
+    if (!showBgn) return eurHtml;
+
+    const rateRaw = currencySettings?.eurToBgnRate;
+    const rate = Number(rateRaw);
+    if (!Number.isFinite(rate) || rate <= 0) return eurHtml;
+
+    const bgn = round2(eur * rate);
+    const bgnHtml = `<span class="price-bgn">${bgn.toFixed(2)} лв</span>`;
+    return `<span class="price-container">${eurHtml}${bgnHtml}</span>`;
 }
 
 // Create product card element
@@ -1022,7 +1033,7 @@ function createProductCard(product) {
         priceHTML = `
             <div class="product-price-wrapper">
                 <span class="product-price promo-price">${formatPrice(effectivePrice)}</span>
-                <span class="product-price-original">${formatPrice(product.price)}</span>
+                <span class="product-price-original">${formatPrice(product.price, { showBgn: false })}</span>
             </div>
         `;
     } else if (product.isCombo && bundleOriginalPrice > product.price) {
@@ -1030,7 +1041,7 @@ function createProductCard(product) {
         priceHTML = `
             <div class="product-price-wrapper">
                 <span class="product-price promo-price">${formatPrice(product.price)}</span>
-                <span class="product-price-original">${formatPrice(bundleOriginalPrice)}</span>
+                <span class="product-price-original">${formatPrice(bundleOriginalPrice, { showBgn: false })}</span>
             </div>
         `;
     } else {
