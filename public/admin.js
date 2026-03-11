@@ -3281,6 +3281,148 @@ async function handleBulkProductImagesUpload(event) {
     }
 }
 
+// Manage unlinked uploaded images (files in /uploads not referenced by products)
+let unlinkedImagesCache = [];
+
+function toggleUnlinkedImagesManager(forceOpen) {
+    const panel = document.getElementById('unlinked-images-manager');
+    if (!panel) return;
+
+    const open = (typeof forceOpen === 'boolean') ? forceOpen : (panel.style.display === 'none' || !panel.style.display);
+    panel.style.display = open ? 'block' : 'none';
+
+    if (open) {
+        loadUnlinkedImages();
+    }
+}
+
+function getUploadsPreviewUrl(filename) {
+    if (!filename) return '';
+    return `${BASE_PATH}/uploads/${encodeURIComponent(filename)}`;
+}
+
+async function loadUnlinkedImages() {
+    try {
+        const token = sessionStorage.getItem('adminToken');
+        if (!token) {
+            alert('Please login first');
+            return;
+        }
+
+        const panel = document.getElementById('unlinked-images-manager');
+        if (panel) panel.style.display = 'block';
+
+        const res = await fetch(`${API_URL}/uploads/images?unlinkedOnly=1`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!res.ok) {
+            if (res.status === 401) {
+                alert('Unauthorized. Please login again.');
+            } else {
+                alert('Failed to load unlinked images');
+            }
+            return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        unlinkedImagesCache = Array.isArray(data?.items) ? data.items : [];
+        renderUnlinkedImages();
+    } catch (e) {
+        console.error('Failed to load unlinked images:', e);
+        alert('Failed to load unlinked images');
+    }
+}
+
+function renderUnlinkedImages() {
+    const list = document.getElementById('unlinked-images-list');
+    const count = document.getElementById('unlinked-images-count');
+    if (!list) return;
+
+    const items = Array.isArray(unlinkedImagesCache) ? unlinkedImagesCache : [];
+    if (count) count.textContent = items.length ? `(${items.length})` : '(0)';
+
+    if (!items.length) {
+        list.innerHTML = '<div style="grid-column: 1 / -1; color:#666; padding: 10px;">No unlinked images found.</div>';
+        return;
+    }
+
+    list.innerHTML = items.map((it, idx) => {
+        const filename = (it?.filename || '').toString();
+        const url = getUploadsPreviewUrl(filename);
+        const sizeKB = Math.round(((Number(it?.size) || 0) / 1024) * 10) / 10;
+        const idInfo = it?.productIdFromFilename != null
+            ? `ID ${it.productIdFromFilename} • ${it.productExists ? 'product exists' : 'no product'}`
+            : 'no ID';
+
+        return `
+            <label style="display:block; border:1px solid #e0e0e0; border-radius: 10px; background:#fff; overflow:hidden; cursor:pointer;">
+                <div style="display:flex; align-items:center; gap:8px; padding:8px;">
+                    <input type="checkbox" class="unlinked-image-checkbox" data-fn="${escapeHtmlAttribute(filename)}" />
+                    <div style="min-width:0;">
+                        <div style="font-weight:700; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(filename)}</div>
+                        <div style="font-size:11px; color:#666;">${idInfo} • ${sizeKB} KB</div>
+                    </div>
+                </div>
+                <div style="height:120px; background:#f2f2f2; display:flex; align-items:center; justify-content:center;">
+                    <img src="${url}" alt="${escapeHtmlAttribute(filename)}" style="width:100%; height:100%; object-fit:cover; display:block;" loading="lazy" />
+                </div>
+            </label>
+        `;
+    }).join('');
+}
+
+function selectAllUnlinkedImages(checked) {
+    document.querySelectorAll('.unlinked-image-checkbox').forEach(cb => {
+        cb.checked = !!checked;
+    });
+}
+
+async function deleteSelectedUnlinkedImages() {
+    const checkboxes = Array.from(document.querySelectorAll('.unlinked-image-checkbox'));
+    const filenames = checkboxes.filter(cb => cb.checked).map(cb => cb.getAttribute('data-fn')).filter(Boolean);
+
+    if (!filenames.length) {
+        alert('No images selected');
+        return;
+    }
+
+    if (!confirm(`Delete ${filenames.length} unlinked image(s)?\n\nThis cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const token = sessionStorage.getItem('adminToken');
+        if (!token) {
+            alert('Please login first');
+            return;
+        }
+
+        const res = await fetch(`${API_URL}/uploads/images`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ filenames })
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            alert(data?.error || 'Failed to delete images');
+            return;
+        }
+
+        alert(`Deleted: ${data.deleted ?? 0}\nSkipped (in-use): ${data.skippedReferenced ?? 0}\nNot found: ${data.notFound ?? 0}`);
+        await loadUnlinkedImages();
+    } catch (e) {
+        console.error('Failed to delete unlinked images:', e);
+        alert('Failed to delete images');
+    }
+}
+
 // Handle CSV Import
 async function handleCSVImport(event) {
     const file = event.target.files[0];

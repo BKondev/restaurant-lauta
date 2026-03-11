@@ -1585,7 +1585,7 @@ body {
 
 .product-modal-image {
     width: 100%;
-    height: 320px;
+    height: 500px;
     object-fit: cover;
     border-radius: 12px;
     background: #f0f0f0;
@@ -2174,7 +2174,7 @@ body {
     }
 
     .product-modal-image {
-        height: 240px;
+        height: 500px;
     }
 
     .product-modal-footer {

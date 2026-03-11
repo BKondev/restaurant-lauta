@@ -1282,9 +1282,27 @@
                 <button onclick="document.getElementById('bulk-images-file').click()" class="btn btn-secondary">
                     <i class="fas fa-images"></i> <span>Upload Product Images</span>
                 </button>
+                <button onclick="toggleUnlinkedImagesManager()" class="btn btn-secondary">
+                    <i class="fas fa-trash"></i> <span>Delete Unlinked Images</span>
+                </button>
             </div>
             <input type="file" id="csv-import-file" accept=".csv,.xlsx" style="display: none;" onchange="handleCSVImport(event)">
             <input type="file" id="bulk-images-file" accept="image/*" multiple style="display: none;" onchange="handleBulkProductImagesUpload(event)">
+
+            <div id="unlinked-images-manager" style="display:none; margin-top: 14px; padding: 14px; border: 1px solid #e0e0e0; border-radius: 12px; background: #fafafa;">
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom: 10px;">
+                    <strong>Unlinked uploaded images</strong>
+                    <span id="unlinked-images-count" style="color:#666; font-weight:600;"></span>
+                </div>
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom: 12px;">
+                    <button class="btn btn-info" onclick="loadUnlinkedImages()"><i class="fas fa-sync"></i> Refresh</button>
+                    <button class="btn btn-secondary" onclick="selectAllUnlinkedImages(true)">Select all</button>
+                    <button class="btn btn-secondary" onclick="selectAllUnlinkedImages(false)">Clear</button>
+                    <button class="btn btn-danger" onclick="deleteSelectedUnlinkedImages()"><i class="fas fa-trash"></i> Delete selected</button>
+                    <button class="btn" style="margin-left:auto;" onclick="toggleUnlinkedImagesManager(false)">Close</button>
+                </div>
+                <div id="unlinked-images-list" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px;"></div>
+            </div>
             
             <h3 style="margin-top: 40px; margin-bottom: 15px;">
                 <i class="fas fa-database"></i> <span data-translate="fullDatabaseBackup">Full Database Backup</span>

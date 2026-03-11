@@ -89,6 +89,106 @@ function deleteLocalProductImages(product) {
     return deleted;
 }
 
+function extractUploadsFilenameFromUrl(imageUrl) {
+    const raw = (imageUrl ?? '').toString().trim();
+    if (!raw) return null;
+    if (/^https?:\/\//i.test(raw)) return null;
+
+    const prefixes = [
+        `${BASE_PATH}/uploads/`,
+        '/uploads/',
+        'uploads/'
+    ];
+
+    let filename = null;
+    for (const p of prefixes) {
+        if (raw.startsWith(p)) {
+            filename = raw.slice(p.length);
+            break;
+        }
+    }
+    if (!filename) return null;
+
+    filename = filename.split('?')[0].split('#')[0].trim();
+    if (!filename) return null;
+    filename = filename.replace(/\\/g, '/');
+    if (filename.includes('/') || filename.includes('..')) return null;
+    return filename;
+}
+
+function isSafeUploadsFilename(filename) {
+    const name = (filename ?? '').toString().trim();
+    if (!name) return false;
+    if (name.replace(/\\/g, '/').includes('/')) return false;
+    if (name.includes('..')) return false;
+    if (name !== path.basename(name)) return false;
+    return true;
+}
+
+function getReferencedUploadsFilenames(db) {
+    const set = new Set();
+    const products = Array.isArray(db?.products) ? db.products : [];
+    for (const p of products) {
+        const fn = extractUploadsFilenameFromUrl(p?.image);
+        if (fn) set.add(fn);
+    }
+    return set;
+}
+
+function listUploadImages(db, { unlinkedOnly = true } = {}) {
+    const referenced = getReferencedUploadsFilenames(db);
+    const products = Array.isArray(db?.products) ? db.products : [];
+    const productIds = new Set(products.map(p => Number(p?.id)).filter(Number.isFinite));
+
+    let files = [];
+    try {
+        files = fs.readdirSync(UPLOADS_DIR, { withFileTypes: true })
+            .filter(d => d && d.isFile && d.isFile())
+            .map(d => d.name);
+    } catch (e) {
+        return [];
+    }
+
+    const allowedExt = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+
+    const items = [];
+    for (const name of files) {
+        const ext = path.extname(name).toLowerCase();
+        if (!allowedExt.has(ext)) continue;
+
+        const isReferenced = referenced.has(name);
+        if (unlinkedOnly && isReferenced) continue;
+
+        const base = path.basename(name, ext).trim();
+        const id = parseInt(base, 10);
+        const productIdFromFilename = (Number.isFinite(id) && String(id) === base) ? id : null;
+        const productExists = productIdFromFilename != null ? productIds.has(productIdFromFilename) : false;
+
+        let size = 0;
+        let mtimeMs = 0;
+        try {
+            const st = fs.statSync(path.join(UPLOADS_DIR, name));
+            size = Number(st.size) || 0;
+            mtimeMs = Number(st.mtimeMs) || 0;
+        } catch (e) {
+            // ignore
+        }
+
+        items.push({
+            filename: name,
+            url: `/uploads/${name}`,
+            size,
+            mtimeMs,
+            referenced: isReferenced,
+            productIdFromFilename,
+            productExists
+        });
+    }
+
+    items.sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0));
+    return items;
+}
+
 // Multi-tenant authentication system
 // Each restaurant has its own credentials and API key
 // In production: use environment variables, hash passwords with bcrypt, use proper JWT tokens
@@ -3371,6 +3471,58 @@ app.post(API_PREFIX + '/products/upload-images', requireAuth, uploadProductImage
         console.error('Bulk product image upload failed:', e);
         return res.status(500).json({ error: 'Bulk image upload failed' });
     }
+});
+
+// Admin: list unlinked upload images (files in /uploads not referenced by any product)
+app.get(API_PREFIX + '/uploads/images', requireAuth, (req, res) => {
+    const db = readDatabase();
+    const unlinkedOnlyRaw = (req.query?.unlinkedOnly ?? '1').toString();
+    const unlinkedOnly = unlinkedOnlyRaw !== '0' && unlinkedOnlyRaw.toLowerCase() !== 'false';
+    const items = listUploadImages(db, { unlinkedOnly });
+    res.json({ ok: true, items });
+});
+
+// Admin: delete selected unlinked upload images
+app.delete(API_PREFIX + '/uploads/images', requireAuth, (req, res) => {
+    const filenames = Array.isArray(req.body?.filenames) ? req.body.filenames : [];
+    if (!filenames.length) {
+        return res.status(400).json({ error: 'No filenames provided' });
+    }
+
+    const db = readDatabase();
+    const referenced = getReferencedUploadsFilenames(db);
+
+    let deleted = 0;
+    let skippedReferenced = 0;
+    let notFound = 0;
+    const errors = [];
+
+    for (const raw of filenames) {
+        const name = (raw ?? '').toString().trim();
+        if (!isSafeUploadsFilename(name)) {
+            errors.push({ filename: name, error: 'Invalid filename' });
+            continue;
+        }
+
+        if (referenced.has(name)) {
+            skippedReferenced++;
+            continue;
+        }
+
+        const full = path.join(UPLOADS_DIR, name);
+        try {
+            if (!fs.existsSync(full)) {
+                notFound++;
+                continue;
+            }
+            fs.unlinkSync(full);
+            deleted++;
+        } catch (e) {
+            errors.push({ filename: name, error: e?.message || String(e) });
+        }
+    }
+
+    res.json({ ok: true, deleted, skippedReferenced, notFound, errors });
 });
 
 // Get restaurant settings (name and logo)
