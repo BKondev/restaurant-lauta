@@ -95,7 +95,7 @@
                 const contactLines = [
                     rawAddress ? `<li><strong>Address:</strong> ${addressHtml}</li>` : '',
                     (wh && wh.openingTime && wh.closingTime) ? `<li><strong>Working hours:</strong> ${esc(String(wh.openingTime).trim())} - ${esc(String(wh.closingTime).trim())}</li>` : '',
-                    contacts.phone ? `<li><strong>Phone:</strong> ${esc(contacts.phone)}</li>` : '',
+                    contacts.phone ? `<li><strong>Phone:</strong> <a class="footer-contact-link" href="tel:${encodeURIComponent(String(contacts.phone))}">${esc(contacts.phone)}</a></li>` : '',
                     contacts.email ? `<li><strong>Email:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${esc(contacts.email)}</a></li>` : ''
                 ].filter(Boolean).join('');
 

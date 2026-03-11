@@ -558,7 +558,7 @@ function renderSiteFooter() {
     const contactLines = [
         rawAddress ? `<li><strong>${escapeHtml(labels.address)}:</strong> ${addressHtml}</li>` : '',
         hoursText ? `<li><strong>${escapeHtml(labels.hours)}:</strong> ${escapeHtml(hoursText)}</li>` : '',
-        contacts.phone ? `<li><strong>${escapeHtml(labels.phone)}:</strong> ${escapeHtml(contacts.phone)}</li>` : '',
+        contacts.phone ? `<li><strong>${escapeHtml(labels.phone)}:</strong> <a class="footer-contact-link" href="tel:${encodeURIComponent(String(contacts.phone))}">${escapeHtml(contacts.phone)}</a></li>` : '',
         contacts.email ? `<li><strong>${escapeHtml(labels.email)}:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${escapeHtml(contacts.email)}</a></li>` : ''
     ].filter(Boolean).join('');
 
@@ -693,7 +693,7 @@ function showError(message) {
 
 // Extract unique categories from products
 function extractCategories() {
-    const uniqueCategories = [...new Set(products.map(p => p.category))];
+    const uniqueCategories = [...new Set(products.map(p => (p?.category ?? '').toString().trim()).filter(Boolean))];
     
     // Separate special categories from regular ones
     const specialCategories = [];
@@ -723,7 +723,32 @@ function extractCategories() {
     regularCategories.sort();
     
     // Combine: special categories first, then regular
-    categories = [...specialCategories, ...regularCategories];
+    const computed = [...specialCategories, ...regularCategories];
+
+    // Apply admin-defined category order (optional)
+    const orderCfg = siteSettings?.categories?.order;
+    if (Array.isArray(orderCfg) && orderCfg.length > 0) {
+        const want = orderCfg.map(x => (x ?? '').toString().trim()).filter(Boolean);
+        const existing = new Set(computed);
+        const ordered = [];
+        const seen = new Set();
+
+        want.forEach(k => {
+            if (!existing.has(k)) return;
+            if (seen.has(k)) return;
+            seen.add(k);
+            ordered.push(k);
+        });
+
+        computed.forEach(k => {
+            if (seen.has(k)) return;
+            ordered.push(k);
+        });
+
+        categories = ordered;
+    } else {
+        categories = computed;
+    }
 }
 
 // Render categories in sidebar
@@ -742,24 +767,9 @@ function renderCategories() {
     categories.forEach(category => {
         const btn = document.createElement('button');
         btn.className = 'category-btn' + (currentCategory === category ? ' active' : '');
-        
-        // Try to get Bulgarian translation for category
-        let displayName = category;
-        if (currentLanguage === 'bg') {
-            // Special translation for Promotions category
-            if (category === 'Promotions') {
-                displayName = 'Промоции';
-            } else if (category === 'Combos & Bundles') {
-                displayName = 'Комбо и Бъндъл Оферти';
-            } else {
-                const productWithCategory = products.find(p => p.category === category && p.translations?.bg?.category);
-                if (productWithCategory) {
-                    displayName = productWithCategory.translations.bg.category;
-                }
-            }
-        }
-        
-        btn.textContent = displayName.toUpperCase();
+
+        const displayName = getCategoryDisplayName(category);
+        btn.textContent = (displayName || category).toUpperCase();
         btn.onclick = () => filterByCategory(category);
         nav.appendChild(btn);
     });
@@ -880,13 +890,25 @@ function handleInitialProductDeepLink() {
 }
 
 function getCategoryDisplayName(category) {
-    if (currentLanguage !== 'bg') return category;
+    const key = (category ?? '').toString();
+    const overrides = siteSettings?.categories?.labels;
+    const label = overrides && typeof overrides === 'object' ? overrides[key] : null;
 
-    if (category === 'Promotions') return 'Промоции';
-    if (category === 'Combos & Bundles') return 'Комбо и Бъндъл Оферти';
+    if (currentLanguage === 'bg') {
+        const overrideBg = (label && typeof label === 'object') ? (label.bg || '') : '';
+        if (overrideBg) return overrideBg;
 
-    const productWithCategory = products.find(p => p.category === category && p.translations?.bg?.category);
-    return productWithCategory ? productWithCategory.translations.bg.category : category;
+        if (key === 'Promotions') return 'Промоции';
+        if (key === 'Combos & Bundles') return 'Комбо и Бъндъл Оферти';
+
+        const productWithCategory = products.find(p => p.category === key && p.translations?.bg?.category);
+        return productWithCategory ? productWithCategory.translations.bg.category : key;
+    }
+
+    const overrideEn = (label && typeof label === 'object') ? (label.en || '') : '';
+    if (overrideEn) return overrideEn;
+
+    return key;
 }
 
 function normalizeAvailabilityStatus(value) {

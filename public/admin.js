@@ -7,6 +7,9 @@ const API_URL = `${BASE_PATH}/api`;
 // Language & Translation System
 let currentLanguage = sessionStorage.getItem('adminLanguage') || 'en';
 
+let siteSettingsDraft = null;
+let siteCategoriesDraft = { order: [], labels: {} };
+
 const translations = {
     en: {
         adminPanel: 'Admin Panel',
@@ -86,6 +89,12 @@ const translations = {
         namesAndDescriptions: 'Names + Descriptions',
         namesOnly: 'Names only',
         searchModeHelp: 'Controls which fields are searchable in the storefront.',
+        categoriesManager: 'Categories',
+        categoriesManagerHelp: 'Rename and reorder categories shown on the storefront.',
+        categoryLabelEn: 'EN name',
+        categoryLabelBg: 'BG name',
+        moveUp: 'Up',
+        moveDown: 'Down',
         webmail: 'Webmail',
         webmailUrl: 'Webmail URL',
         webmailUrlPlaceholder: 'https://mail.example.com/roundcube',
@@ -526,6 +535,12 @@ const translations = {
         namesAndDescriptions: 'Имена + Описания',
         namesOnly: 'Само имена',
         searchModeHelp: 'Определя кои полета са търсими в магазина.',
+        categoriesManager: 'Категории',
+        categoriesManagerHelp: 'Преименувайте и подредете категориите в магазина.',
+        categoryLabelEn: 'EN име',
+        categoryLabelBg: 'BG име',
+        moveUp: 'Нагоре',
+        moveDown: 'Надолу',
         webmail: 'Уеб поща',
         webmailUrl: 'Линк към уеб поща',
         webmailUrlPlaceholder: 'https://mail.example.com/roundcube',
@@ -1654,9 +1669,185 @@ async function loadProductsForSearch() {
         allProducts = await res.json();
         filteredProducts = allProducts;
         applyProductSearch();
+
+        // Categories manager depends on products.
+        try { renderCategoriesManager(); } catch (e) {}
     } catch (e) {
         console.error('Failed to load products', e);
     }
+}
+
+function normalizeCategoriesDraft(input) {
+    const src = input && typeof input === 'object' ? input : {};
+    const orderSrc = Array.isArray(src.order) ? src.order : [];
+    const order = [];
+    const seen = new Set();
+    for (const rawKey of orderSrc) {
+        const key = (rawKey ?? '').toString().trim();
+        if (!key) continue;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        order.push(key);
+        if (order.length >= 200) break;
+    }
+
+    const labelsSrc = src.labels && typeof src.labels === 'object' ? src.labels : {};
+    const labels = {};
+    for (const [rawKey, rawValue] of Object.entries(labelsSrc)) {
+        const key = (rawKey ?? '').toString().trim();
+        if (!key) continue;
+        const value = rawValue && typeof rawValue === 'object' ? rawValue : {};
+        const en = (value.en ?? '').toString().trim();
+        const bg = (value.bg ?? '').toString().trim();
+        if (!en && !bg) continue;
+        labels[key] = { en, bg };
+        if (Object.keys(labels).length >= 200) break;
+    }
+
+    return { order, labels };
+}
+
+function getAllCategoryKeysForManager() {
+    const list = Array.isArray(allProducts) && allProducts.length
+        ? allProducts
+        : (Array.isArray(products) ? products : []);
+    const set = new Set();
+    (list || []).forEach(p => {
+        const cat = (p?.category ?? '').toString().trim();
+        if (!cat) return;
+        set.add(cat);
+    });
+    return Array.from(set);
+}
+
+function sortCategoriesDefault(keys) {
+    const specials = [];
+    const regular = [];
+    (keys || []).forEach(k => {
+        if (k === 'Promotions' || k === 'Combos & Bundles') specials.push(k);
+        else regular.push(k);
+    });
+    specials.sort((a, b) => {
+        if (a === 'Promotions') return -1;
+        if (b === 'Promotions') return 1;
+        return 0;
+    });
+    regular.sort((a, b) => a.localeCompare(b));
+    return [...specials, ...regular];
+}
+
+function collectCategoriesDraftFromDom() {
+    const mount = document.getElementById('site-categories-manager');
+    if (!mount) return siteCategoriesDraft;
+
+    const rows = Array.from(mount.querySelectorAll('[data-category-row="1"]'));
+    const order = [];
+    const labels = {};
+
+    for (const row of rows) {
+        const key = (row.getAttribute('data-category-key') || '').toString().trim();
+        if (!key) continue;
+        order.push(key);
+        const en = (row.querySelector('input[data-category-en="1"]')?.value || '').toString().trim();
+        const bg = (row.querySelector('input[data-category-bg="1"]')?.value || '').toString().trim();
+        if (en || bg) labels[key] = { en, bg };
+    }
+
+    siteCategoriesDraft = { order, labels };
+    return siteCategoriesDraft;
+}
+
+function renderCategoriesManager() {
+    const mount = document.getElementById('site-categories-manager');
+    if (!mount) return;
+
+    const keys = getAllCategoryKeysForManager();
+    if (!keys || keys.length === 0) {
+        mount.innerHTML = `<div style="color:#999; padding: 8px 0;">${t('noCategoriesYet', 'No categories found yet.')}</div>`;
+        return;
+    }
+
+    const existing = normalizeCategoriesDraft(siteCategoriesDraft);
+    const desiredOrder = Array.isArray(existing.order) ? existing.order : [];
+    const keySet = new Set(keys);
+
+    const order = [];
+    const seen = new Set();
+    for (const k of desiredOrder) {
+        if (!keySet.has(k)) continue;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        order.push(k);
+    }
+    const remaining = sortCategoriesDefault(keys.filter(k => !seen.has(k)));
+    const finalOrder = [...order, ...remaining];
+
+    // Keep draft order in sync with what's shown.
+    siteCategoriesDraft = {
+        order: finalOrder.slice(0, 200),
+        labels: existing.labels || {}
+    };
+
+    const esc = (v) => escapeHtml((v ?? '').toString());
+    const labelFor = (key, lang) => {
+        const row = siteCategoriesDraft.labels?.[key];
+        const value = (row && typeof row === 'object') ? (row[lang] || '') : '';
+        return value;
+    };
+
+    mount.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap: 8px;">
+            ${finalOrder.map((key, idx) => {
+                const enVal = labelFor(key, 'en');
+                const bgVal = labelFor(key, 'bg');
+                const canUp = idx > 0;
+                const canDown = idx < finalOrder.length - 1;
+                return `
+                    <div data-category-row="1" data-category-key="${esc(key)}" style="display:flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px; border: 1px solid #eee; border-radius: 10px; background: #fff;">
+                        <div style="flex: 1; min-width: 180px; font-weight: 700;">${esc(key)}</div>
+                        <div style="flex: 2; min-width: 200px;">
+                            <input data-category-en="1" type="text" placeholder="${esc(key)}" value="${esc(enVal)}" style="width: 100%;" />
+                            <small style="color:#666;">${esc(t('categoryLabelEn', 'EN name'))}</small>
+                        </div>
+                        <div style="flex: 2; min-width: 200px;">
+                            <input data-category-bg="1" type="text" placeholder="" value="${esc(bgVal)}" style="width: 100%;" />
+                            <small style="color:#666;">${esc(t('categoryLabelBg', 'BG name'))}</small>
+                        </div>
+                        <div style="display:flex; gap: 6px;">
+                            <button type="button" class="btn btn-secondary" data-move-dir="up" data-move-key="${esc(key)}" ${canUp ? '' : 'disabled'}>${esc(t('moveUp', 'Up'))}</button>
+                            <button type="button" class="btn btn-secondary" data-move-dir="down" data-move-key="${esc(key)}" ${canDown ? '' : 'disabled'}>${esc(t('moveDown', 'Down'))}</button>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    // Wire events
+    mount.querySelectorAll('button[data-move-dir]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const dir = (btn.getAttribute('data-move-dir') || '').toString();
+            const key = (btn.getAttribute('data-move-key') || '').toString();
+            if (!key) return;
+            collectCategoriesDraftFromDom();
+            const current = Array.isArray(siteCategoriesDraft.order) ? siteCategoriesDraft.order.slice() : [];
+            const idx = current.indexOf(key);
+            if (idx < 0) return;
+            const nextIdx = dir === 'up' ? idx - 1 : (dir === 'down' ? idx + 1 : idx);
+            if (nextIdx < 0 || nextIdx >= current.length) return;
+            const tmp = current[idx];
+            current[idx] = current[nextIdx];
+            current[nextIdx] = tmp;
+            siteCategoriesDraft.order = current;
+            renderCategoriesManager();
+        });
+    });
+
+    mount.querySelectorAll('input[data-category-en], input[data-category-bg]').forEach(input => {
+        input.addEventListener('input', () => {
+            collectCategoriesDraftFromDom();
+        });
+    });
 }
 
 function applyProductSearch() {
@@ -1894,6 +2085,9 @@ async function loadSiteSettings() {
         if (!res.ok) return;
         const data = await res.json();
 
+        siteSettingsDraft = data;
+        siteCategoriesDraft = normalizeCategoriesDraft(data?.categories);
+
         const modeEl = document.getElementById('site-search-mode');
         if (modeEl) modeEl.value = data?.search?.mode === 'names_only' ? 'names_only' : 'names_and_descriptions';
 
@@ -1942,6 +2136,8 @@ async function loadSiteSettings() {
         const termsEl = document.getElementById('site-terms-html');
         if (privacyEl) privacyEl.value = data?.legal?.privacyHtml || '';
         if (termsEl) termsEl.value = data?.legal?.termsHtml || '';
+
+        try { renderCategoriesManager(); } catch (e) {}
     } catch (e) {
         console.error('Error loading site settings:', e);
     }
@@ -1963,6 +2159,8 @@ async function updateSiteSettings() {
             window.location.href = `${BASE_PATH}/login`;
             return;
         }
+
+        const categoriesDraft = collectCategoriesDraftFromDom();
 
         const mode = (document.getElementById('site-search-mode')?.value || 'names_and_descriptions').toString();
         const webmailUrl = (document.getElementById('site-webmail-url')?.value || '').toString();
@@ -2020,6 +2218,7 @@ async function updateSiteSettings() {
                 zoom: mapZoom
             },
             email: { webmailUrl },
+            categories: categoriesDraft,
             footer: {
                 contacts: { phone, email, address, addressMapsUrl },
                 aboutText,

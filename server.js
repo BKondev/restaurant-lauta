@@ -1095,6 +1095,7 @@ function getDefaultSiteSettings() {
         search: { mode: 'names_and_descriptions' },
         map: { enabled: false, lat: null, lng: null, zoom: 16, label: '' },
         email: { webmailUrl: '' },
+        categories: { order: [], labels: {} },
         footer: {
             contacts: { phone: '', email: '', address: '', addressMapsUrl: '' },
             aboutText: '',
@@ -1165,7 +1166,34 @@ function normalizeSiteSettings(input) {
         webmailUrl: normalizeText(src.email?.webmailUrl, 500)
     };
 
-    return { search: { mode }, map, email, footer, legal };
+    const categoriesSrc = src.categories && typeof src.categories === 'object' ? src.categories : {};
+    const orderSrc = Array.isArray(categoriesSrc.order) ? categoriesSrc.order : [];
+    const order = [];
+    const seen = new Set();
+    for (const rawKey of orderSrc.slice(0, 200)) {
+        const key = normalizeText(rawKey, 80);
+        if (!key) continue;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        order.push(key);
+    }
+
+    const labelsSrc = categoriesSrc.labels && typeof categoriesSrc.labels === 'object' ? categoriesSrc.labels : {};
+    const labels = {};
+    const labelEntries = Object.entries(labelsSrc).slice(0, 200);
+    for (const [rawKey, rawValue] of labelEntries) {
+        const key = normalizeText(rawKey, 80);
+        if (!key) continue;
+        const value = rawValue && typeof rawValue === 'object' ? rawValue : {};
+        const en = normalizeText(value.en, 80);
+        const bg = normalizeText(value.bg, 80);
+        if (!en && !bg) continue;
+        labels[key] = { en, bg };
+    }
+
+    const categories = { order, labels };
+
+    return { search: { mode }, map, email, categories, footer, legal };
 }
 
 function isOrderForRestaurant(order, restaurantId, db) {
