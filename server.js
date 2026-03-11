@@ -336,8 +336,10 @@ function buildXlsxHeaderIndexMap(headerRow) {
         id: ['id'],
         code: ['code', 'код', 'product code'],
         // Legacy single-language columns
-        name: ['name', 'наименование', 'продукт', 'name (legacy)', 'име (legacy)'],
-        category: ['category', 'категория (legacy)'],
+        // NOTE: Do NOT include plain 'name'/'category' here, because customer files use them
+        // as EN columns and we want them to map to *_en.
+        name: ['наименование', 'продукт', 'name (legacy)', 'име (legacy)'],
+        category: ['категория (legacy)', 'category (legacy)'],
         info: ['info', 'описание/състав', 'състав'],
 
         // Bilingual columns (preferred)
@@ -346,7 +348,7 @@ function buildXlsxHeaderIndexMap(headerRow) {
         category_bg: ['категория', 'категория bg', 'категория (bg)'],
         category_en: ['category', 'category en', 'category (en)'],
         description_bg: ['описание', 'описание bg', 'описание (bg)'],
-        description_en: ['description', 'description en', 'description (en)'],
+        description_en: ['description', 'discription', 'description en', 'description (en)'],
         weight: ['weight/quantity', 'weight', 'quantity', 'грамаж', 'тегло', 'количество'],
 
         subcategory: ['subcategory', 'подкатегория', 'подкат.', 'група', 'подгрупа'],
@@ -2923,22 +2925,21 @@ app.post(API_PREFIX + '/products/import-xlsx', requireAuth, uploadXlsx.single('f
                 codeNorm = codeRaw.toLowerCase();
             }
 
-            const nameBg = coerceCellString(row, idx.name_bg) || coerceCellString(row, idx.name);
-            const nameEn = coerceCellString(row, idx.name_en);
+            const nameEn = coerceCellString(row, idx.name_en) || coerceCellString(row, idx.name);
+            const nameBg = coerceCellString(row, idx.name_bg);
 
-            const categoryBg = coerceCellString(row, idx.category_bg) || coerceCellString(row, idx.category);
-            const categoryEn = coerceCellString(row, idx.category_en);
+            const categoryEn = coerceCellString(row, idx.category_en) || coerceCellString(row, idx.category);
+            const categoryBg = coerceCellString(row, idx.category_bg);
 
-            const descBg = coerceCellString(row, idx.description_bg) || coerceCellString(row, idx.info) || coerceCellString(row, idx.description);
             const descEn = coerceCellString(row, idx.description_en);
+            const descBg = coerceCellString(row, idx.description_bg) || coerceCellString(row, idx.info) || coerceCellString(row, idx.description);
 
-            const category = (categoryBg || categoryEn || 'Other');
+            const name = (nameEn || nameBg || codeRaw);
+            const category = (categoryEn || categoryBg || 'Other');
             const subcategory = coerceCellString(row, idx.subcategory);
-            const description = (descBg || descEn || '');
+            const description = (descEn || descBg || '');
 
             const weight = coerceCellString(row, idx.weight);
-
-            const name = (nameBg || nameEn || codeRaw);
 
             let price = parsePriceLike(row[idx.price]);
             // Allow blank/zero prices so every row can be imported.
@@ -2977,9 +2978,9 @@ app.post(API_PREFIX + '/products/import-xlsx', requireAuth, uploadXlsx.single('f
                 promo: null,
                 translations: {
                     bg: {
-                        name: nameBg || name || '',
-                        description: descBg || description || '',
-                        category: categoryBg || category || ''
+                        name: nameBg || nameEn || name || '',
+                        description: descBg || descEn || description || '',
+                        category: categoryBg || categoryEn || category || ''
                     },
                     en: {
                         name: nameEn || '',
