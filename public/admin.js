@@ -3233,7 +3233,7 @@ async function handleCSVImport(event) {
                 return;
             }
 
-            if (!confirm(`Import products from Excel file "${file.name}"?\n\nDuplicates by CODE will be skipped.`)) {
+            if (!confirm(`Import products from Excel file "${file.name}"?\n\nRows will be imported. If CODE is missing or already exists, it will be auto-adjusted.`)) {
                 return;
             }
 

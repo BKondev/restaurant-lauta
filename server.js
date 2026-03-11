@@ -2815,38 +2815,58 @@ app.post(API_PREFIX + '/products/import-xlsx', requireAuth, uploadXlsx.single('f
             .filter(Boolean));
 
         const created = [];
-        let duplicateCount = 0;
-        let invalidCount = 0;
+        // Historically we skipped duplicates by code; now we auto-adjust codes to import every row.
+        // Keep counters for UI feedback.
+        let duplicateCount = 0; // number of rows whose code had to be adjusted due to collision
+        let invalidCount = 0; // number of rows we could not import (should be 0 unless something is very wrong)
 
         for (let r = headerRowIndex + 1; r < rows.length; r++) {
             const row = rows[r] || [];
             const hasAny = row.some(v => (v ?? '').toString().trim() !== '');
             if (!hasAny) continue;
 
-            const codeRaw = coerceCellString(row, idx.code);
-            if (!codeRaw) continue;
-            const codeNorm = codeRaw.toLowerCase();
-            if (existingCodes.has(codeNorm)) {
-                duplicateCount++;
-                continue;
+            const requestedId = (idx.id != null) ? coerceCellString(row, idx.id) : '';
+
+            let codeRaw = coerceCellString(row, idx.code);
+            // If the file doesn't provide a code, generate one so every row can be imported.
+            if (!codeRaw) {
+                const base = requestedId ? `AUTO-${requestedId}` : `AUTO-ROW-${r}`;
+                codeRaw = base;
             }
 
-            const name = coerceCellString(row, idx.name);
+            // Ensure uniqueness: if code already exists, append a numeric suffix.
+            let codeNorm = codeRaw.toLowerCase();
+            if (existingCodes.has(codeNorm)) {
+                duplicateCount++;
+                let suffix = 2;
+                let candidate = `${codeRaw}-${suffix}`;
+                while (existingCodes.has(candidate.toLowerCase())) {
+                    suffix++;
+                    candidate = `${codeRaw}-${suffix}`;
+                }
+                codeRaw = candidate;
+                codeNorm = codeRaw.toLowerCase();
+            }
+
+            let name = coerceCellString(row, idx.name);
             const category = coerceCellString(row, idx.category) || 'Other';
             const subcategory = coerceCellString(row, idx.subcategory);
             const description = coerceCellString(row, idx.info);
 
-            const price = parsePriceLike(row[idx.price]);
-            if (!Number.isFinite(price) || price <= 0) {
-                invalidCount++;
-                continue;
-            }
+            if (!name) name = codeRaw;
+
+            let price = parsePriceLike(row[idx.price]);
+            // Allow blank/zero prices so every row can be imported.
+            if (!Number.isFinite(price) || price < 0) price = 0;
 
             const image = (coerceCellString(row, idx.img_url) || 'https://via.placeholder.com/300x200?text=No+Image');
 
             const promoPrice = (idx.promo_price != null) ? parsePriceLike(row[idx.promo_price]) : NaN;
             const promoPctRaw = (idx.promo_percentage != null) ? coerceCellString(row, idx.promo_percentage) : '';
-            const promoPct = promoPctRaw ? Number(String(promoPctRaw).replace(',', '.')) : NaN;
+            const promoPctClean = promoPctRaw ? String(promoPctRaw).replace('%', '').replace(',', '.').trim() : '';
+            const promoPctMatch = promoPctClean ? promoPctClean.match(/-?\d+(?:\.\d+)?/) : null;
+            const promoPctParsed = promoPctMatch ? Number(promoPctMatch[0]) : NaN;
+            const promoPct = Number.isFinite(promoPctParsed) ? Math.max(0, Math.min(100, promoPctParsed)) : NaN;
             const isPromoCell = (idx.is_promo != null) ? row[idx.is_promo] : '';
             const isPromo = parseBoolLikeServer(isPromoCell) || (Number.isFinite(promoPrice) && promoPrice > 0) || (Number.isFinite(promoPct) && promoPct > 0);
 
@@ -2854,8 +2874,6 @@ app.post(API_PREFIX + '/products/import-xlsx', requireAuth, uploadXlsx.single('f
             const availabilityStatus = (idx.available != null)
                 ? (parseBoolLikeServer(availableCell) ? 'available' : 'not_available')
                 : 'available';
-
-            const requestedId = (idx.id != null) ? coerceCellString(row, idx.id) : '';
 
             const newProduct = {
                 id: generateUniqueProductId(db, requestedId),
