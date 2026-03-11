@@ -1577,7 +1577,7 @@ body {
 }
 
 .product-modal-description {
-    font-size: 15px;
+    font-size: 16px;
     color: #666;
     line-height: 1.55;
     margin-bottom: 16px;
@@ -2043,7 +2043,7 @@ body {
         font-size: 11px;
     }
 
-    /* EUR-only on mobile */
+    /* Prices on mobile */
     .price-eur {
         font-size: 18px !important;
         line-height: 1.1;
@@ -2051,7 +2051,9 @@ body {
     }
 
     .price-bgn {
-        display: none !important;
+        display: inline-block !important;
+        font-size: 12px !important;
+        margin-left: 6px;
     }
 
     .price-container {
@@ -2090,7 +2092,7 @@ body {
     }
 
     .product-price-wrapper .price-bgn {
-        display: none !important;
+        display: inline-block !important;
     }
 
     .add-to-cart-btn {
