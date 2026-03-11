@@ -3475,11 +3475,16 @@ app.post(API_PREFIX + '/products/upload-images', requireAuth, uploadProductImage
 
 // Admin: list unlinked upload images (files in /uploads not referenced by any product)
 app.get(API_PREFIX + '/uploads/images', requireAuth, (req, res) => {
-    const db = readDatabase();
-    const unlinkedOnlyRaw = (req.query?.unlinkedOnly ?? '1').toString();
-    const unlinkedOnly = unlinkedOnlyRaw !== '0' && unlinkedOnlyRaw.toLowerCase() !== 'false';
-    const items = listUploadImages(db, { unlinkedOnly });
-    res.json({ ok: true, items });
+    try {
+        const db = readDatabase();
+        const unlinkedOnlyRaw = (req.query?.unlinkedOnly ?? '1').toString();
+        const unlinkedOnly = unlinkedOnlyRaw !== '0' && unlinkedOnlyRaw.toLowerCase() !== 'false';
+        const items = listUploadImages(db, { unlinkedOnly });
+        res.json({ ok: true, items });
+    } catch (e) {
+        console.error('[UPLOADS] Failed to list images:', e);
+        res.status(500).json({ error: 'Failed to list images', message: e?.message || String(e) });
+    }
 });
 
 // Admin: delete selected unlinked upload images

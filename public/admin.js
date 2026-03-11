@@ -3319,10 +3319,24 @@ async function loadUnlinkedImages() {
         });
 
         if (!res.ok) {
-            if (res.status === 401) {
+            let details = '';
+            try {
+                const contentType = (res.headers.get('content-type') || '').toLowerCase();
+                if (contentType.includes('application/json')) {
+                    const errJson = await res.json().catch(() => ({}));
+                    details = errJson?.error || errJson?.message || '';
+                } else {
+                    const text = await res.text().catch(() => '');
+                    details = (text || '').slice(0, 200);
+                }
+            } catch (e) {
+                // ignore
+            }
+
+            if (res.status === 401 || res.status === 403) {
                 alert('Unauthorized. Please login again.');
             } else {
-                alert('Failed to load unlinked images');
+                alert(`Failed to load unlinked images (HTTP ${res.status})${details ? `: ${details}` : ''}`);
             }
             return;
         }
@@ -3332,7 +3346,7 @@ async function loadUnlinkedImages() {
         renderUnlinkedImages();
     } catch (e) {
         console.error('Failed to load unlinked images:', e);
-        alert('Failed to load unlinked images');
+        alert(`Failed to load unlinked images: ${e?.message || e}`);
     }
 }
 
