@@ -1809,9 +1809,23 @@ function renderCategoriesManager() {
     };
 
     const esc = (v) => escapeHtml((v ?? '').toString());
+    const inferBgLabelFromProducts = (key) => {
+        const list = Array.isArray(allProducts) && allProducts.length
+            ? allProducts
+            : (Array.isArray(products) ? products : []);
+
+        for (const p of (list || [])) {
+            const cat = (p?.category ?? '').toString().trim();
+            if (!cat || cat !== key) continue;
+            const bg = (p?.translations?.bg?.category || '').toString().trim();
+            if (bg) return bg;
+        }
+        return '';
+    };
     const labelFor = (key, lang) => {
         const row = siteCategoriesDraft.labels?.[key];
         const value = (row && typeof row === 'object') ? (row[lang] || '') : '';
+        if (lang === 'bg' && !value) return inferBgLabelFromProducts(key);
         return value;
     };
 
