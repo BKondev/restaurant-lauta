@@ -828,14 +828,20 @@ body.admin-drawer-open {
     .admin-tabs-nav {
         --admin-sidebar-width: 100%;
 
-        position: relative;
-        top: 0;
+        /* Fixed drawer under the sticky header */
+        position: fixed;
+        top: var(--admin-header-h, 56px);
+        left: 0;
+        right: 0;
         width: 100%;
         height: auto;
-        max-height: 520px;
+        max-height: calc(100vh - var(--admin-header-h, 56px));
         opacity: 1;
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
         transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+
+        z-index: 999;
 
         border-right: none;
         border-bottom: 1px solid rgba(255,255,255,0.12);

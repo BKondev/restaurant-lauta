@@ -1089,21 +1089,42 @@ function getAdminBasePath() {
     }
 }
 
+function updateAdminMobileNavOffset() {
+    const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+    if (!isMobile) return;
+
+    const header = document.getElementById('adminMobileHeader');
+    const headerHeight = header ? header.offsetHeight : 56;
+    try {
+        document.documentElement.style.setProperty('--admin-header-h', `${Math.max(40, headerHeight)}px`);
+    } catch (e) {
+        // ignore
+    }
+}
+
 // Toggle Navigation Visibility (repurposed to the drawer)
 function toggleNav() {
     const nav = document.getElementById('adminNav');
     if (!nav) return;
     const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
     if (!isMobile) return;
+
+    updateAdminMobileNavOffset();
     nav.classList.toggle('collapsed');
+
+    const isCollapsed = nav.classList.contains('collapsed');
+    document.body.classList.toggle('admin-drawer-open', !isCollapsed);
 
     const icon = document.getElementById('toggleIcon');
     if (icon) {
-        const isCollapsed = nav.classList.contains('collapsed');
         icon.classList.toggle('fa-bars', isCollapsed);
         icon.classList.toggle('fa-times', !isCollapsed);
     }
 }
+
+window.addEventListener('resize', () => {
+    try { updateAdminMobileNavOffset(); } catch (e) {}
+});
 
 function updateAdminDrawerActive(normalizedTab) {
     const menu = document.getElementById('adminDrawerMenu');
