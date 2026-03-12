@@ -101,6 +101,10 @@ const translations = {
         searchModeHelp: 'Controls which fields are searchable in the storefront.',
         categoriesManager: 'Categories',
         categoriesManagerHelp: 'Rename and reorder categories shown on the storefront.',
+        saveCategories: 'Save categories',
+        categoriesSaved: 'Categories saved successfully!',
+        categoriesSaveFailed: 'Failed to save categories',
+        categoriesSaveError: 'Error saving categories',
         categoryLabelEn: 'EN name',
         categoryLabelBg: 'BG name',
         moveUp: 'Up',
@@ -557,6 +561,10 @@ const translations = {
         searchModeHelp: 'Определя кои полета са търсими в магазина.',
         categoriesManager: 'Категории',
         categoriesManagerHelp: 'Преименувайте и подредете категориите в магазина.',
+        saveCategories: 'Запази категориите',
+        categoriesSaved: 'Категориите са запазени успешно!',
+        categoriesSaveFailed: 'Грешка при запазване на категориите',
+        categoriesSaveError: 'Грешка при запазване на категориите',
         categoryLabelEn: 'EN име',
         categoryLabelBg: 'BG име',
         moveUp: 'Нагоре',
@@ -2307,6 +2315,62 @@ async function updateSiteSettings() {
     } catch (e) {
         console.error('Error saving site settings:', e);
         alert(t('siteSettingsSaveError', 'Error saving site settings'));
+    }
+}
+
+async function saveCategoriesOnly() {
+    try {
+        const token = getAdminToken();
+        if (!token) {
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        const categoriesDraft = collectCategoriesDraftFromDom();
+
+        // Merge with latest server-side settings so we don't overwrite other site content.
+        const baselineRes = await fetch(`${API_URL}/settings/site`, { cache: 'no-store' });
+        const baseline = baselineRes.ok ? await baselineRes.json().catch(() => ({})) : {};
+
+        const payload = {
+            search: (baseline?.search && typeof baseline.search === 'object') ? baseline.search : { mode: 'names_and_descriptions' },
+            map: (baseline?.map && typeof baseline.map === 'object') ? baseline.map : { enabled: false },
+            email: (baseline?.email && typeof baseline.email === 'object') ? baseline.email : {},
+            categories: categoriesDraft,
+            footer: (baseline?.footer && typeof baseline.footer === 'object') ? baseline.footer : {},
+            legal: (baseline?.legal && typeof baseline.legal === 'object') ? baseline.legal : {}
+        };
+
+        const res = await fetch(`${API_URL}/settings/site`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.status === 401) {
+            alert(t('sessionExpired', 'Session expired. Please login again.'));
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || t('categoriesSaveFailed', 'Failed to save categories'));
+            return;
+        }
+
+        siteCategoriesDraft = normalizeCategoriesDraft(categoriesDraft);
+        if (siteSettingsDraft && typeof siteSettingsDraft === 'object') {
+            siteSettingsDraft.categories = siteCategoriesDraft;
+        }
+
+        alert(t('categoriesSaved', 'Categories saved successfully!'));
+    } catch (e) {
+        console.error('Error saving categories:', e);
+        alert(t('categoriesSaveError', 'Error saving categories'));
     }
 }
 

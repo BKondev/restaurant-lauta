@@ -1460,18 +1460,24 @@ function buildCheckoutLockedOverlayHtml(reason) {
                 ? 'Доставката и взимането от място са временно изключени.'
                 : 'Both delivery and pickup are temporarily disabled.';
         }
-        const timeText = reason?.opensAt ? escapeHtml(reason.opensAt) : '';
-        if (!timeText) {
+        const opensAt = reason?.opensAt ? escapeHtml(reason.opensAt) : '';
+        if (!opensAt) {
             return isBg ? 'Заповядайте по-късно.' : 'Please come again later.';
         }
-        if (isBg) {
-            return reason?.tomorrow
-                ? `Отваряме утре в ${timeText}.`
-                : `Отваряме в ${timeText}.`;
+
+        const days = Number.isFinite(reason?.opensInDays) ? reason.opensInDays : (reason?.tomorrow ? 1 : 0);
+        const dayKey = (reason?.opensDayKey || '').toString().trim();
+        const dayName = dayKey ? (WORKING_HOURS_WEEKDAY_LABELS[isBg ? 'bg' : 'en']?.[dayKey] || '') : '';
+
+        if (days === 0) {
+            return isBg ? `Отваряме в ${opensAt}.` : `We open at ${opensAt}.`;
         }
-        return reason?.tomorrow
-            ? `We open tomorrow at ${timeText}.`
-            : `We open at ${timeText}.`;
+        if (days === 1) {
+            return isBg ? `Отваряме утре в ${opensAt}.` : `We open tomorrow at ${opensAt}.`;
+        }
+        return isBg
+            ? `Отваряме в ${escapeHtml(dayName || dayKey)} в ${opensAt}.`
+            : `We open on ${escapeHtml(dayName || dayKey)} at ${opensAt}.`;
     })();
 
     return `
@@ -1558,6 +1564,27 @@ function isMinutesWithinWindow(nowMinutes, openMinutes, closeMinutes) {
 
 const WORKING_HOURS_DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
+const WORKING_HOURS_WEEKDAY_LABELS = {
+    en: {
+        mon: 'Monday',
+        tue: 'Tuesday',
+        wed: 'Wednesday',
+        thu: 'Thursday',
+        fri: 'Friday',
+        sat: 'Saturday',
+        sun: 'Sunday'
+    },
+    bg: {
+        mon: 'Понеделник',
+        tue: 'Вторник',
+        wed: 'Сряда',
+        thu: 'Четвъртък',
+        fri: 'Петък',
+        sat: 'Събота',
+        sun: 'Неделя'
+    }
+};
+
 function getWeekdayKeyInTimeZoneClient(timeZone, date = new Date()) {
     const tz = (timeZone || 'Europe/Sofia').toString();
     try {
@@ -1600,6 +1627,53 @@ function getWorkingHoursDayForNow() {
     const key = dayKey || fallbackByLocal || 'mon';
     const day = (cfg.weekly && cfg.weekly[key]) ? cfg.weekly[key] : { closed: false, openingTime: '09:00', closingTime: '22:00' };
     return { timezone: tz, dayKey: key, ...day };
+}
+
+function getDayKeyByOffsetClient(timeZone, startDate, offsetDays) {
+    const base = startDate instanceof Date ? startDate : new Date();
+    const d = new Date(base);
+    d.setDate(d.getDate() + (Number(offsetDays) || 0));
+    const key = getWeekdayKeyInTimeZoneClient(timeZone, d);
+    if (key) return key;
+    const localMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const idx = d.getDay();
+    return localMap[idx] || 'mon';
+}
+
+function getNextOpenInfoClient() {
+    const cfg = normalizeWorkingHoursConfigClient(workingHours || null);
+    const tz = cfg.timezone || 'Europe/Sofia';
+    const nowDate = new Date();
+    const todayKey = getWeekdayKeyInTimeZoneClient(tz, nowDate) || getDayKeyByOffsetClient(tz, nowDate, 0);
+    const todayCfg = cfg.weekly?.[todayKey] || { closed: false, openingTime: '09:00', closingTime: '22:00' };
+
+    const now = nowMinutesOfDay();
+
+    if (todayCfg.closed !== true) {
+        const open = parseHHMMToMinutes(todayCfg.openingTime) ?? (9 * 60);
+        const close = parseHHMMToMinutes(todayCfg.closingTime) ?? (22 * 60);
+        const within = isMinutesWithinWindow(now, open, close);
+        if (!within) {
+            if (close > open) {
+                if (now < open) {
+                    return { dayKey: todayKey, opensAt: minutesToHHMM(open), daysAhead: 0 };
+                }
+            } else {
+                // Overnight schedule: closed only in the gap [close, open)
+                return { dayKey: todayKey, opensAt: minutesToHHMM(open), daysAhead: 0 };
+            }
+        }
+    }
+
+    for (let offset = 1; offset <= 7; offset++) {
+        const key = getDayKeyByOffsetClient(tz, nowDate, offset);
+        const dayCfg = cfg.weekly?.[key] || { closed: false, openingTime: '09:00', closingTime: '22:00' };
+        if (dayCfg.closed === true) continue;
+        const open = parseHHMMToMinutes(dayCfg.openingTime) ?? (9 * 60);
+        return { dayKey: key, opensAt: minutesToHHMM(open), daysAhead: offset };
+    }
+
+    return null;
 }
 
 function getRestaurantWindowMinutes() {
@@ -1701,7 +1775,14 @@ function getRestaurantClosedReason() {
     // Delivery-hours are handled separately (delivery option disabled with a notice).
     const window = getRestaurantWindowMinutes();
     if (window.closed === true) {
-        return { type: 'closed_day', opensAt: '', tomorrow: false };
+        const next = getNextOpenInfoClient();
+        return {
+            type: 'closed_day',
+            opensAt: next?.opensAt || '',
+            opensInDays: Number.isFinite(next?.daysAhead) ? next.daysAhead : null,
+            opensDayKey: next?.dayKey || null,
+            tomorrow: next?.daysAhead === 1
+        };
     }
 
     const now = nowMinutesOfDay();
@@ -1709,14 +1790,17 @@ function getRestaurantClosedReason() {
     const within = isMinutesWithinWindow(now, window.open, window.close);
     if (within) return null;
 
-    // Closed: compute next opening time.
-    if (window.close > window.open) {
-        if (now < window.open) return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: false };
-        return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: true };
-    }
-
-    // Overnight schedule: closed only in the gap [close, open)
-    return { type: 'hours', opensAt: minutesToHHMM(window.open), tomorrow: false };
+    const next = getNextOpenInfoClient();
+    const opensAt = next?.opensAt || minutesToHHMM(window.open);
+    const opensInDays = Number.isFinite(next?.daysAhead) ? next.daysAhead : (now < window.open ? 0 : 1);
+    const opensDayKey = next?.dayKey || null;
+    return {
+        type: 'hours',
+        opensAt,
+        opensInDays,
+        opensDayKey,
+        tomorrow: opensInDays === 1
+    };
 }
 
 function getDeliveryClosedReason() {
@@ -1774,16 +1858,31 @@ function renderRestaurantStatusBanner() {
                 : 'Ordering is temporarily unavailable.';
         }
 
-        const timeText = reason.opensAt;
-        if (currentLanguage === 'bg') {
-            return reason.tomorrow
-                ? `Ресторантът в момента не работи. Отваряме утре в ${timeText}.`
-                : `Ресторантът в момента не работи. Отваряме в ${timeText}.`;
+        const isBg = currentLanguage === 'bg';
+        const dayKey = reason.opensDayKey;
+        const dayName = dayKey ? (WORKING_HOURS_WEEKDAY_LABELS[isBg ? 'bg' : 'en']?.[dayKey] || '') : '';
+        const opensAt = reason.opensAt;
+        const days = Number.isFinite(reason.opensInDays) ? reason.opensInDays : (reason.tomorrow ? 1 : 0);
+
+        const openLine = (!opensAt)
+            ? ''
+            : (days === 0
+                ? (isBg ? `Отваряме в ${opensAt}.` : `Opens at ${opensAt}.`)
+                : (days === 1
+                    ? (isBg ? `Отваряме утре в ${opensAt}.` : `Opens tomorrow at ${opensAt}.`)
+                    : (isBg
+                        ? `Отваряме в ${dayName || ''} в ${opensAt}.`
+                        : `Opens on ${dayName || ''} at ${opensAt}.`)));
+
+        if (reason.type === 'closed_day') {
+            return isBg
+                ? (`Днес не приемаме поръчки.${openLine ? ' ' + openLine : ''}`)
+                : (`We are not accepting orders today.${openLine ? ' ' + openLine : ''}`);
         }
 
-        return reason.tomorrow
-            ? `The restaurant is currently closed. Opens tomorrow at ${timeText}.`
-            : `The restaurant is currently closed. Opens at ${timeText}.`;
+        return isBg
+            ? (`Ресторантът в момента не работи.${openLine ? ' ' + openLine : ''}`)
+            : (`The restaurant is currently closed.${openLine ? ' ' + openLine : ''}`);
     })();
 
     banner.textContent = msg;

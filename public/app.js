@@ -251,6 +251,27 @@ function isMinutesWithinWindow(nowMinutes, openMinutes, closeMinutes) {
 
 const WORKING_HOURS_DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
+const WORKING_HOURS_WEEKDAY_LABELS = {
+    en: {
+        mon: 'Monday',
+        tue: 'Tuesday',
+        wed: 'Wednesday',
+        thu: 'Thursday',
+        fri: 'Friday',
+        sat: 'Saturday',
+        sun: 'Sunday'
+    },
+    bg: {
+        mon: 'Понеделник',
+        tue: 'Вторник',
+        wed: 'Сряда',
+        thu: 'Четвъртък',
+        fri: 'Петък',
+        sat: 'Събота',
+        sun: 'Неделя'
+    }
+};
+
 function getWeekdayKeyInTimeZoneClient(timeZone, date = new Date()) {
     const tz = (timeZone || 'Europe/Sofia').toString();
     try {
@@ -293,6 +314,53 @@ function getWorkingHoursDayForNow() {
     return { timezone: tz, dayKey: key, ...day };
 }
 
+function getDayKeyByOffsetClient(timeZone, startDate, offsetDays) {
+    const base = startDate instanceof Date ? startDate : new Date();
+    const d = new Date(base);
+    d.setDate(d.getDate() + (Number(offsetDays) || 0));
+    const key = getWeekdayKeyInTimeZoneClient(timeZone, d);
+    if (key) return key;
+    const localMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const idx = d.getDay();
+    return localMap[idx] || 'mon';
+}
+
+function getNextOpenInfoClient() {
+    const cfg = normalizeWorkingHoursConfigClient(siteWorkingHours || null);
+    const tz = cfg.timezone || 'Europe/Sofia';
+    const nowDate = new Date();
+    const todayKey = getWeekdayKeyInTimeZoneClient(tz, nowDate) || getDayKeyByOffsetClient(tz, nowDate, 0);
+    const todayCfg = cfg.weekly?.[todayKey] || { closed: false, openingTime: '09:00', closingTime: '22:00' };
+
+    const now = nowMinutesOfDay();
+
+    if (todayCfg.closed !== true) {
+        const open = parseHHMMToMinutes(todayCfg.openingTime) ?? (9 * 60);
+        const close = parseHHMMToMinutes(todayCfg.closingTime) ?? (22 * 60);
+        const within = isMinutesWithinWindow(now, open, close);
+        if (!within) {
+            if (close > open) {
+                if (now < open) {
+                    return { dayKey: todayKey, opensAt: minutesToHHMM(open), daysAhead: 0 };
+                }
+            } else {
+                // Overnight schedule: closed only in the gap [close, open)
+                return { dayKey: todayKey, opensAt: minutesToHHMM(open), daysAhead: 0 };
+            }
+        }
+    }
+
+    for (let offset = 1; offset <= 7; offset++) {
+        const key = getDayKeyByOffsetClient(tz, nowDate, offset);
+        const dayCfg = cfg.weekly?.[key] || { closed: false, openingTime: '09:00', closingTime: '22:00' };
+        if (dayCfg.closed === true) continue;
+        const open = parseHHMMToMinutes(dayCfg.openingTime) ?? (9 * 60);
+        return { dayKey: key, opensAt: minutesToHHMM(open), daysAhead: offset };
+    }
+
+    return null;
+}
+
 function getStorefrontClosedReason() {
     if (siteOrderSettings?.temporarilyClosed === true) {
         return { type: 'manual' };
@@ -300,7 +368,14 @@ function getStorefrontClosedReason() {
 
     const day = getWorkingHoursDayForNow();
     if (day.closed === true) {
-        return { type: 'closed_day' };
+        const next = getNextOpenInfoClient();
+        return {
+            type: 'closed_day',
+            opensAt: next?.opensAt || '',
+            opensInDays: Number.isFinite(next?.daysAhead) ? next.daysAhead : null,
+            opensDayKey: next?.dayKey || null,
+            tomorrow: next?.daysAhead === 1
+        };
     }
 
     const open = parseHHMMToMinutes(day.openingTime) ?? (9 * 60);
@@ -310,15 +385,18 @@ function getStorefrontClosedReason() {
     const within = isMinutesWithinWindow(now, open, close);
     if (within) return null;
 
-    // Closed: compute next opening time.
-    if (close > open) {
-        // Same-day schedule.
-        if (now < open) return { type: 'hours', opensAt: minutesToHHMM(open), tomorrow: false };
-        return { type: 'hours', opensAt: minutesToHHMM(open), tomorrow: true };
-    }
+    const next = getNextOpenInfoClient();
+    const opensAt = next?.opensAt || minutesToHHMM(open);
+    const opensInDays = Number.isFinite(next?.daysAhead) ? next.daysAhead : (now < open ? 0 : 1);
+    const opensDayKey = next?.dayKey || null;
 
-    // Overnight schedule: closed only in the gap [close, open)
-    return { type: 'hours', opensAt: minutesToHHMM(open), tomorrow: false };
+    return {
+        type: 'hours',
+        opensAt,
+        opensInDays,
+        opensDayKey,
+        tomorrow: opensInDays === 1
+    };
 }
 
 function renderRestaurantStatusBanner() {
@@ -343,22 +421,31 @@ function renderRestaurantStatusBanner() {
                 : 'The restaurant is temporarily closed.';
         }
 
+        const isBg = currentLanguage === 'bg';
+        const dayKey = reason.opensDayKey;
+        const dayName = dayKey ? (WORKING_HOURS_WEEKDAY_LABELS[isBg ? 'bg' : 'en']?.[dayKey] || '') : '';
+        const opensAt = reason.opensAt;
+        const days = Number.isFinite(reason.opensInDays) ? reason.opensInDays : (reason.tomorrow ? 1 : 0);
+
+        const openLine = (!opensAt)
+            ? ''
+            : (days === 0
+                ? (isBg ? `Отваряме в ${opensAt}.` : `Opens at ${opensAt}.`)
+                : (days === 1
+                    ? (isBg ? `Отваряме утре в ${opensAt}.` : `Opens tomorrow at ${opensAt}.`)
+                    : (isBg
+                        ? `Отваряме в ${dayName || ''} в ${opensAt}.`
+                        : `Opens on ${dayName || ''} at ${opensAt}.`)));
+
         if (reason.type === 'closed_day') {
-            return currentLanguage === 'bg'
-                ? 'Днес не приемаме поръчки.'
-                : 'We are not accepting orders today.';
+            return isBg
+                ? (`Днес не приемаме поръчки.${openLine ? ' ' + openLine : ''}`)
+                : (`We are not accepting orders today.${openLine ? ' ' + openLine : ''}`);
         }
 
-        const timeText = reason.opensAt;
-        if (currentLanguage === 'bg') {
-            return reason.tomorrow
-                ? `Ресторантът в момента не работи. Отваряме утре в ${timeText}.`
-                : `Ресторантът в момента не работи. Отваряме в ${timeText}.`;
-        }
-
-        return reason.tomorrow
-            ? `The restaurant is currently closed. Opens tomorrow at ${timeText}.`
-            : `The restaurant is currently closed. Opens at ${timeText}.`;
+        return isBg
+            ? (`Ресторантът в момента не работи.${openLine ? ' ' + openLine : ''}`)
+            : (`The restaurant is currently closed.${openLine ? ' ' + openLine : ''}`);
     })();
 
     banner.textContent = msg;
@@ -405,7 +492,7 @@ function showUxModal({ title, message, primaryText }) {
     }
 }
 
-function showRestaurantClosedModal({ type, open, close, opensAt, tomorrow }) {
+function showRestaurantClosedModal({ type, open, close, opensAt, tomorrow, opensInDays, opensDayKey }) {
     const isBg = currentLanguage === 'bg';
     const isManual = type === 'manual';
     const isClosedDay = type === 'closed_day';
@@ -423,11 +510,28 @@ function showRestaurantClosedModal({ type, open, close, opensAt, tomorrow }) {
             ? (isBg ? 'Днес сме затворени' : 'We are closed today')
             : (isBg ? 'В момента сме затворени' : 'We are currently closed'));
 
-    const openLine = (!isManual && opensAt)
-        ? (isBg
-            ? (tomorrow ? `Отваряме утре в <b>${escapeHtml(opensAt)}</b>.` : `Отваряме в <b>${escapeHtml(opensAt)}</b>.`)
-            : (tomorrow ? `Opens tomorrow at <b>${escapeHtml(opensAt)}</b>.` : `Opens at <b>${escapeHtml(opensAt)}</b>.`))
-        : '';
+    const openLine = (() => {
+        if (isManual) return '';
+        const at = (opensAt || '').toString().trim();
+        if (!at) return '';
+        const days = Number.isFinite(opensInDays) ? opensInDays : (tomorrow ? 1 : 0);
+        const dayKey = (opensDayKey || '').toString().trim();
+        const dayName = dayKey ? (WORKING_HOURS_WEEKDAY_LABELS[isBg ? 'bg' : 'en']?.[dayKey] || '') : '';
+
+        if (days === 0) {
+            return isBg
+                ? `Отваряме в <b>${escapeHtml(at)}</b>.`
+                : `Opens at <b>${escapeHtml(at)}</b>.`;
+        }
+        if (days === 1) {
+            return isBg
+                ? `Отваряме утре в <b>${escapeHtml(at)}</b>.`
+                : `Opens tomorrow at <b>${escapeHtml(at)}</b>.`;
+        }
+        return isBg
+            ? `Отваряме в <b>${escapeHtml(dayName || dayKey)}</b> в <b>${escapeHtml(at)}</b>.`
+            : `Opens on <b>${escapeHtml(dayName || dayKey)}</b> at <b>${escapeHtml(at)}</b>.`;
+    })();
 
     const heroSub = isManual
         ? (isBg ? 'Заповядайте по-късно.' : 'Please come again later.')
@@ -482,7 +586,9 @@ function maybeShowClosedModalOnce() {
         open: open || undefined,
         close: close || undefined,
         opensAt: reason.opensAt,
-        tomorrow: !!reason.tomorrow
+        tomorrow: !!reason.tomorrow,
+        opensInDays: reason.opensInDays,
+        opensDayKey: reason.opensDayKey
     });
 }
 

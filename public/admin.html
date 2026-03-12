@@ -316,6 +316,9 @@
             <div class="form-group">
                 <small data-translate="categoriesManagerHelp">Rename and reorder categories shown on the storefront.</small>
                 <div id="site-categories-manager" style="margin-top: 10px;"></div>
+                <button type="button" onclick="saveCategoriesOnly()" class="btn btn-primary" style="margin-top: 10px;">
+                    <i class="fas fa-save"></i> <span data-translate="saveCategories">Save categories</span>
+                </button>
             </div>
 
             <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
@@ -515,15 +518,6 @@
         <!-- Working Hours Section -->
         <div class="admin-section">
             <h2><i class="fas fa-clock"></i> <span data-translate="workingHours">Working Hours</span></h2>
-
-            <small data-translate="workingHoursHelp">Set different working hours for each weekday. Mark days as closed when you are not accepting orders.</small>
-
-            <div class="form-row">
-                <div class="form-group" style="min-width: 140px;"><label data-translate="day">Day</label></div>
-                <div class="form-group" style="min-width: 140px;"><label data-translate="closedDay">Closed</label></div>
-                <div class="form-group" style="min-width: 160px;"><label data-translate="openingTime">Opening Time</label></div>
-                <div class="form-group" style="min-width: 160px;"><label data-translate="closingTime">Closing Time</label></div>
-            </div>
 
             <div class="form-row">
                 <div class="form-group" style="min-width: 140px;"><strong data-translate="dayMon">Monday</strong></div>
