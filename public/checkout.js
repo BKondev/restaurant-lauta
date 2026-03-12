@@ -415,22 +415,30 @@ function truncateMobileName(name, maxChars = 25) {
     return text.slice(0, maxChars).trimEnd() + '…';
 }
 
-// List of available cities for delivery
-const availableCities = [
-    'Пловдив',
-    'Асеновград',
-    'Стамболийски',
-    'Раковски',
-    'Куклен',
-    'Марица',
-    'Съединение',
-    'Карлово',
-    'Хисаря',
-    'Брезово',
-    'Първомай',
-    'Садово',
-    'Други'
-];
+function getAvailableDeliveryCities() {
+    const raw = deliverySettings?.cityPrices;
+
+    let cities = [];
+    if (Array.isArray(raw)) {
+        cities = raw
+            .map(e => (e && (e.name ?? e.city)) ? String(e.name ?? e.city).trim() : '')
+            .filter(Boolean);
+    } else if (raw && typeof raw === 'object') {
+        cities = Object.keys(raw)
+            .map(c => String(c || '').trim())
+            .filter(Boolean);
+    }
+
+    const seen = new Set();
+    const out = [];
+    for (const c of cities) {
+        const k = c.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(c);
+    }
+    return out;
+}
 
 // Format price
 function round2(n) {
@@ -1347,7 +1355,12 @@ function renderCheckout() {
                 </label>
                 <select id="customer-city" ${deliveryMethod === 'delivery' ? 'required' : ''} onchange="onCityChange()">
                     <option value="">${currentLanguage === 'bg' ? 'Изберете град...' : 'Select city...'}</option>
-                    ${availableCities.map(city => `<option value="${city}" ${customerInfo.city === city ? 'selected' : ''}>${city}</option>`).join('')}
+                    ${getAvailableDeliveryCities().map(city => {
+                        const value = escapeHtmlAttribute(city);
+                        const label = escapeHtml(city);
+                        const selected = (customerInfo.city === city) ? 'selected' : '';
+                        return `<option value="${value}" ${selected}>${label}</option>`;
+                    }).join('')}
                 </select>
             </div>
             <div class="form-group ${deliveryMethod === 'delivery' ? 'show' : ''}" id="address-street-field">
