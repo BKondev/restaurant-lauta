@@ -65,13 +65,17 @@
                 };
 
                 const whCfg = normalizeWorkingHours(wh || null);
-                const whDayKey = getWeekdayKeyInTimeZone(whCfg.timezone, new Date()) || 'mon';
-                const whDay = (whCfg.weekly && whCfg.weekly[whDayKey]) ? whCfg.weekly[whDayKey] : null;
-                const whText = whDay
-                    ? (whDay.closed === true
-                        ? 'Closed'
-                        : ((whDay.openingTime && whDay.closingTime) ? `${String(whDay.openingTime).trim()} - ${String(whDay.closingTime).trim()}` : ''))
-                    : '';
+                const dayNames = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
+                const dayOrder = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+                const whWeeklyHtml = dayOrder
+                    .map(k => {
+                        const d = (whCfg.weekly && whCfg.weekly[k]) ? whCfg.weekly[k] : { closed: false, openingTime: '09:00', closingTime: '22:00' };
+                        const open = (d.openingTime || '').toString().trim();
+                        const close = (d.closingTime || '').toString().trim();
+                        const rangeText = d.closed === true ? 'Closed' : `${open} - ${close}`;
+                        return `<div>${esc(dayNames[k] || k)}: ${esc(rangeText)}</div>`;
+                    })
+                    .join('');
 
                 // map (above footer)
                 try {
@@ -133,7 +137,7 @@
 
                 const contactLines = [
                     rawAddress ? `<li><strong>Address:</strong> ${addressHtml}</li>` : '',
-                    whText ? `<li><strong>Working hours:</strong> ${esc(whText)}</li>` : '',
+                    `<li><strong>Working hours:</strong> ${whWeeklyHtml}</li>`,
                     contacts.phone ? `<li><strong>Phone:</strong> <a class="footer-contact-link" href="tel:${encodeURIComponent(String(contacts.phone))}">${esc(contacts.phone)}</a></li>` : '',
                     contacts.email ? `<li><strong>Email:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${esc(contacts.email)}</a></li>` : ''
                 ].filter(Boolean).join('');

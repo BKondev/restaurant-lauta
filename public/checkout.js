@@ -722,13 +722,20 @@ function renderSiteFooter() {
     }
 
     const wh = normalizeWorkingHoursConfigClient(workingHours || null);
-    const dayKey = getWeekdayKeyInTimeZoneClient(wh.timezone, new Date()) || 'mon';
-    const day = (wh.weekly && wh.weekly[dayKey]) ? wh.weekly[dayKey] : { closed: false, openingTime: '', closingTime: '' };
-    const openingTime = (day.openingTime || '').toString().trim();
-    const closingTime = (day.closingTime || '').toString().trim();
-    const hoursText = day.closed === true
-        ? (currentLanguage === 'bg' ? 'Затворено' : 'Closed')
-        : ((openingTime && closingTime) ? `${openingTime} - ${closingTime}` : '');
+    const closedText = currentLanguage === 'bg' ? 'Затворено' : 'Closed';
+    const dayNames = currentLanguage === 'bg'
+        ? { mon: 'Понеделник', tue: 'Вторник', wed: 'Сряда', thu: 'Четъртък', fri: 'Петък', sat: 'Събота', sun: 'Неделя' }
+        : { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
+    const dayOrder = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    const weeklyHoursHtml = dayOrder
+        .map(k => {
+            const d = (wh.weekly && wh.weekly[k]) ? wh.weekly[k] : { closed: false, openingTime: '09:00', closingTime: '22:00' };
+            const open = (d.openingTime || '').toString().trim();
+            const close = (d.closingTime || '').toString().trim();
+            const rangeText = d.closed === true ? closedText : `${open} - ${close}`;
+            return `<div>${escapeHtml(dayNames[k] || k)}: ${escapeHtml(rangeText)}</div>`;
+        })
+        .join('');
 
     const rawAddress = (contacts.address || '').toString().trim();
     const explicitMapsUrlRaw = (contacts.addressMapsUrl || '').toString().trim();
@@ -749,7 +756,7 @@ function renderSiteFooter() {
 
     const contactLines = [
         rawAddress ? `<li><strong>${escapeHtml(labels.address)}:</strong> ${addressHtml}</li>` : '',
-        hoursText ? `<li><strong>${escapeHtml(labels.hours)}:</strong> ${escapeHtml(hoursText)}</li>` : '',
+        `<li><strong>${escapeHtml(labels.hours)}:</strong> ${weeklyHoursHtml}</li>`,
         contacts.phone ? `<li><strong>${escapeHtml(labels.phone)}:</strong> <a class="footer-contact-link" href="tel:${encodeURIComponent(String(contacts.phone))}">${escapeHtml(contacts.phone)}</a></li>` : '',
         contacts.email ? `<li><strong>${escapeHtml(labels.email)}:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${escapeHtml(contacts.email)}</a></li>` : ''
     ].filter(Boolean).join('');
