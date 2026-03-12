@@ -75,7 +75,7 @@
             </button>
             
             <div class="admin-actions">
-                <a href="/resturant-website/" class="admin-action-btn" data-translate-title="backToMenu" title="Back to Menu">
+                <a href="/" class="admin-action-btn" data-translate-title="backToMenu" title="Back to Menu">
                     <i class="fas fa-home"></i>
                     <span class="action-text" data-translate="menu">Menu</span>
                 </a>
@@ -265,7 +265,7 @@
                 <input type="url" id="borica-backref-url" placeholder="https://your-domain/api/payments/borica/return">
                 <small>
                     Configure BORICA Return URL to:
-                    <span style="font-family: monospace;">https://YOUR_DOMAIN/resturant-website/api/payments/borica/return</span>
+                    <span style="font-family: monospace;">https://YOUR_DOMAIN/api/payments/borica/return</span>
                 </small>
             </div>
 
@@ -1617,11 +1617,14 @@
     </div>
 
     <script>
-        // Fix navigation links with BASE_PATH
-        const BASE_PATH_FIX = window.location.pathname.includes('/resturant-website') ? '/resturant-website' : '';
+        // Ensure admin navigation returns to the public site root
         document.addEventListener('DOMContentLoaded', () => {
+            const rootUrl = window.location.origin + '/';
+            const menuLink = document.querySelector('.admin-actions a.admin-action-btn');
+            if (menuLink) menuLink.href = rootUrl;
+
             const backLink = document.querySelector('a[href="../"]');
-            if (backLink) backLink.href = BASE_PATH_FIX + '/';
+            if (backLink) backLink.href = rootUrl;
         });
     </script>
     <!-- Leaflet JS -->

@@ -104,6 +104,15 @@ body.admin-drawer-open {
     margin-right: 10px;
 }
 
+/* On small screens, public styles.css hides .lang-btn (for the storefront).
+   Admin uses the same class names, so force buttons visible inside the admin panel. */
+.admin-container .language-switcher .lang-btn,
+.admin-container .admin-lang-switcher .lang-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .admin-header .lang-btn {
     padding: 6px 12px;
     border: none;
@@ -897,6 +906,16 @@ body.admin-drawer-open {
     .admin-tabs-nav .admin-tab-btn i {
         font-size: 20px;
         margin: 0;
+    }
+
+    /* Make all admin tables scroll instead of overflowing off-screen */
+    .admin-section {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .admin-section table {
+        max-width: 100%;
     }
 
     .admin-tabs-nav .admin-tab-btn .tab-text {
