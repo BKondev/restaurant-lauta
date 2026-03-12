@@ -892,6 +892,76 @@ function parseHHMMToMinutes(hhmm) {
     return Number(m[1]) * 60 + Number(m[2]);
 }
 
+const DEFAULT_WORKING_HOURS_TZ = 'Europe/Sofia';
+const WORKING_HOURS_WEEK_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+function getWeekdayKeyInTimeZone(timeZone, date = new Date()) {
+    const tz = (timeZone || DEFAULT_WORKING_HOURS_TZ).toString();
+    try {
+        const weekdayShort = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(date);
+        const map = {
+            Mon: 'mon',
+            Tue: 'tue',
+            Wed: 'wed',
+            Thu: 'thu',
+            Fri: 'fri',
+            Sat: 'sat',
+            Sun: 'sun'
+        };
+        return map[weekdayShort] || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function normalizeWorkingHoursDay(rawDay, fallbackDay) {
+    const fallback = fallbackDay || { closed: false, openingTime: '09:00', closingTime: '22:00' };
+    const closed = rawDay?.closed === true;
+    const openingTime = (rawDay?.openingTime || fallback.openingTime || '09:00').toString().trim();
+    const closingTime = (rawDay?.closingTime || fallback.closingTime || '22:00').toString().trim();
+    return {
+        closed,
+        openingTime: openingTime || '09:00',
+        closingTime: closingTime || '22:00'
+    };
+}
+
+function normalizeWorkingHoursConfig(raw) {
+    const timeZone = (raw?.timezone || raw?.timeZone || DEFAULT_WORKING_HOURS_TZ).toString().trim() || DEFAULT_WORKING_HOURS_TZ;
+
+    const legacyOpening = (raw?.openingTime || '09:00').toString().trim() || '09:00';
+    const legacyClosing = (raw?.closingTime || '22:00').toString().trim() || '22:00';
+    const legacyDay = { closed: false, openingTime: legacyOpening, closingTime: legacyClosing };
+
+    const weeklyIn = (raw && typeof raw.weekly === 'object' && raw.weekly) ? raw.weekly : null;
+    const weekly = {};
+    for (const key of WORKING_HOURS_WEEK_KEYS) {
+        weekly[key] = normalizeWorkingHoursDay(weeklyIn ? weeklyIn[key] : null, legacyDay);
+    }
+
+    // Keep top-level opening/closing as a backward-compatible fallback.
+    return {
+        timezone: timeZone,
+        weekly,
+        openingTime: weekly.mon.openingTime,
+        closingTime: weekly.mon.closingTime
+    };
+}
+
+function getWorkingHoursForDate(rawWorkingHours, date = new Date(), timeZoneFallback = DEFAULT_WORKING_HOURS_TZ) {
+    const cfg = normalizeWorkingHoursConfig(rawWorkingHours);
+    const tz = (cfg?.timezone || timeZoneFallback || DEFAULT_WORKING_HOURS_TZ).toString();
+    const dayKey = getWeekdayKeyInTimeZone(tz, date) || 'mon';
+    const day = (cfg.weekly && cfg.weekly[dayKey]) ? cfg.weekly[dayKey] : normalizeWorkingHoursDay(null, null);
+    return {
+        timezone: tz,
+        dayKey,
+        closed: day.closed === true,
+        openingTime: day.openingTime,
+        closingTime: day.closingTime
+    };
+}
+
 function getMinutesOfDayInTimeZone(timeZone, date = new Date()) {
     try {
         const dtf = new Intl.DateTimeFormat('en-US', {
@@ -3835,18 +3905,18 @@ app.put(API_PREFIX + '/settings/order', requireAuth, (req, res) => {
 // Get working hours
 app.get(API_PREFIX + '/settings/working-hours', (req, res) => {
     const db = readDatabase();
-    res.json(db.workingHours || {
-        openingTime: '09:00',
-        closingTime: '22:00'
-    });
+    res.json(normalizeWorkingHoursConfig(db.workingHours || null));
 });
 
 // Update working hours
 app.put(API_PREFIX + '/settings/working-hours', requireAuth, (req, res) => {
     const db = readDatabase();
+    const next = normalizeWorkingHoursConfig(req.body || null);
     db.workingHours = {
-        openingTime: req.body.openingTime || '09:00',
-        closingTime: req.body.closingTime || '22:00'
+        timezone: next.timezone,
+        weekly: next.weekly,
+        openingTime: next.openingTime,
+        closingTime: next.closingTime
     };
     
     if (writeDatabase(db)) {
@@ -5419,15 +5489,20 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         const workingHours = data.workingHours || { openingTime: '09:00', closingTime: '22:00' };
         const deliveryHours = (data.deliverySettings && data.deliverySettings.deliveryHours) || { openingTime: '11:00', closingTime: '21:30' };
 
-        const whOpen = parseHHMMToMinutes(workingHours.openingTime) ?? (9 * 60);
-        const whClose = parseHHMMToMinutes(workingHours.closingTime) ?? (22 * 60);
+        const whForNow = getWorkingHoursForDate(workingHours, new Date(), DEFAULT_WORKING_HOURS_TZ);
+        const workingHoursNormalized = normalizeWorkingHoursConfig(workingHours);
+
+        const whOpen = parseHHMMToMinutes(whForNow.openingTime) ?? (9 * 60);
+        const whClose = parseHHMMToMinutes(whForNow.closingTime) ?? (22 * 60);
         const dhOpen = parseHHMMToMinutes(deliveryHours.openingTime) ?? (11 * 60);
         const dhClose = parseHHMMToMinutes(deliveryHours.closingTime) ?? (21 * 60 + 30);
 
         const nowMinutes = getMinutesOfDayInTimeZone('Europe/Sofia') ?? (new Date().getHours() * 60 + new Date().getMinutes());
 
         const requiresDeliveryWindow = normalizedDeliveryMethod === 'delivery';
-        const withinWorking = isMinutesWithinWindow(nowMinutes, whOpen, whClose);
+        const withinWorking = (whForNow.closed === true)
+            ? false
+            : isMinutesWithinWindow(nowMinutes, whOpen, whClose);
         const withinDelivery = !requiresDeliveryWindow || isMinutesWithinWindow(nowMinutes, dhOpen, dhClose);
 
         const normalizedOrderTime = (orderTime === 'now' || orderTime === 'later') ? orderTime : 'now';
@@ -5447,14 +5522,16 @@ app.post(API_PREFIX + '/orders', (req, res) => {
                 });
             }
 
-            const withinScheduledWorking = isMinutesWithinWindow(scheduledMinutes, whOpen, whClose);
+            const withinScheduledWorking = (whForNow.closed === true)
+                ? false
+                : isMinutesWithinWindow(scheduledMinutes, whOpen, whClose);
             const withinScheduledDelivery = !requiresDeliveryWindow || isMinutesWithinWindow(scheduledMinutes, dhOpen, dhClose);
             if (!withinScheduledWorking || !withinScheduledDelivery) {
                 return res.status(423).json({
                     error: 'Restaurant closed',
                     reason: 'hours',
                     message: 'The restaurant is not accepting orders at the selected time',
-                    workingHours,
+                    workingHours: workingHoursNormalized,
                     deliveryHours
                 });
             }
@@ -5464,7 +5541,7 @@ app.post(API_PREFIX + '/orders', (req, res) => {
                     error: 'Restaurant closed',
                     reason: 'hours',
                     message: 'The restaurant is not accepting orders right now',
-                    workingHours,
+                    workingHours: workingHoursNormalized,
                     deliveryHours
                 });
             }

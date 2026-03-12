@@ -50,6 +50,16 @@ const translations = {
         yes: 'Yes',
         no: 'No',
         workingHours: 'Working Hours',
+        workingHoursHelp: 'Set different working hours for each weekday. Mark days as closed when you are not accepting orders.',
+        day: 'Day',
+        closedDay: 'Closed',
+        dayMon: 'Monday',
+        dayTue: 'Tuesday',
+        dayWed: 'Wednesday',
+        dayThu: 'Thursday',
+        dayFri: 'Friday',
+        daySat: 'Saturday',
+        daySun: 'Sunday',
         openingTime: 'Opening Time',
         closingTime: 'Closing Time',
         saveWorkingHours: 'Save Working Hours',
@@ -496,6 +506,16 @@ const translations = {
         yes: 'Да',
         no: 'Не',
         workingHours: 'Работно Време',
+        workingHoursHelp: 'Задайте различно работно време за всеки ден. Маркирайте дните като затворени, когато не приемате поръчки.',
+        day: 'Ден',
+        closedDay: 'Затворено',
+        dayMon: 'Понеделник',
+        dayTue: 'Вторник',
+        dayWed: 'Сряда',
+        dayThu: 'Четвъртък',
+        dayFri: 'Петък',
+        daySat: 'Събота',
+        daySun: 'Неделя',
         openingTime: 'Отваряне',
         closingTime: 'Затваряне',
         saveWorkingHours: 'Запази Работно Време',
@@ -4091,11 +4111,50 @@ async function loadOrderSettings() {
 
 // ========== WORKING HOURS FUNCTIONS ==========
 
+const WORKING_HOURS_DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+let workingHoursTimezoneDraft = 'Europe/Sofia';
+let workingHoursFormInitialized = false;
+
+function normalizeWorkingHoursConfigClient(raw) {
+    const timeZone = (raw?.timezone || raw?.timeZone || 'Europe/Sofia').toString().trim() || 'Europe/Sofia';
+    const legacyOpening = (raw?.openingTime || '09:00').toString().trim() || '09:00';
+    const legacyClosing = (raw?.closingTime || '22:00').toString().trim() || '22:00';
+    const legacyDay = { closed: false, openingTime: legacyOpening, closingTime: legacyClosing };
+    const weeklyIn = (raw && typeof raw.weekly === 'object' && raw.weekly) ? raw.weekly : null;
+
+    const weekly = {};
+    for (const key of WORKING_HOURS_DAY_KEYS) {
+        const d = weeklyIn ? weeklyIn[key] : null;
+        weekly[key] = {
+            closed: d?.closed === true,
+            openingTime: (d?.openingTime || legacyDay.openingTime).toString().trim() || legacyDay.openingTime,
+            closingTime: (d?.closingTime || legacyDay.closingTime).toString().trim() || legacyDay.closingTime
+        };
+    }
+
+    return { timezone: timeZone, weekly };
+}
+
+function setWorkingHoursDayDisabled(dayKey, closed) {
+    const openEl = document.getElementById(`wh-${dayKey}-open`);
+    const closeEl = document.getElementById(`wh-${dayKey}-close`);
+    if (openEl) openEl.disabled = !!closed;
+    if (closeEl) closeEl.disabled = !!closed;
+}
+
 // Update working hours
 async function updateWorkingHours() {
+    const weekly = {};
+    for (const key of WORKING_HOURS_DAY_KEYS) {
+        const closed = !!document.getElementById(`wh-${key}-closed`)?.checked;
+        const openingTime = (document.getElementById(`wh-${key}-open`)?.value || '09:00').toString();
+        const closingTime = (document.getElementById(`wh-${key}-close`)?.value || '22:00').toString();
+        weekly[key] = { closed, openingTime, closingTime };
+    }
+
     const workingHours = {
-        openingTime: document.getElementById('opening-time').value,
-        closingTime: document.getElementById('closing-time').value
+        timezone: workingHoursTimezoneDraft || 'Europe/Sofia',
+        weekly
     };
 
     try {
@@ -4125,9 +4184,34 @@ async function loadWorkingHours() {
     try {
         const response = await fetch(`${API_URL}/settings/working-hours`);
         const settings = await response.json();
-        
-        document.getElementById('opening-time').value = settings.openingTime || '09:00';
-        document.getElementById('closing-time').value = settings.closingTime || '22:00';
+
+        const normalized = normalizeWorkingHoursConfigClient(settings || null);
+        workingHoursTimezoneDraft = normalized.timezone || 'Europe/Sofia';
+
+        for (const key of WORKING_HOURS_DAY_KEYS) {
+            const day = normalized.weekly[key] || { closed: false, openingTime: '09:00', closingTime: '22:00' };
+            const closedEl = document.getElementById(`wh-${key}-closed`);
+            const openEl = document.getElementById(`wh-${key}-open`);
+            const closeEl = document.getElementById(`wh-${key}-close`);
+
+            if (closedEl) closedEl.checked = day.closed === true;
+            if (openEl) openEl.value = day.openingTime || '09:00';
+            if (closeEl) closeEl.value = day.closingTime || '22:00';
+
+            setWorkingHoursDayDisabled(key, day.closed === true);
+        }
+
+        if (!workingHoursFormInitialized) {
+            workingHoursFormInitialized = true;
+            for (const key of WORKING_HOURS_DAY_KEYS) {
+                const closedEl = document.getElementById(`wh-${key}-closed`);
+                if (closedEl) {
+                    closedEl.addEventListener('change', () => {
+                        setWorkingHoursDayDisabled(key, !!closedEl.checked);
+                    });
+                }
+            }
+        }
     } catch (error) {
         console.error('Error loading working hours:', error);
     }

@@ -34,6 +34,45 @@
                     if (whRes.ok) wh = await whRes.json();
                 } catch (e) {}
 
+                const getWeekdayKeyInTimeZone = (timeZone, date = new Date()) => {
+                    const tz = (timeZone || 'Europe/Sofia').toString();
+                    try {
+                        const weekdayShort = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(date);
+                        const map = { Mon: 'mon', Tue: 'tue', Wed: 'wed', Thu: 'thu', Fri: 'fri', Sat: 'sat', Sun: 'sun' };
+                        return map[weekdayShort] || null;
+                    } catch (e) {
+                        return null;
+                    }
+                };
+
+                const normalizeWorkingHours = (raw) => {
+                    const timeZone = (raw?.timezone || raw?.timeZone || 'Europe/Sofia').toString().trim() || 'Europe/Sofia';
+                    const legacyOpening = (raw?.openingTime || '09:00').toString().trim() || '09:00';
+                    const legacyClosing = (raw?.closingTime || '22:00').toString().trim() || '22:00';
+                    const legacyDay = { closed: false, openingTime: legacyOpening, closingTime: legacyClosing };
+                    const weeklyIn = (raw && typeof raw.weekly === 'object' && raw.weekly) ? raw.weekly : null;
+                    const keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+                    const weekly = {};
+                    keys.forEach(k => {
+                        const d = weeklyIn ? weeklyIn[k] : null;
+                        weekly[k] = {
+                            closed: d?.closed === true,
+                            openingTime: (d?.openingTime || legacyDay.openingTime).toString().trim() || legacyDay.openingTime,
+                            closingTime: (d?.closingTime || legacyDay.closingTime).toString().trim() || legacyDay.closingTime
+                        };
+                    });
+                    return { timezone: timeZone, weekly };
+                };
+
+                const whCfg = normalizeWorkingHours(wh || null);
+                const whDayKey = getWeekdayKeyInTimeZone(whCfg.timezone, new Date()) || 'mon';
+                const whDay = (whCfg.weekly && whCfg.weekly[whDayKey]) ? whCfg.weekly[whDayKey] : null;
+                const whText = whDay
+                    ? (whDay.closed === true
+                        ? 'Closed'
+                        : ((whDay.openingTime && whDay.closingTime) ? `${String(whDay.openingTime).trim()} - ${String(whDay.closingTime).trim()}` : ''))
+                    : '';
+
                 // map (above footer)
                 try {
                     const mapEl = document.getElementById('site-map');
@@ -94,7 +133,7 @@
 
                 const contactLines = [
                     rawAddress ? `<li><strong>Address:</strong> ${addressHtml}</li>` : '',
-                    (wh && wh.openingTime && wh.closingTime) ? `<li><strong>Working hours:</strong> ${esc(String(wh.openingTime).trim())} - ${esc(String(wh.closingTime).trim())}</li>` : '',
+                    whText ? `<li><strong>Working hours:</strong> ${esc(whText)}</li>` : '',
                     contacts.phone ? `<li><strong>Phone:</strong> <a class="footer-contact-link" href="tel:${encodeURIComponent(String(contacts.phone))}">${esc(contacts.phone)}</a></li>` : '',
                     contacts.email ? `<li><strong>Email:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${esc(contacts.email)}</a></li>` : ''
                 ].filter(Boolean).join('');

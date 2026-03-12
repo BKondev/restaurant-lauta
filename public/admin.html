@@ -22,9 +22,17 @@
                 <i class="fas fa-utensils"></i>
                 <span data-translate="adminPanel">Admin Panel</span>
             </div>
-            <button class="nav-toggle-btn" onclick="toggleNav()" title="Menu" aria-label="Menu">
-                <i class="fas fa-bars" id="toggleIcon"></i>
-            </button>
+
+            <div class="admin-header-right">
+                <div class="admin-lang-switcher language-switcher" aria-label="Language">
+                    <button class="lang-btn" data-lang="en" onclick="switchLanguage('en')" title="English">EN</button>
+                    <button class="lang-btn" data-lang="bg" onclick="switchLanguage('bg')" title="Български">BG</button>
+                </div>
+
+                <button class="nav-toggle-btn" onclick="toggleNav()" title="Menu" aria-label="Menu">
+                    <i class="fas fa-bars" id="toggleIcon"></i>
+                </button>
+            </div>
         </div>
 
         <!-- Tab Navigation -->
@@ -507,19 +515,77 @@
         <!-- Working Hours Section -->
         <div class="admin-section">
             <h2><i class="fas fa-clock"></i> <span data-translate="workingHours">Working Hours</span></h2>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="opening-time"><span data-translate="openingTime">Opening Time</span>:</label>
-                    <input type="time" id="opening-time" value="09:00">
-                    <small data-translate="openingTimeHelp">Restaurant opening time for pickup orders</small>
-                </div>
 
-                <div class="form-group">
-                    <label for="closing-time"><span data-translate="closingTime">Closing Time</span>:</label>
-                    <input type="time" id="closing-time" value="22:00">
-                    <small data-translate="closingTimeHelp">Restaurant closing time for pickup orders</small>
+            <small data-translate="workingHoursHelp">Set different working hours for each weekday. Mark days as closed when you are not accepting orders.</small>
+
+            <div class="form-row">
+                <div class="form-group" style="min-width: 140px;"><label data-translate="day">Day</label></div>
+                <div class="form-group" style="min-width: 140px;"><label data-translate="closedDay">Closed</label></div>
+                <div class="form-group" style="min-width: 160px;"><label data-translate="openingTime">Opening Time</label></div>
+                <div class="form-group" style="min-width: 160px;"><label data-translate="closingTime">Closing Time</label></div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="min-width: 140px;"><strong data-translate="dayMon">Monday</strong></div>
+                <div class="form-group" style="min-width: 140px;">
+                    <label class="checkbox-label"><input type="checkbox" id="wh-mon-closed"> <span data-translate="closedDay">Closed</span></label>
                 </div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-mon-open" value="09:00"></div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-mon-close" value="22:00"></div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="min-width: 140px;"><strong data-translate="dayTue">Tuesday</strong></div>
+                <div class="form-group" style="min-width: 140px;">
+                    <label class="checkbox-label"><input type="checkbox" id="wh-tue-closed"> <span data-translate="closedDay">Closed</span></label>
+                </div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-tue-open" value="09:00"></div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-tue-close" value="22:00"></div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="min-width: 140px;"><strong data-translate="dayWed">Wednesday</strong></div>
+                <div class="form-group" style="min-width: 140px;">
+                    <label class="checkbox-label"><input type="checkbox" id="wh-wed-closed"> <span data-translate="closedDay">Closed</span></label>
+                </div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-wed-open" value="09:00"></div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-wed-close" value="22:00"></div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="min-width: 140px;"><strong data-translate="dayThu">Thursday</strong></div>
+                <div class="form-group" style="min-width: 140px;">
+                    <label class="checkbox-label"><input type="checkbox" id="wh-thu-closed"> <span data-translate="closedDay">Closed</span></label>
+                </div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-thu-open" value="09:00"></div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-thu-close" value="22:00"></div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="min-width: 140px;"><strong data-translate="dayFri">Friday</strong></div>
+                <div class="form-group" style="min-width: 140px;">
+                    <label class="checkbox-label"><input type="checkbox" id="wh-fri-closed"> <span data-translate="closedDay">Closed</span></label>
+                </div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-fri-open" value="09:00"></div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-fri-close" value="22:00"></div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="min-width: 140px;"><strong data-translate="daySat">Saturday</strong></div>
+                <div class="form-group" style="min-width: 140px;">
+                    <label class="checkbox-label"><input type="checkbox" id="wh-sat-closed"> <span data-translate="closedDay">Closed</span></label>
+                </div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-sat-open" value="09:00"></div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-sat-close" value="22:00"></div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="min-width: 140px;"><strong data-translate="daySun">Sunday</strong></div>
+                <div class="form-group" style="min-width: 140px;">
+                    <label class="checkbox-label"><input type="checkbox" id="wh-sun-closed"> <span data-translate="closedDay">Closed</span></label>
+                </div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-sun-open" value="09:00"></div>
+                <div class="form-group" style="min-width: 160px;"><input type="time" id="wh-sun-close" value="22:00"></div>
             </div>
 
             <button onclick="updateWorkingHours()" class="btn btn-primary">

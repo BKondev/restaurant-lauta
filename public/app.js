@@ -226,6 +226,7 @@ function parseHHMMToMinutes(hhmm) {
 }
 
 function minutesToHHMM(totalMinutes) {
+    if (!Number.isFinite(totalMinutes)) return '--:--';
     const normalized = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
     const hours = String(Math.floor(normalized / 60)).padStart(2, '0');
     const minutes = String(normalized % 60).padStart(2, '0');
@@ -248,13 +249,62 @@ function isMinutesWithinWindow(nowMinutes, openMinutes, closeMinutes) {
     return nowMinutes >= openMinutes || nowMinutes < closeMinutes;
 }
 
+const WORKING_HOURS_DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+function getWeekdayKeyInTimeZoneClient(timeZone, date = new Date()) {
+    const tz = (timeZone || 'Europe/Sofia').toString();
+    try {
+        const weekdayShort = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(date);
+        const map = { Mon: 'mon', Tue: 'tue', Wed: 'wed', Thu: 'thu', Fri: 'fri', Sat: 'sat', Sun: 'sun' };
+        return map[weekdayShort] || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function normalizeWorkingHoursConfigClient(raw) {
+    const timeZone = (raw?.timezone || raw?.timeZone || 'Europe/Sofia').toString().trim() || 'Europe/Sofia';
+    const legacyOpening = (raw?.openingTime || '09:00').toString().trim() || '09:00';
+    const legacyClosing = (raw?.closingTime || '22:00').toString().trim() || '22:00';
+    const legacyDay = { closed: false, openingTime: legacyOpening, closingTime: legacyClosing };
+    const weeklyIn = (raw && typeof raw.weekly === 'object' && raw.weekly) ? raw.weekly : null;
+    const weekly = {};
+    for (const key of WORKING_HOURS_DAY_KEYS) {
+        const d = weeklyIn ? weeklyIn[key] : null;
+        weekly[key] = {
+            closed: d?.closed === true,
+            openingTime: (d?.openingTime || legacyDay.openingTime).toString().trim() || legacyDay.openingTime,
+            closingTime: (d?.closingTime || legacyDay.closingTime).toString().trim() || legacyDay.closingTime
+        };
+    }
+    return { timezone: timeZone, weekly };
+}
+
+function getWorkingHoursDayForNow() {
+    const cfg = normalizeWorkingHoursConfigClient(siteWorkingHours || null);
+    const tz = cfg.timezone || 'Europe/Sofia';
+    const dayKey = getWeekdayKeyInTimeZoneClient(tz, new Date()) || null;
+    const fallbackByLocal = (() => {
+        const d = new Date().getDay();
+        return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][d] || 'mon';
+    })();
+    const key = dayKey || fallbackByLocal || 'mon';
+    const day = (cfg.weekly && cfg.weekly[key]) ? cfg.weekly[key] : { closed: false, openingTime: '09:00', closingTime: '22:00' };
+    return { timezone: tz, dayKey: key, ...day };
+}
+
 function getStorefrontClosedReason() {
     if (siteOrderSettings?.temporarilyClosed === true) {
         return { type: 'manual' };
     }
 
-    const open = parseHHMMToMinutes(siteWorkingHours?.openingTime) ?? (9 * 60);
-    const close = parseHHMMToMinutes(siteWorkingHours?.closingTime) ?? (22 * 60);
+    const day = getWorkingHoursDayForNow();
+    if (day.closed === true) {
+        return { type: 'closed_day' };
+    }
+
+    const open = parseHHMMToMinutes(day.openingTime) ?? (9 * 60);
+    const close = parseHHMMToMinutes(day.closingTime) ?? (22 * 60);
     const now = nowMinutesOfDay();
 
     const within = isMinutesWithinWindow(now, open, close);
@@ -291,6 +341,12 @@ function renderRestaurantStatusBanner() {
             return currentLanguage === 'bg'
                 ? 'Ресторантът е временно затворен.'
                 : 'The restaurant is temporarily closed.';
+        }
+
+        if (reason.type === 'closed_day') {
+            return currentLanguage === 'bg'
+                ? 'Днес не приемаме поръчки.'
+                : 'We are not accepting orders today.';
         }
 
         const timeText = reason.opensAt;
@@ -352,15 +408,20 @@ function showUxModal({ title, message, primaryText }) {
 function showRestaurantClosedModal({ type, open, close, opensAt, tomorrow }) {
     const isBg = currentLanguage === 'bg';
     const isManual = type === 'manual';
+    const isClosedDay = type === 'closed_day';
 
     const title = isManual
         ? (isBg ? 'Временно затворено' : 'Temporarily closed')
-        : (isBg ? 'Извън работно време' : 'Outside working hours');
+        : (isClosedDay
+            ? (isBg ? 'Днес сме затворени' : 'Closed today')
+            : (isBg ? 'Извън работно време' : 'Outside working hours'));
 
     const heroIcon = isManual ? '<i class="fas fa-store-slash"></i>' : '<i class="fas fa-clock"></i>';
     const heroTitle = isManual
         ? (isBg ? 'В момента не приемаме поръчки' : 'We are not accepting orders right now')
-        : (isBg ? 'В момента сме затворени' : 'We are currently closed');
+        : (isClosedDay
+            ? (isBg ? 'Днес сме затворени' : 'We are closed today')
+            : (isBg ? 'В момента сме затворени' : 'We are currently closed'));
 
     const openLine = (!isManual && opensAt)
         ? (isBg
@@ -370,7 +431,9 @@ function showRestaurantClosedModal({ type, open, close, opensAt, tomorrow }) {
 
     const heroSub = isManual
         ? (isBg ? 'Заповядайте по-късно.' : 'Please come again later.')
-        : (openLine || (isBg ? 'Можете да поръчате в работното време по-долу.' : 'You can order during the hours shown below.'));
+        : (isClosedDay
+            ? (isBg ? 'Днес не приемаме поръчки.' : 'We are not accepting orders today.')
+            : (openLine || (isBg ? 'Можете да поръчате в работното време по-долу.' : 'You can order during the hours shown below.')));
 
     const hoursHtml = (!isManual && open && close)
         ? `
@@ -411,8 +474,9 @@ function maybeShowClosedModalOnce() {
     if (sessionStorage.getItem(key) === '1') return;
     sessionStorage.setItem(key, '1');
 
-    const open = (siteWorkingHours?.openingTime || '').toString().trim();
-    const close = (siteWorkingHours?.closingTime || '').toString().trim();
+    const day = getWorkingHoursDayForNow();
+    const open = day.closed === true ? '' : (day.openingTime || '').toString().trim();
+    const close = day.closed === true ? '' : (day.closingTime || '').toString().trim();
     showRestaurantClosedModal({
         type: reason.type,
         open: open || undefined,
@@ -534,9 +598,44 @@ function renderSiteFooter() {
         ? { contacts: 'Контакти', info: 'Информация', about: 'За нас', address: 'Адрес', hours: 'Работно време', phone: 'Телефон', email: 'Имейл', terms: 'Условия', privacy: 'Политика за поверителност', poweredBy: 'Powered by:' }
         : { contacts: 'Contacts', info: 'Information', about: 'About us', address: 'Address', hours: 'Working hours', phone: 'Phone', email: 'Email', terms: 'Terms', privacy: 'Privacy policy', poweredBy: 'Powered by:' };
 
-    const openingTime = (siteWorkingHours?.openingTime || '').toString().trim();
-    const closingTime = (siteWorkingHours?.closingTime || '').toString().trim();
-    const hoursText = (openingTime && closingTime) ? `${openingTime} - ${closingTime}` : '';
+    function getWeekdayKeyInTimeZoneClient(timeZone, date = new Date()) {
+        const tz = (timeZone || 'Europe/Sofia').toString();
+        try {
+            const weekdayShort = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(date);
+            const map = { Mon: 'mon', Tue: 'tue', Wed: 'wed', Thu: 'thu', Fri: 'fri', Sat: 'sat', Sun: 'sun' };
+            return map[weekdayShort] || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function normalizeWorkingHoursConfigClient(raw) {
+        const timeZone = (raw?.timezone || raw?.timeZone || 'Europe/Sofia').toString().trim() || 'Europe/Sofia';
+        const legacyOpening = (raw?.openingTime || '09:00').toString().trim() || '09:00';
+        const legacyClosing = (raw?.closingTime || '22:00').toString().trim() || '22:00';
+        const legacyDay = { closed: false, openingTime: legacyOpening, closingTime: legacyClosing };
+        const weeklyIn = (raw && typeof raw.weekly === 'object' && raw.weekly) ? raw.weekly : null;
+        const keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+        const weekly = {};
+        keys.forEach(k => {
+            const d = weeklyIn ? weeklyIn[k] : null;
+            weekly[k] = {
+                closed: d?.closed === true,
+                openingTime: (d?.openingTime || legacyDay.openingTime).toString().trim() || legacyDay.openingTime,
+                closingTime: (d?.closingTime || legacyDay.closingTime).toString().trim() || legacyDay.closingTime
+            };
+        });
+        return { timezone: timeZone, weekly };
+    }
+
+    const wh = normalizeWorkingHoursConfigClient(siteWorkingHours || null);
+    const dayKey = getWeekdayKeyInTimeZoneClient(wh.timezone, new Date()) || 'mon';
+    const day = (wh.weekly && wh.weekly[dayKey]) ? wh.weekly[dayKey] : { closed: false, openingTime: '', closingTime: '' };
+    const openingTime = (day.openingTime || '').toString().trim();
+    const closingTime = (day.closingTime || '').toString().trim();
+    const hoursText = day.closed === true
+        ? (currentLanguage === 'bg' ? 'Затворено' : 'Closed')
+        : ((openingTime && closingTime) ? `${openingTime} - ${closingTime}` : '');
 
     const rawAddress = (contacts.address || '').toString().trim();
     const explicitMapsUrlRaw = (contacts.addressMapsUrl || '').toString().trim();
