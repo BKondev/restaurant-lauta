@@ -1002,6 +1002,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
         if (nav && isMobile) {
             nav.classList.add('collapsed');
+            document.body.classList.remove('admin-drawer-open');
             if (icon) {
                 icon.classList.add('fa-bars');
                 icon.classList.remove('fa-times');
@@ -1051,6 +1052,7 @@ function switchTab(tabName) {
         const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
         if (nav && isMobile) {
             nav.classList.add('collapsed');
+            document.body.classList.remove('admin-drawer-open');
             if (icon) {
                 icon.classList.add('fa-bars');
                 icon.classList.remove('fa-times');
