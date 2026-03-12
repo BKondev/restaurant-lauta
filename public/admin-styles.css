@@ -813,6 +813,11 @@ body.admin-drawer-open {
 
     .admin-header {
         display: flex;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
     }
 
     .admin-header .nav-toggle-btn {
@@ -957,7 +962,8 @@ body.admin-drawer-open {
     }
 
     .admin-tabs-content {
-        padding: 15px 10px;
+        /* Header is fixed on mobile; keep content below it. */
+        padding: calc(var(--admin-header-h, 56px) + 15px) 10px 15px;
     }
 }
 

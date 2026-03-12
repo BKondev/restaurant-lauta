@@ -993,6 +993,8 @@ function switchLanguage(lang) {
 document.addEventListener('DOMContentLoaded', () => {
     switchLanguage(currentLanguage);
 
+    try { updateAdminMobileNavOffset(); } catch (e) {}
+
     // Mobile: start with the menu collapsed (dropdown opens via the header toggle)
     try {
         const nav = document.getElementById('adminNav');
