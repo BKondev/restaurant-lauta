@@ -922,9 +922,11 @@ function extractCategories() {
         }
     });
     
-    // Add "Promotions" category if there are products with promotions
-    const hasPromoProducts = products.some(p => p.promo && (p.promo.isActive || p.promo.enabled));
-    if (hasPromoProducts && !specialCategories.includes('Promotions')) {
+    // Ensure "Promotions" exists and is pinned first when there are active promos or bundles.
+    const hasPromoProducts = products.some(p => isPromoActive(p?.promo));
+    const hasBundleProducts = products.some(p => p?.isCombo === true);
+    const shouldPinPromotions = hasPromoProducts || hasBundleProducts;
+    if (shouldPinPromotions && !specialCategories.includes('Promotions')) {
         specialCategories.push('Promotions');
     }
     
@@ -963,6 +965,14 @@ function extractCategories() {
         categories = ordered;
     } else {
         categories = computed;
+    }
+
+    // Force Promotions to render first (after "All") when deals exist.
+    if (shouldPinPromotions && Array.isArray(categories)) {
+        const idx = categories.indexOf('Promotions');
+        if (idx > 0) {
+            categories = ['Promotions', ...categories.slice(0, idx), ...categories.slice(idx + 1)];
+        }
     }
 }
 
@@ -1163,8 +1173,8 @@ function renderProducts() {
     // Filter by category
     if (currentCategory !== 'all') {
         if (currentCategory === 'Promotions') {
-            // Show all products with active promotions
-            filteredProducts = filteredProducts.filter(p => p.promo && (p.promo.isActive || p.promo.enabled));
+            // Show all deal items: active promos OR bundles/combos
+            filteredProducts = filteredProducts.filter(p => isPromoActive(p?.promo) || p?.isCombo === true);
         } else {
             // Show products in selected category OR products with promotions if category is Promotions
             filteredProducts = filteredProducts.filter(p => p.category === currentCategory);
