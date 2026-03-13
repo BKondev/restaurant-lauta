@@ -4802,7 +4802,6 @@ function sanitizeOrderItems(items) {
     return sanitized;
 }
 
-function recomputeOrderTotals(order) {
 function recomputeOrderTotals(order, db) {
     const items = Array.isArray(order.items) ? order.items : [];
     const subtotal = items.reduce((sum, it) => sum + (parseNumber(it.price, 0) * parseNumber(it.quantity, 0)), 0);
