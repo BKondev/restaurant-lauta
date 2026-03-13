@@ -262,6 +262,53 @@ function generateToken() {
     return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 
+function migrateRestaurantAuthDefaults() {
+    try {
+        const db = readDatabase();
+        if (!db || typeof db !== 'object') return;
+        if (!Array.isArray(db.restaurants) || db.restaurants.length === 0) return;
+
+        // LAUTA defaults requested by user
+        const targetId = 'rest_bojole_001';
+        const primaryUsername = 'lauta_admin';
+        const primaryPassword = 'lauta123';
+        const secondaryUsername = 'crystal';
+        const secondaryPassword = 'crystal123';
+
+        const restaurant = db.restaurants.find(r => r && r.id === targetId) || db.restaurants[0];
+        if (!restaurant || typeof restaurant !== 'object') return;
+
+        let changed = false;
+
+        if (restaurant.username !== primaryUsername) {
+            restaurant.username = primaryUsername;
+            changed = true;
+        }
+        if (restaurant.password !== primaryPassword) {
+            restaurant.password = primaryPassword;
+            changed = true;
+        }
+
+        if (!Array.isArray(restaurant.adminUsers)) {
+            restaurant.adminUsers = [];
+            changed = true;
+        }
+
+        const hasSecondary = restaurant.adminUsers.some(u => u && u.username === secondaryUsername);
+        if (!hasSecondary) {
+            restaurant.adminUsers.push({ username: secondaryUsername, password: secondaryPassword });
+            changed = true;
+        }
+
+        if (changed) {
+            writeDatabase(db);
+            console.log('[AUTH] Migrated restaurant auth defaults (primary + secondary admin).');
+        }
+    } catch (e) {
+        console.error('[AUTH] Failed to migrate auth defaults:', e?.message || e);
+    }
+}
+
 // Helper function to get restaurant by credentials
 function getRestaurantByCredentials(username, password) {
     console.log('[GET RESTAURANT] Called with username:', username);
@@ -269,11 +316,31 @@ function getRestaurantByCredentials(username, password) {
     console.log('[GET RESTAURANT] After readDatabase, db type:', typeof db);
     console.log('[GET RESTAURANT] Restaurants in database:', db.restaurants ? db.restaurants.length : 'NONE');
     if (db.restaurants) {
-        console.log('[GET RESTAURANT] First restaurant:', JSON.stringify(db.restaurants[0]));
+        const first = db.restaurants[0] || {};
+        console.log('[GET RESTAURANT] First restaurant:', JSON.stringify({
+            id: first.id,
+            name: first.name,
+            username: first.username,
+            active: first.active
+        }));
     }
-    const found = db.restaurants?.find(r => r.username === username && r.password === password);
-    console.log('[GET RESTAURANT] Found:', found ? found.name : 'NOT FOUND');
-    return found;
+
+    const u = (username ?? '').toString();
+    const p = (password ?? '').toString();
+    if (!u || !p) return null;
+
+    const direct = db.restaurants?.find(r => r && r.username === u && r.password === p);
+    if (direct) {
+        console.log('[GET RESTAURANT] Found (primary):', direct.name);
+        return direct;
+    }
+
+    const viaSecondary = db.restaurants?.find(r => {
+        const users = Array.isArray(r?.adminUsers) ? r.adminUsers : [];
+        return users.some(x => x && x.username === u && x.password === p);
+    });
+    console.log('[GET RESTAURANT] Found (secondary):', viaSecondary ? viaSecondary.name : 'NOT FOUND');
+    return viaSecondary || null;
 }
 
 // Helper function to get restaurant by API key
@@ -1275,6 +1342,7 @@ function isOrderForRestaurant(order, restaurantId, db) {
 
 // Initialize database on startup
 initDatabase();
+migrateRestaurantAuthDefaults();
 hydrateTokensFromDb();
 
 // ==================== API ROUTES ====================
