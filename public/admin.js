@@ -2009,7 +2009,24 @@ async function promptPromoConfig() {
         alert('Invalid percentage. Must be between 1 and 99.'); 
         return null; 
     }
-    return { discount, type: 'permanent' };
+
+    const wantsTimed = confirm('Timed promo? Click OK for timed (start/end), Cancel for permanent.');
+    if (!wantsTimed) {
+        return { discount, type: 'permanent' };
+    }
+
+    const startDate = (prompt('Start date/time (YYYY-MM-DDTHH:MM), e.g. 2026-03-20T10:00') || '').toString().trim();
+    const endDate = (prompt('End date/time (YYYY-MM-DDTHH:MM), e.g. 2026-03-27T22:00') || '').toString().trim();
+    if (!startDate || !endDate) {
+        alert('Start and end date are required for timed promos.');
+        return null;
+    }
+    if (new Date(endDate) <= new Date(startDate)) {
+        alert('End date must be after start date');
+        return null;
+    }
+
+    return { discount, type: 'timed', startDate, endDate };
 }
 
 async function applyBatchPromo(ids, promoConfig) {
@@ -2018,7 +2035,13 @@ async function applyBatchPromo(ids, promoConfig) {
         const res = await fetch(`${API_URL}/products/promo/batch`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ ids, discount: promoConfig.discount })
+            body: JSON.stringify({
+                ids,
+                discount: promoConfig.discount,
+                type: promoConfig.type,
+                startDate: promoConfig.startDate,
+                endDate: promoConfig.endDate
+            })
         });
         if (!res.ok) throw new Error('Batch promo failed');
         await loadProductsForSearch();
@@ -2032,7 +2055,12 @@ async function applyCategoryPromo(category, promoConfig) {
         const res = await fetch(`${API_URL}/products/promo/category/${encodeURIComponent(category)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ discount: promoConfig.discount })
+            body: JSON.stringify({
+                discount: promoConfig.discount,
+                type: promoConfig.type,
+                startDate: promoConfig.startDate,
+                endDate: promoConfig.endDate
+            })
         });
         if (!res.ok) throw new Error('Category promo failed');
         await loadProductsForSearch();
@@ -2053,6 +2081,8 @@ async function loadProducts() {
         renderProducts();
         updateCategoryFilter();
         updatePromoCodeCategoryDropdown();
+        try { updatePromoCodeProductsDropdown(); } catch (e) {}
+        try { onPromoCodeScopeChange(); } catch (e) {}
         updateManageCategoryDropdown();
     } catch (error) {
         console.error('Error loading products:', error);
@@ -5189,6 +5219,8 @@ async function loadPromoCodes() {
         promoCodes = await response.json();
         renderPromoCodes();
         updatePromoCodeCategoryDropdown();
+        try { updatePromoCodeProductsDropdown(); } catch (e) {}
+        try { onPromoCodeScopeChange(); } catch (e) {}
     } catch (error) {
         console.error('Error loading promo codes:', error);
     }
@@ -5197,6 +5229,7 @@ async function loadPromoCodes() {
 // Update promo code category dropdown
 function updatePromoCodeCategoryDropdown() {
     const select = document.getElementById('promo-code-category');
+    if (!select) return;
     const categories = [...new Set(products.map(p => p.category))].sort();
     
     const currentValue = select.value;
@@ -5214,6 +5247,51 @@ function updatePromoCodeCategoryDropdown() {
     }
 }
 
+function updatePromoCodeProductsDropdown() {
+    const select = document.getElementById('promo-code-products');
+    if (!select) return;
+
+    const currentSelected = new Set(Array.from(select.selectedOptions || []).map(o => String(o.value)));
+    const list = (products || []).slice().sort((a, b) => {
+        const an = (a?.name || '').toString().toLowerCase();
+        const bn = (b?.name || '').toString().toLowerCase();
+        return an.localeCompare(bn);
+    });
+
+    select.innerHTML = '';
+    list.forEach(p => {
+        if (!p || p.id === undefined || p.id === null) return;
+        const opt = document.createElement('option');
+        opt.value = String(p.id);
+        opt.textContent = `${p.name || ''} (#${p.id})`;
+        if (currentSelected.has(String(p.id))) opt.selected = true;
+        select.appendChild(opt);
+    });
+}
+
+function derivePromoScopeFromPromo(promo) {
+    const scope = (promo?.scope || '').toString().trim().toLowerCase();
+    if (scope === 'all' || scope === 'category' || scope === 'products') return scope;
+    const productIds = Array.isArray(promo?.productIds) ? promo.productIds : [];
+    if (productIds.length) return 'products';
+    const category = (promo?.category || 'all').toString();
+    return category && category !== 'all' ? 'category' : 'all';
+}
+
+function onPromoCodeScopeChange() {
+    const scopeSel = document.getElementById('promo-code-scope');
+    const scope = (scopeSel?.value || 'all').toString().trim().toLowerCase();
+
+    const catGroup = document.getElementById('promo-code-category-group');
+    const prodGroup = document.getElementById('promo-code-products-group');
+    if (catGroup) catGroup.style.display = scope === 'category' ? '' : 'none';
+    if (prodGroup) prodGroup.style.display = scope === 'products' ? '' : 'none';
+
+    if (scope === 'products') {
+        try { updatePromoCodeProductsDropdown(); } catch (e) {}
+    }
+}
+
 // Render promo codes table
 function renderPromoCodes() {
     const tbody = document.getElementById('promo-codes-table-body');
@@ -5221,12 +5299,34 @@ function renderPromoCodes() {
     if (promoCodes.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" style="text-align: center; padding: 20px; color: #999;">
+                <td colspan="7" style="text-align: center; padding: 20px; color: #999;">
                     ${t('noPromoCodesYet', 'No promo codes yet. Create one above!')}
                 </td>
             </tr>
         `;
         return;
+    }
+
+    function formatPromoDate(value) {
+        const s = (value || '').toString().trim();
+        if (!s) return '';
+        // Keep it compact and readable; datetime-local already looks like YYYY-MM-DDTHH:MM
+        return s.replace('T', ' ');
+    }
+
+    function renderTargetCell(promo) {
+        const scope = derivePromoScopeFromPromo(promo);
+        if (scope === 'all' || (promo.category || 'all') === 'all') {
+            return t('allProducts', 'All products');
+        }
+        if (scope === 'category') {
+            return promo.category || '—';
+        }
+        if (scope === 'products') {
+            const n = Array.isArray(promo.productIds) ? promo.productIds.length : 0;
+            return `${t('selectedProducts', 'Selected products')} (${n})`;
+        }
+        return '—';
     }
     
     tbody.innerHTML = promoCodes.map(promo => `
@@ -5234,8 +5334,8 @@ function renderPromoCodes() {
             <td data-label="${t('promoTableCode', 'Code')}">
                 <strong style="font-family: monospace; color: #667eea;">${promo.code}</strong>
             </td>
-            <td data-label="${t('promoTableCategory', 'Category')}">
-                <span class="product-category">${promo.category === 'all' ? t('allCategories', 'All Categories') : promo.category}</span>
+            <td data-label="${t('promoTableTarget', 'Target')}">
+                <span class="product-category">${escapeHtml(renderTargetCell(promo))}</span>
             </td>
             <td data-label="${t('promoTableDiscount', 'Discount')}">
                 <strong style="color: #e74c3c;">${promo.discount}% ${t('off', 'OFF')}</strong>
@@ -5246,6 +5346,16 @@ function renderPromoCodes() {
                     if (allowed === 'delivery') return t('methodDelivery', 'Delivery');
                     if (allowed === 'pickup') return t('methodPickup', 'Pickup');
                     return t('methodAll', 'All');
+                })()}</span>
+            </td>
+            <td data-label="${t('promoTableDates', 'Dates')}">
+                <span class="product-category">${(() => {
+                    const start = formatPromoDate(promo.startDate);
+                    const end = formatPromoDate(promo.endDate);
+                    if (!start && !end) return '—';
+                    if (start && end) return `${escapeHtml(start)} → ${escapeHtml(end)}`;
+                    if (start) return `${t('startDate', 'Start Date')}: ${escapeHtml(start)}`;
+                    return `${t('endDate', 'End Date')}: ${escapeHtml(end)}`;
                 })()}</span>
             </td>
             <td data-label="${t('promoTableStatus', 'Status')}">
@@ -5553,10 +5663,13 @@ function initPromoFlyersUI() {
 // Save promo code (add or edit)
 async function savePromoCode() {
     const code = document.getElementById('promo-code-input').value.trim().toUpperCase();
-    const category = document.getElementById('promo-code-category').value;
+    const scope = (document.getElementById('promo-code-scope')?.value || 'all').toString().trim().toLowerCase();
+    const category = document.getElementById('promo-code-category')?.value;
     const discount = parseFloat(document.getElementById('promo-code-discount').value);
     const isActive = document.getElementById('promo-code-active').value === 'true';
     const allowedMethod = (document.getElementById('promo-code-method')?.value || 'all').toString();
+    const startDate = (document.getElementById('promo-code-start')?.value || '').toString().trim();
+    const endDate = (document.getElementById('promo-code-end')?.value || '').toString().trim();
     
     if (!code) {
         alert(t('promoEnterCode', 'Please enter a promo code'));
@@ -5567,13 +5680,54 @@ async function savePromoCode() {
         alert(t('promoEnterDiscountRange', 'Please enter a discount between 1 and 100%'));
         return;
     }
+
+    if (startDate || endDate) {
+        if (!startDate || !endDate) {
+            alert(t('promoDatesBoth', 'Please set both start and end date'));
+            return;
+        }
+        if (new Date(endDate) <= new Date(startDate)) {
+            alert(t('promoDatesOrder', 'End date must be after start date'));
+            return;
+        }
+    }
+
+    let normalizedScope = (scope === 'all' || scope === 'category' || scope === 'products') ? scope : 'all';
+    let normalizedCategory = (category || 'all').toString();
+    let productIds = [];
+
+    if (normalizedScope === 'all') {
+        normalizedCategory = 'all';
+    }
+
+    if (normalizedScope === 'category') {
+        if (!normalizedCategory) normalizedCategory = 'all';
+        if (normalizedCategory === 'all') {
+            normalizedScope = 'all';
+        }
+    }
+
+    if (normalizedScope === 'products') {
+        const sel = document.getElementById('promo-code-products');
+        const ids = Array.from(sel?.selectedOptions || []).map(o => parseInt(String(o.value), 10)).filter(n => Number.isFinite(n));
+        productIds = Array.from(new Set(ids));
+        if (productIds.length === 0) {
+            alert(t('promoSelectProducts', 'Please select at least one product'));
+            return;
+        }
+        normalizedCategory = 'all';
+    }
     
     const promoData = {
         code,
-        category,
+        scope: normalizedScope,
+        category: normalizedCategory,
+        ...(normalizedScope === 'products' ? { productIds } : {}),
         discount,
         isActive,
-        allowedMethod
+        allowedMethod,
+        ...(startDate ? { startDate } : {}),
+        ...(endDate ? { endDate } : {})
     };
     
     try {
@@ -5624,11 +5778,32 @@ function editPromoCode(id) {
     editingPromoId = id;
     
     document.getElementById('promo-code-input').value = promo.code;
-    document.getElementById('promo-code-category').value = promo.category;
+    const scope = derivePromoScopeFromPromo(promo);
+    const scopeSel = document.getElementById('promo-code-scope');
+    if (scopeSel) scopeSel.value = scope;
+
+    onPromoCodeScopeChange();
+
+    const categorySel = document.getElementById('promo-code-category');
+    if (categorySel) categorySel.value = promo.category || 'all';
+
+    const prodSel = document.getElementById('promo-code-products');
+    if (prodSel) {
+        const idSet = new Set((Array.isArray(promo.productIds) ? promo.productIds : []).map(x => String(x)));
+        Array.from(prodSel.options || []).forEach(opt => {
+            opt.selected = idSet.has(String(opt.value));
+        });
+    }
+
     document.getElementById('promo-code-discount').value = promo.discount;
     document.getElementById('promo-code-active').value = promo.isActive.toString();
     const methodSelect = document.getElementById('promo-code-method');
     if (methodSelect) methodSelect.value = (promo.allowedMethod || 'all');
+
+    const startEl = document.getElementById('promo-code-start');
+    const endEl = document.getElementById('promo-code-end');
+    if (startEl) startEl.value = (promo.startDate || '');
+    if (endEl) endEl.value = (promo.endDate || '');
     
     document.getElementById('promo-submit-text').textContent = t('updatePromoCode', 'Update Promo Code');
     document.getElementById('cancel-promo-btn').style.display = 'inline-flex';
@@ -5668,13 +5843,30 @@ async function deletePromoCode(id) {
 function resetPromoForm() {
     editingPromoId = null;
     document.getElementById('promo-code-input').value = '';
-    document.getElementById('promo-code-category').value = 'all';
+    const scopeSel = document.getElementById('promo-code-scope');
+    if (scopeSel) scopeSel.value = 'all';
+
+    const catSel = document.getElementById('promo-code-category');
+    if (catSel) catSel.value = 'all';
+
+    const prodSel = document.getElementById('promo-code-products');
+    if (prodSel) {
+        Array.from(prodSel.options || []).forEach(opt => { opt.selected = false; });
+    }
+
     document.getElementById('promo-code-discount').value = '';
     const methodSelect = document.getElementById('promo-code-method');
     if (methodSelect) methodSelect.value = 'all';
     document.getElementById('promo-code-active').value = 'true';
+    const startEl = document.getElementById('promo-code-start');
+    const endEl = document.getElementById('promo-code-end');
+    if (startEl) startEl.value = '';
+    if (endEl) endEl.value = '';
+
     document.getElementById('promo-submit-text').textContent = t('addPromoCode', 'Add Promo Code');
     document.getElementById('cancel-promo-btn').style.display = 'none';
+
+    onPromoCodeScopeChange();
 }
 
 // Cancel promo code edit

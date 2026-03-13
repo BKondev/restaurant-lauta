@@ -769,7 +769,6 @@ function renderSiteFooter() {
 
     const contactLines = [
         rawAddress ? `<li><strong>${escapeHtml(labels.address)}:</strong> ${addressHtml}</li>` : '',
-        `<li><strong>${escapeHtml(labels.hours)}:</strong> ${weeklyHoursHtml}</li>`,
         contacts.phone ? `<li><strong>${escapeHtml(labels.phone)}:</strong> <a class="footer-contact-link" href="tel:${encodeURIComponent(String(contacts.phone))}">${escapeHtml(contacts.phone)}</a></li>` : '',
         contacts.email ? `<li><strong>${escapeHtml(labels.email)}:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${escapeHtml(contacts.email)}</a></li>` : ''
     ].filter(Boolean).join('');
@@ -816,6 +815,10 @@ function renderSiteFooter() {
                 <div class="footer-col">
                     <h3>${escapeHtml(labels.contacts)}</h3>
                     <ul>${contactLines || '<li>—</li>'}</ul>
+                </div>
+                <div class="footer-col">
+                    <h3>${escapeHtml(labels.hours)}</h3>
+                    <div>${weeklyHoursHtml || '—'}</div>
                 </div>
                 <div class="footer-col">
                     <h3>${escapeHtml(labels.info)}</h3>
@@ -1786,7 +1789,20 @@ function getEffectivePrice(product) {
     
     // Then apply promo code if applicable
     if (appliedPromoCode) {
-        if (appliedPromoCode.category === 'all' || appliedPromoCode.category === product.category) {
+        const scope = (appliedPromoCode.scope || '').toString().trim().toLowerCase();
+        const category = (appliedPromoCode.category || 'all').toString();
+
+        let applies = false;
+        if (!scope || scope === 'all' || category === 'all') {
+            applies = true;
+        } else if (scope === 'category') {
+            applies = (category === product.category);
+        } else if (scope === 'products') {
+            const ids = Array.isArray(appliedPromoCode.productIds) ? appliedPromoCode.productIds : [];
+            applies = ids.map(String).includes(String(product.id));
+        }
+
+        if (applies) {
             price = price * (1 - appliedPromoCode.discount / 100);
         }
     }
@@ -1808,22 +1824,30 @@ async function applyPromoCode() {
     }
     
     try {
-        // Validate against first product's category to test
         const response = await fetch(`${API_URL}/promo-codes/validate`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ code, category: 'all' })
+            body: JSON.stringify({ code })
         });
         
         const result = await response.json();
         
         if (result.valid) {
-            appliedPromoCode = result;
+            appliedPromoCode = {
+                code,
+                discount: result.discount,
+                scope: result.scope || ((result.category && result.category !== 'all') ? 'category' : 'all'),
+                category: result.category || 'all',
+                productIds: Array.isArray(result.productIds) ? result.productIds : [],
+                allowedMethod: result.allowedMethod || 'all',
+                startDate: result.startDate || null,
+                endDate: result.endDate || null
+            };
             message.style.display = 'block';
             message.style.color = '#27ae60';
-            message.innerHTML = `<i class="fas fa-check-circle"></i> Promo code applied! ${result.discount}% off ${result.category === 'all' ? 'all items' : result.category}`;
+            message.innerHTML = `<i class="fas fa-check-circle"></i> Promo code applied! ${result.discount}% off`;
             input.style.borderColor = '#27ae60';
             
             // Re-render products with new prices
@@ -1900,8 +1924,19 @@ function addToCartWithQuantity(productId, quantity) {
         discountLabel = (translations && translations[currentLanguage] && translations[currentLanguage].bundle) ? translations[currentLanguage].bundle : 'Bundle';
     } else if (isPromoActive(product.promo)) {
         discountLabel = (translations && translations[currentLanguage] && translations[currentLanguage].promo) ? translations[currentLanguage].promo : 'Promo';
-    } else if (appliedPromoCode && (appliedPromoCode.category === 'all' || appliedPromoCode.category === product.category) && effectivePrice < originalPrice) {
-        discountLabel = 'Promo code';
+    } else if (appliedPromoCode && effectivePrice < originalPrice) {
+        const scope = (appliedPromoCode.scope || '').toString().trim().toLowerCase();
+        const category = (appliedPromoCode.category || 'all').toString();
+        let applies = false;
+        if (!scope || scope === 'all' || category === 'all') {
+            applies = true;
+        } else if (scope === 'category') {
+            applies = category === product.category;
+        } else if (scope === 'products') {
+            const ids = Array.isArray(appliedPromoCode.productIds) ? appliedPromoCode.productIds : [];
+            applies = ids.map(String).includes(String(product.id));
+        }
+        if (applies) discountLabel = 'Promo code';
     }
 
     const existingItem = cart.find(item => item.id === productId);

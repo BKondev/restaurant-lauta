@@ -137,7 +137,6 @@
 
                 const contactLines = [
                     rawAddress ? `<li><strong>Address:</strong> ${addressHtml}</li>` : '',
-                    `<li><strong>Working hours:</strong> ${whWeeklyHtml}</li>`,
                     contacts.phone ? `<li><strong>Phone:</strong> <a class="footer-contact-link" href="tel:${encodeURIComponent(String(contacts.phone))}">${esc(contacts.phone)}</a></li>` : '',
                     contacts.email ? `<li><strong>Email:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${esc(contacts.email)}</a></li>` : ''
                 ].filter(Boolean).join('');
@@ -181,6 +180,10 @@
                             <div class="footer-col">
                                 <h3>Contacts</h3>
                                 <ul>${contactLines || '<li>—</li>'}</ul>
+                            </div>
+                            <div class="footer-col">
+                                <h3>Working hours</h3>
+                                <div>${whWeeklyHtml || '—'}</div>
                             </div>
                             <div class="footer-col">
                                 <h3>Information</h3>

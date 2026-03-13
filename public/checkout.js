@@ -27,7 +27,11 @@ function saveAppliedPromoState() {
         const payload = {
             code,
             discount: Number.isFinite(discount) ? discount : 0,
+            scope: (appliedPromo.scope || '').toString(),
             category: (appliedPromo.category || '').toString(),
+            productIds: Array.isArray(appliedPromo.productIds) ? appliedPromo.productIds : [],
+            startDate: appliedPromo.startDate || null,
+            endDate: appliedPromo.endDate || null,
             allowedMethod: (allowedMethod === 'delivery' || allowedMethod === 'pickup' || allowedMethod === 'all') ? allowedMethod : 'all'
         };
         localStorage.setItem(APPLIED_PROMO_STORAGE_KEY, JSON.stringify(payload));
@@ -60,9 +64,18 @@ function loadAppliedPromoState() {
         const restored = {
             code,
             discount: Number.isFinite(discount) ? discount : 0,
+            scope: (parsed.scope || '').toString().trim().toLowerCase(),
             category: (parsed.category || '').toString(),
+            productIds: Array.isArray(parsed.productIds) ? parsed.productIds : [],
+            startDate: parsed.startDate || null,
+            endDate: parsed.endDate || null,
             allowedMethod: (allowedMethod === 'delivery' || allowedMethod === 'pickup' || allowedMethod === 'all') ? allowedMethod : 'all'
         };
+
+        // Backward compatibility for older stored promos.
+        if (!(restored.scope === 'all' || restored.scope === 'category' || restored.scope === 'products')) {
+            restored.scope = (restored.category && restored.category !== 'all') ? 'category' : 'all';
+        }
 
         // If checkout state already has a selected delivery method, ensure the promo is compatible.
         const dm = (deliveryMethod || '').toString().trim().toLowerCase();
@@ -764,7 +777,6 @@ function renderSiteFooter() {
 
     const contactLines = [
         rawAddress ? `<li><strong>${escapeHtml(labels.address)}:</strong> ${addressHtml}</li>` : '',
-        `<li><strong>${escapeHtml(labels.hours)}:</strong> ${weeklyHoursHtml}</li>`,
         contacts.phone ? `<li><strong>${escapeHtml(labels.phone)}:</strong> <a class="footer-contact-link" href="tel:${encodeURIComponent(String(contacts.phone))}">${escapeHtml(contacts.phone)}</a></li>` : '',
         contacts.email ? `<li><strong>${escapeHtml(labels.email)}:</strong> <a href="mailto:${encodeURIComponent(contacts.email)}">${escapeHtml(contacts.email)}</a></li>` : ''
     ].filter(Boolean).join('');
@@ -811,6 +823,10 @@ function renderSiteFooter() {
                 <div class="footer-col">
                     <h3>${escapeHtml(labels.contacts)}</h3>
                     <ul>${contactLines || '<li>—</li>'}</ul>
+                </div>
+                <div class="footer-col">
+                    <h3>${escapeHtml(labels.hours)}</h3>
+                    <div>${weeklyHoursHtml || '—'}</div>
                 </div>
                 <div class="footer-col">
                     <h3>${escapeHtml(labels.info)}</h3>
@@ -2229,9 +2245,40 @@ function removeItem(productId) {
 function calculateTotals() {
     const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     let discount = 0;
+
+    function computeEligibleSubtotalForPromo(promo) {
+        if (!promo) return 0;
+        const scope = (promo.scope || '').toString().trim().toLowerCase();
+        const category = (promo.category || 'all').toString();
+
+        if (scope === 'all' || category === 'all' || !scope) {
+            return subtotal;
+        }
+
+        if (scope === 'category') {
+            const targetNorm = category.toLowerCase();
+            return cart.reduce((sum, item) => {
+                const itemCat = (item.category || '').toString().toLowerCase();
+                if (itemCat !== targetNorm) return sum;
+                return sum + (Number(item.price) * Number(item.quantity));
+            }, 0);
+        }
+
+        if (scope === 'products') {
+            const ids = Array.isArray(promo.productIds) ? promo.productIds : [];
+            const set = new Set(ids.map(x => String(x)));
+            return cart.reduce((sum, item) => {
+                if (!set.has(String(item.id))) return sum;
+                return sum + (Number(item.price) * Number(item.quantity));
+            }, 0);
+        }
+
+        return subtotal;
+    }
     
     if (appliedPromo) {
-        discount = subtotal * (appliedPromo.discount / 100);
+        const eligibleSubtotal = computeEligibleSubtotalForPromo(appliedPromo);
+        discount = eligibleSubtotal * (appliedPromo.discount / 100);
     }
     
     // Calculate delivery fee
@@ -2275,35 +2322,30 @@ async function applyPromoCode() {
         return;
     }
 
-    // Get all unique categories in cart
-    const categories = [...new Set(cart.map(item => item.category))];
+    // Provide cart context so the server can ensure the promo applies to at least 1 item.
+    const categories = [...new Set(cart.map(item => (item.category || '').toString()).filter(Boolean))];
+    const productIds = [...new Set(cart.map(item => item.id).filter(v => v !== undefined && v !== null))];
 
     try {
-        // Validate promo code for each category in cart
-        let validPromo = null;
-        
-        for (const category of categories) {
-            const response = await fetch(`${API_URL}/promo-codes/validate`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ code, category, deliveryMethod })
-            });
+        const response = await fetch(`${API_URL}/promo-codes/validate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ code, categories, productIds, deliveryMethod })
+        });
 
-            const data = await response.json();
+        const validPromo = await response.json();
 
-            if (data.valid) {
-                validPromo = data;
-                break;
-            }
-        }
-
-        if (validPromo) {
+        if (validPromo && validPromo.valid) {
             appliedPromo = {
                 code: code,
                 discount: validPromo.discount,
-                category: validPromo.category,
+                scope: validPromo.scope || ((validPromo.category && validPromo.category !== 'all') ? 'category' : 'all'),
+                category: validPromo.category || 'all',
+                productIds: Array.isArray(validPromo.productIds) ? validPromo.productIds : [],
+                startDate: validPromo.startDate || null,
+                endDate: validPromo.endDate || null,
                 allowedMethod: validPromo.allowedMethod || 'all'
             };
             saveAppliedPromoState();

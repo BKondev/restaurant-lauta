@@ -4060,6 +4060,85 @@ app.post(API_PREFIX + '/reset', requireAuth, (req, res) => {
 
 // ==================== PROMO CODE ROUTES ====================
 
+function normalizePromoCodeScope(promo) {
+    const scopeRaw = (promo?.scope || '').toString().trim().toLowerCase();
+    if (scopeRaw === 'all' || scopeRaw === 'category' || scopeRaw === 'products') return scopeRaw;
+
+    const productIds = Array.isArray(promo?.productIds) ? promo.productIds : [];
+    if (productIds.length) return 'products';
+
+    const category = (promo?.category || 'all').toString();
+    return category && category !== 'all' ? 'category' : 'all';
+}
+
+function normalizePromoCodeProductIds(value) {
+    if (!Array.isArray(value)) return [];
+    const ids = value
+        .map(v => {
+            if (typeof v === 'number') return v;
+            const n = parseInt(String(v), 10);
+            return Number.isFinite(n) ? n : NaN;
+        })
+        .filter(n => Number.isFinite(n));
+    return Array.from(new Set(ids)).slice(0, 5000);
+}
+
+function isPromoWindowActiveNow(promo, nowMs = Date.now()) {
+    const startRaw = (promo?.startDate || promo?.start || '').toString().trim();
+    const endRaw = (promo?.endDate || promo?.end || '').toString().trim();
+
+    const hasStart = !!startRaw;
+    const hasEnd = !!endRaw;
+    if (!hasStart && !hasEnd) return true;
+
+    const startMs = hasStart ? new Date(startRaw).getTime() : null;
+    const endMs = hasEnd ? new Date(endRaw).getTime() : null;
+    if (hasStart && !Number.isFinite(startMs)) return false;
+    if (hasEnd && !Number.isFinite(endMs)) return false;
+    if (hasStart && hasEnd && endMs < startMs) return false;
+
+    if (hasStart && nowMs < startMs) return false;
+    if (hasEnd && nowMs > endMs) return false;
+    return true;
+}
+
+function computePromoEligibleSubtotal(items, promo, db) {
+    const safeItems = Array.isArray(items) ? items : [];
+    if (!promo) return 0;
+    const scope = normalizePromoCodeScope(promo);
+    const category = (promo?.category || 'all').toString();
+    const categoryNorm = category.toLowerCase();
+    const productIds = normalizePromoCodeProductIds(promo?.productIds);
+    const productIdSet = new Set(productIds.map(String));
+
+    const products = Array.isArray(db?.products) ? db.products : [];
+    const productById = new Map(products.map(p => [String(p?.id), p]));
+
+    return safeItems.reduce((sum, it) => {
+        const line = (parseNumber(it?.price, 0) * parseNumber(it?.quantity, 0));
+        if (line <= 0) return sum;
+
+        if (scope === 'all' || category === 'all') {
+            return sum + line;
+        }
+
+        const id = it?.id;
+        const idStr = (id === undefined || id === null) ? '' : String(id);
+        const product = idStr ? productById.get(idStr) : null;
+        const itemCategory = (product?.category || it?.category || '').toString();
+        const itemCategoryNorm = itemCategory.toLowerCase();
+
+        if (scope === 'category') {
+            return itemCategoryNorm === categoryNorm ? (sum + line) : sum;
+        }
+        if (scope === 'products') {
+            return productIdSet.has(idStr) ? (sum + line) : sum;
+        }
+
+        return sum;
+    }, 0);
+}
+
 // Get all promo codes
 app.get(API_PREFIX + '/promo-codes', requireAuth, (req, res) => {
     const db = readDatabase();
@@ -4068,10 +4147,23 @@ app.get(API_PREFIX + '/promo-codes', requireAuth, (req, res) => {
 
 // Apply promo to batch of products
 app.put(API_PREFIX + '/products/promo/batch', requireAuth, (req, res) => {
-    const { ids, discount } = req.body || {};
+    const { ids, discount, type, startDate, endDate } = req.body || {};
     if (!Array.isArray(ids) || !discount || discount <= 0 || discount >= 100) {
         return res.status(400).json({ error: 'ids (array) and discount (1-99) required' });
     }
+
+    const promoTypeRaw = (type || 'permanent').toString().trim().toLowerCase();
+    const promoType = (promoTypeRaw === 'timed' || promoTypeRaw === 'permanent') ? promoTypeRaw : 'permanent';
+    const start = (startDate || '').toString().trim();
+    const end = (endDate || '').toString().trim();
+    if (promoType === 'timed') {
+        const startMs = new Date(start).getTime();
+        const endMs = new Date(end).getTime();
+        if (!start || !end || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+            return res.status(400).json({ error: 'Timed promo requires valid startDate and endDate (end after start)' });
+        }
+    }
+
     const db = readDatabase();
     let updated = 0;
     db.products = (db.products || []).map(p => {
@@ -4082,7 +4174,8 @@ app.put(API_PREFIX + '/products/promo/batch', requireAuth, (req, res) => {
                 isActive: true,
                 enabled: true,
                 price: Math.round(promoPrice * 100) / 100, // Round to 2 decimals
-                type: 'permanent'
+                type: promoType,
+                ...(promoType === 'timed' ? { startDate: start, endDate: end } : {})
             };
             updated++;
         }
@@ -4095,10 +4188,23 @@ app.put(API_PREFIX + '/products/promo/batch', requireAuth, (req, res) => {
 // Apply promo to all products in a category
 app.put(API_PREFIX + '/products/promo/category/:category', requireAuth, (req, res) => {
     const category = req.params.category;
-    const { discount } = req.body || {};
+    const { discount, type, startDate, endDate } = req.body || {};
     if (!category || !discount || discount <= 0 || discount >= 100) {
         return res.status(400).json({ error: 'category and discount (1-99) required' });
     }
+
+    const promoTypeRaw = (type || 'permanent').toString().trim().toLowerCase();
+    const promoType = (promoTypeRaw === 'timed' || promoTypeRaw === 'permanent') ? promoTypeRaw : 'permanent';
+    const start = (startDate || '').toString().trim();
+    const end = (endDate || '').toString().trim();
+    if (promoType === 'timed') {
+        const startMs = new Date(start).getTime();
+        const endMs = new Date(end).getTime();
+        if (!start || !end || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+            return res.status(400).json({ error: 'Timed promo requires valid startDate and endDate (end after start)' });
+        }
+    }
+
     const db = readDatabase();
     let updated = 0;
     db.products = (db.products || []).map(p => {
@@ -4109,7 +4215,8 @@ app.put(API_PREFIX + '/products/promo/category/:category', requireAuth, (req, re
                 isActive: true,
                 enabled: true,
                 price: Math.round(promoPrice * 100) / 100, // Round to 2 decimals
-                type: 'permanent'
+                type: promoType,
+                ...(promoType === 'timed' ? { startDate: start, endDate: end } : {})
             };
             updated++;
         }
@@ -4122,23 +4229,57 @@ app.put(API_PREFIX + '/products/promo/category/:category', requireAuth, (req, re
 // Validate promo code (public route for customers)
 app.post(API_PREFIX + '/promo-codes/validate', (req, res) => {
     const db = readDatabase();
-    const { code, category, deliveryMethod } = req.body;
+    const { code, category, categories, productIds, deliveryMethod } = req.body;
 
     const normalizedMethod = (deliveryMethod === 'delivery' || deliveryMethod === 'pickup') ? deliveryMethod : null;
     
+    const inCategory = (category || '').toString();
+    const inCategories = Array.isArray(categories) ? categories.map(c => (c || '').toString()) : [];
+    const inProductIds = normalizePromoCodeProductIds(productIds);
+
     const promoCode = (db.promoCodes || []).find(pc => {
         if (!pc) return false;
         const pcCode = (pc.code || '').toString().toLowerCase();
         const inCode = (code || '').toString().toLowerCase();
         if (!pcCode || !inCode || pcCode !== inCode) return false;
         if (!pc.isActive) return false;
-        if (!(pc.category === 'all' || pc.category === category)) return false;
+
+        if (!isPromoWindowActiveNow(pc)) return false;
 
         const allowed = (pc.allowedMethod || 'all').toString().trim().toLowerCase();
         if (allowed === 'delivery' || allowed === 'pickup') {
-            if (!normalizedMethod) return false;
-            if (allowed !== normalizedMethod) return false;
+            if (normalizedMethod && allowed !== normalizedMethod) return false;
         }
+
+        // Eligibility in cart: if caller provides category/categories/productIds, enforce target match.
+        const scope = normalizePromoCodeScope(pc);
+        const targetCategory = (pc.category || 'all').toString();
+        const targetCategoryNorm = targetCategory.toLowerCase();
+        const targetProductIds = normalizePromoCodeProductIds(pc.productIds);
+        const targetSet = new Set(targetProductIds.map(String));
+
+        if (scope === 'all' || targetCategory === 'all') {
+            return true;
+        }
+
+        if (scope === 'category') {
+            if (!inCategory && (!inCategories || inCategories.length === 0)) {
+                // Browse-mode validation
+                return true;
+            }
+            if (inCategory && inCategory.toLowerCase() === targetCategoryNorm) return true;
+            if (inCategories && inCategories.some(c => (c || '').toString().toLowerCase() === targetCategoryNorm)) return true;
+            return false;
+        }
+
+        if (scope === 'products') {
+            if (!inProductIds || inProductIds.length === 0) {
+                // Browse-mode validation
+                return true;
+            }
+            return inProductIds.some(pid => targetSet.has(String(pid)));
+        }
+
         return true;
     });
     
@@ -4146,8 +4287,12 @@ app.post(API_PREFIX + '/promo-codes/validate', (req, res) => {
         res.json({
             valid: true,
             discount: promoCode.discount,
-            category: promoCode.category,
-            allowedMethod: (promoCode.allowedMethod || 'all')
+            scope: normalizePromoCodeScope(promoCode),
+            category: (promoCode.category || 'all'),
+            productIds: normalizePromoCodeProductIds(promoCode.productIds),
+            allowedMethod: (promoCode.allowedMethod || 'all'),
+            startDate: promoCode.startDate || null,
+            endDate: promoCode.endDate || null
         });
     } else {
         res.json({ valid: false });
@@ -4159,13 +4304,34 @@ app.post(API_PREFIX + '/promo-codes', requireAuth, (req, res) => {
     const db = readDatabase();
     const allowedMethodRaw = (req.body.allowedMethod || 'all').toString().trim().toLowerCase();
     const allowedMethod = (allowedMethodRaw === 'delivery' || allowedMethodRaw === 'pickup' || allowedMethodRaw === 'all') ? allowedMethodRaw : 'all';
+    const scope = normalizePromoCodeScope(req.body);
+    const category = (req.body.category || 'all').toString();
+    const productIds = normalizePromoCodeProductIds(req.body.productIds);
+    const startDate = (req.body.startDate || '').toString().trim();
+    const endDate = (req.body.endDate || '').toString().trim();
+    if (startDate || endDate) {
+        const startMs = startDate ? new Date(startDate).getTime() : NaN;
+        const endMs = endDate ? new Date(endDate).getTime() : NaN;
+        if ((startDate && !Number.isFinite(startMs)) || (endDate && !Number.isFinite(endMs)) || (startDate && endDate && endMs <= startMs)) {
+            return res.status(400).json({ error: 'Invalid start/end date range' });
+        }
+    }
+
+    if (scope === 'products' && productIds.length === 0) {
+        return res.status(400).json({ error: 'productIds required for products-scoped promo codes' });
+    }
+
     const newPromoCode = {
         id: Date.now(),
         code: req.body.code.toUpperCase(),
-        category: req.body.category,
+        scope,
+        category,
+        ...(scope === 'products' ? { productIds } : {}),
         discount: parseFloat(req.body.discount),
         isActive: req.body.isActive !== undefined ? req.body.isActive : true,
         allowedMethod,
+        ...(startDate ? { startDate } : {}),
+        ...(endDate ? { endDate } : {}),
         createdAt: new Date().toISOString()
     };
     
@@ -4239,6 +4405,7 @@ app.post(API_PREFIX + '/promo-codes/bulk', requireAuth, (req, res) => {
         const newPromoCode = {
             id: Date.now() + i,
             code,
+            scope: (category && category !== 'all') ? 'category' : 'all',
             category,
             discount: parseFloat(discount),
             isActive,
@@ -4265,13 +4432,36 @@ app.put(API_PREFIX + '/promo-codes/:id', requireAuth, (req, res) => {
     if (index !== -1) {
         const allowedMethodRaw = (req.body.allowedMethod || 'all').toString().trim().toLowerCase();
         const allowedMethod = (allowedMethodRaw === 'delivery' || allowedMethodRaw === 'pickup' || allowedMethodRaw === 'all') ? allowedMethodRaw : 'all';
+
+        const scope = normalizePromoCodeScope(req.body);
+        const category = (req.body.category || 'all').toString();
+        const productIds = normalizePromoCodeProductIds(req.body.productIds);
+        const startDate = (req.body.startDate || '').toString().trim();
+        const endDate = (req.body.endDate || '').toString().trim();
+
+        if (scope === 'products' && productIds.length === 0) {
+            return res.status(400).json({ error: 'productIds required for products-scoped promo codes' });
+        }
+
+        if (startDate || endDate) {
+            const startMs = startDate ? new Date(startDate).getTime() : NaN;
+            const endMs = endDate ? new Date(endDate).getTime() : NaN;
+            if ((startDate && !Number.isFinite(startMs)) || (endDate && !Number.isFinite(endMs)) || (startDate && endDate && endMs <= startMs)) {
+                return res.status(400).json({ error: 'Invalid start/end date range' });
+            }
+        }
+
         db.promoCodes[index] = {
             id: parseInt(req.params.id),
             code: req.body.code.toUpperCase(),
-            category: req.body.category,
+            scope,
+            category,
+            ...(scope === 'products' ? { productIds } : {}),
             discount: parseFloat(req.body.discount),
             isActive: req.body.isActive,
             allowedMethod,
+            ...(startDate ? { startDate } : {}),
+            ...(endDate ? { endDate } : {}),
             createdAt: db.promoCodes[index].createdAt,
             updatedAt: new Date().toISOString()
         };
@@ -4613,15 +4803,43 @@ function sanitizeOrderItems(items) {
 }
 
 function recomputeOrderTotals(order) {
+function recomputeOrderTotals(order, db) {
     const items = Array.isArray(order.items) ? order.items : [];
     const subtotal = items.reduce((sum, it) => sum + (parseNumber(it.price, 0) * parseNumber(it.quantity, 0)), 0);
-    const discountPercent = Math.max(0, Math.min(100, parseNumber(order.discount, 0)));
-    const discountAmount = subtotal * (discountPercent / 100);
+
+    let discountPercent = Math.max(0, Math.min(100, parseNumber(order.discount, 0)));
+    let discountBaseSubtotal = Number.isFinite(parseNumber(order.discountBaseSubtotal, NaN))
+        ? Math.max(0, parseNumber(order.discountBaseSubtotal, 0))
+        : subtotal;
+
+    const promoCodeNormalized = (order?.promoCode || '').toString().trim().toLowerCase();
+    const method = (order?.deliveryType || order?.deliveryMethod || '').toString().trim().toLowerCase();
+    const normalizedMethod = (method === 'delivery' || method === 'pickup') ? method : null;
+
+    if (db && promoCodeNormalized) {
+        const promo = (db.promoCodes || []).find(pc => (pc?.code || '').toString().trim().toLowerCase() === promoCodeNormalized);
+        if (promo && promo.isActive && isPromoWindowActiveNow(promo)) {
+            const allowed = (promo.allowedMethod || 'all').toString().trim().toLowerCase();
+            if (!normalizedMethod || allowed === 'all' || allowed === normalizedMethod) {
+                discountPercent = Math.max(0, Math.min(100, parseNumber(promo.discount, 0)));
+                discountBaseSubtotal = computePromoEligibleSubtotal(items, promo, db);
+                order.discountScope = normalizePromoCodeScope(promo);
+                order.discountCategory = (promo.category || 'all');
+                order.discountProductIds = normalizePromoCodeProductIds(promo.productIds);
+            }
+        }
+    }
+
+    if (!Number.isFinite(discountBaseSubtotal) || discountBaseSubtotal < 0) discountBaseSubtotal = 0;
+    if (discountBaseSubtotal > subtotal) discountBaseSubtotal = subtotal;
+
+    const discountAmount = discountBaseSubtotal * (discountPercent / 100);
     const deliveryFee = Math.max(0, parseNumber(order.deliveryFee, 0));
     const total = Math.max(0, subtotal - discountAmount + deliveryFee);
 
     order.subtotal = roundMoneyEUR(subtotal);
     order.discount = discountPercent;
+    order.discountBaseSubtotal = roundMoneyEUR(discountBaseSubtotal);
     order.discountAmount = roundMoneyEUR(discountAmount);
     order.deliveryFee = roundMoneyEUR(deliveryFee);
     order.total = roundMoneyEUR(total);
@@ -5426,7 +5644,6 @@ app.post(API_PREFIX + '/orders', (req, res) => {
 
         // Be tolerant of legacy/alternate clients.
         const promoCodeAny = promoCode ?? req.body?.promo_code ?? req.body?.couponCode ?? req.body?.coupon_code;
-        const discountAny = discount ?? req.body?.discountPercent ?? req.body?.discount_percent;
         const totalAny = total ?? req.body?.totalAmount ?? req.body?.total_amount;
         
         // Get restaurant ID from body or X-Restaurant-Id header.
@@ -5609,7 +5826,7 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             restaurantName: restaurant.name,
             items: sanitizedItems,
             promoCode: (promoCodeAny || '').toString().trim() || undefined,
-            discount: Math.max(0, Math.min(100, parseNumber(discountAny, 0))),
+            discount: 0,
             total: parseNumber(totalAny, 0),
             reprintRequested: false,
             // Keep existing field for backward compatibility across UI surfaces
@@ -5630,21 +5847,37 @@ app.post(API_PREFIX + '/orders', (req, res) => {
             trackingExpiry: trackingExpiry.toISOString()
         };
 
-        // Enforce promo allowedMethod server-side (method restriction only).
+        // Enforce promo validity server-side (active + date window + method + target eligibility).
         const promoCodeNormalized = (newOrder.promoCode || '').toString().trim().toLowerCase();
         if (promoCodeNormalized) {
             const promo = (data.promoCodes || []).find(pc => (pc?.code || '').toString().trim().toLowerCase() === promoCodeNormalized);
-            if (promo && promo.isActive) {
-                const allowed = (promo.allowedMethod || 'all').toString().trim().toLowerCase();
-                if ((allowed === 'delivery' || allowed === 'pickup') && allowed !== normalizedDeliveryMethod) {
-                    return res.status(400).json({
-                        error: 'Promo code not valid for delivery method',
-                        message: 'Promo code is not allowed for this delivery method',
-                        allowedMethod: allowed,
-                        deliveryMethod: normalizedDeliveryMethod
-                    });
-                }
+            if (!promo || !promo.isActive || !isPromoWindowActiveNow(promo)) {
+                return res.status(400).json({
+                    error: 'Invalid promo code',
+                    message: 'Promo code is invalid or expired'
+                });
             }
+
+            const allowed = (promo.allowedMethod || 'all').toString().trim().toLowerCase();
+            if ((allowed === 'delivery' || allowed === 'pickup') && allowed !== normalizedDeliveryMethod) {
+                return res.status(400).json({
+                    error: 'Promo code not valid for delivery method',
+                    message: 'Promo code is not allowed for this delivery method',
+                    allowedMethod: allowed,
+                    deliveryMethod: normalizedDeliveryMethod
+                });
+            }
+
+            const eligibleSubtotal = computePromoEligibleSubtotal(sanitizedItems, promo, data);
+            if (!(eligibleSubtotal > 0)) {
+                return res.status(400).json({
+                    error: 'Promo code not applicable',
+                    message: 'Promo code does not apply to the items in your cart'
+                });
+            }
+
+            newOrder.discount = Math.max(0, Math.min(100, parseNumber(promo.discount, 0)));
+            newOrder.discountBaseSubtotal = eligibleSubtotal;
         }
 
         // Enforce delivery fee/free-delivery server-side (do not trust client-provided deliveryFee).
@@ -5658,7 +5891,7 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         }
 
         // Ensure totals are consistent server-side (and rounded correctly).
-        recomputeOrderTotals(newOrder);
+        recomputeOrderTotals(newOrder, data);
 
         // Enforce minimum order amount per fulfillment method (server-side)
         let effectiveMinAmount = getEffectiveMinimumOrderAmount(orderSettings, normalizedDeliveryMethod);
@@ -5976,7 +6209,7 @@ app.put(API_PREFIX + '/orders/:id', requireAuthOrApiKey, async (req, res) => {
         }
 
         // Always recompute totals after any edits
-        recomputeOrderTotals(order);
+        recomputeOrderTotals(order, data);
 
         // Ако статусът е 'approved'
         if (hasStatusUpdate && normalizedStatus === 'approved' && previousStatus !== 'approved') {

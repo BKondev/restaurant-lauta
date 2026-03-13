@@ -898,11 +898,29 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="promo-code-scope"><span data-translate="applyTo">Apply To</span>:</label>
+                    <select id="promo-code-scope" onchange="onPromoCodeScopeChange()">
+                        <option value="all" data-translate="promoScopeAll">All products</option>
+                        <option value="category" data-translate="promoScopeCategory">Category</option>
+                        <option value="products" data-translate="promoScopeProducts">Selected products</option>
+                    </select>
+                    <small data-translate="promoScopeHelp">Choose where the discount applies</small>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" id="promo-code-category-group" style="display: none;">
                     <label for="promo-code-category"><span data-translate="applyToCategory">Apply to Category</span>:</label>
                     <select id="promo-code-category">
                         <option value="all" data-translate="allCategories">All Categories</option>
                     </select>
                     <small data-translate="promoCategoryHelp">Promo code will apply only to items in this category</small>
+                </div>
+
+                <div class="form-group" id="promo-code-products-group" style="display: none;">
+                    <label for="promo-code-products"><span data-translate="selectProducts">Select Products</span>:</label>
+                    <select id="promo-code-products" multiple size="6" style="min-height: 140px;"></select>
+                    <small data-translate="selectProductsHelp">Hold Ctrl/Cmd to select multiple products</small>
                 </div>
             </div>
 
@@ -931,6 +949,18 @@
                 </div>
             </div>
 
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="promo-code-start"><span data-translate="startDate">Start Date</span>:</label>
+                    <input type="datetime-local" id="promo-code-start">
+                </div>
+
+                <div class="form-group">
+                    <label for="promo-code-end"><span data-translate="endDate">End Date</span>:</label>
+                    <input type="datetime-local" id="promo-code-end">
+                </div>
+            </div>
+
             <div class="form-actions">
                 <button onclick="savePromoCode()" class="btn btn-success" id="save-promo-btn">
                     <i class="fas fa-plus"></i> <span id="promo-submit-text" data-translate="addPromoCode">Add Promo Code</span>
@@ -946,16 +976,17 @@
                     <thead>
                         <tr>
                             <th data-translate="promoTableCode">Code</th>
-                            <th data-translate="promoTableCategory">Category</th>
+                            <th data-translate="promoTableTarget">Target</th>
                             <th data-translate="promoTableDiscount">Discount</th>
                             <th data-translate="promoTableMethod">Method</th>
+                            <th data-translate="promoTableDates">Dates</th>
                             <th data-translate="promoTableStatus">Status</th>
                             <th data-translate="actions">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="promo-codes-table-body">
                         <tr>
-                            <td colspan="6" style="text-align: center; padding: 20px; color: #999;">
+                            <td colspan="7" style="text-align: center; padding: 20px; color: #999;">
                                 <span data-translate="noPromoCodesYet">No promo codes yet. Create one above!</span>
                             </td>
                         </tr>
