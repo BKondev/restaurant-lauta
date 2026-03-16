@@ -238,6 +238,27 @@ function nowMinutesOfDay() {
     return now.getHours() * 60 + now.getMinutes();
 }
 
+function nowMinutesOfDayInTimeZoneClient(timeZone, date = new Date()) {
+    const tz = (timeZone || 'Europe/Sofia').toString();
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: tz,
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).formatToParts(date);
+
+        const hourStr = parts.find(p => p.type === 'hour')?.value;
+        const minuteStr = parts.find(p => p.type === 'minute')?.value;
+        const h = parseInt(hourStr || '', 10);
+        const m = parseInt(minuteStr || '', 10);
+        if (!Number.isFinite(h) || !Number.isFinite(m)) return nowMinutesOfDay();
+        return (h * 60) + m;
+    } catch (e) {
+        return nowMinutesOfDay();
+    }
+}
+
 function isMinutesWithinWindow(nowMinutes, openMinutes, closeMinutes) {
     if (!Number.isFinite(nowMinutes) || !Number.isFinite(openMinutes) || !Number.isFinite(closeMinutes)) return false;
     if (openMinutes === closeMinutes) return false;
@@ -283,6 +304,17 @@ function getWeekdayKeyInTimeZoneClient(timeZone, date = new Date()) {
     }
 }
 
+function getDayKeyByWeekdayOffsetClient(todayKey, offsetDays) {
+    const offset = Number(offsetDays) || 0;
+    const idx = WORKING_HOURS_DAY_KEYS.indexOf(todayKey);
+    if (idx < 0) {
+        const normalized = ((offset % 7) + 7) % 7;
+        return WORKING_HOURS_DAY_KEYS[normalized] || 'mon';
+    }
+    const normalized = ((idx + offset) % 7 + 7) % 7;
+    return WORKING_HOURS_DAY_KEYS[normalized] || todayKey;
+}
+
 function normalizeWorkingHoursConfigClient(raw) {
     const timeZone = (raw?.timezone || raw?.timeZone || 'Europe/Sofia').toString().trim() || 'Europe/Sofia';
     const legacyOpening = (raw?.openingTime || '09:00').toString().trim() || '09:00';
@@ -314,25 +346,14 @@ function getWorkingHoursDayForNow() {
     return { timezone: tz, dayKey: key, ...day };
 }
 
-function getDayKeyByOffsetClient(timeZone, startDate, offsetDays) {
-    const base = startDate instanceof Date ? startDate : new Date();
-    const d = new Date(base);
-    d.setDate(d.getDate() + (Number(offsetDays) || 0));
-    const key = getWeekdayKeyInTimeZoneClient(timeZone, d);
-    if (key) return key;
-    const localMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-    const idx = d.getDay();
-    return localMap[idx] || 'mon';
-}
-
 function getNextOpenInfoClient() {
     const cfg = normalizeWorkingHoursConfigClient(siteWorkingHours || null);
     const tz = cfg.timezone || 'Europe/Sofia';
     const nowDate = new Date();
-    const todayKey = getWeekdayKeyInTimeZoneClient(tz, nowDate) || getDayKeyByOffsetClient(tz, nowDate, 0);
+    const todayKey = getWeekdayKeyInTimeZoneClient(tz, nowDate) || 'mon';
     const todayCfg = cfg.weekly?.[todayKey] || { closed: false, openingTime: '09:00', closingTime: '22:00' };
 
-    const now = nowMinutesOfDay();
+    const now = nowMinutesOfDayInTimeZoneClient(tz, nowDate);
 
     if (todayCfg.closed !== true) {
         const open = parseHHMMToMinutes(todayCfg.openingTime) ?? (9 * 60);
@@ -351,7 +372,7 @@ function getNextOpenInfoClient() {
     }
 
     for (let offset = 1; offset <= 7; offset++) {
-        const key = getDayKeyByOffsetClient(tz, nowDate, offset);
+        const key = getDayKeyByWeekdayOffsetClient(todayKey, offset);
         const dayCfg = cfg.weekly?.[key] || { closed: false, openingTime: '09:00', closingTime: '22:00' };
         if (dayCfg.closed === true) continue;
         const open = parseHHMMToMinutes(dayCfg.openingTime) ?? (9 * 60);
@@ -380,7 +401,7 @@ function getStorefrontClosedReason() {
 
     const open = parseHHMMToMinutes(day.openingTime) ?? (9 * 60);
     const close = parseHHMMToMinutes(day.closingTime) ?? (22 * 60);
-    const now = nowMinutesOfDay();
+    const now = nowMinutesOfDayInTimeZoneClient(day.timezone || 'Europe/Sofia', new Date());
 
     const within = isMinutesWithinWindow(now, open, close);
     if (within) return null;
