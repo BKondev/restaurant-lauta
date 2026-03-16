@@ -269,16 +269,21 @@ function migrateRestaurantAuthDefaults() {
         if (!Array.isArray(db.restaurants) || db.restaurants.length === 0) return;
 
         // LAUTA defaults requested by user
-        const targetId = 'rest_bojole_001';
+        const desiredId = 'rest_lauta_002';
         const primaryUsername = 'lauta_admin';
         const primaryPassword = 'lauta123';
         const secondaryUsername = 'crystal';
         const secondaryPassword = 'crystal123';
 
-        const restaurant = db.restaurants.find(r => r && r.id === targetId) || db.restaurants[0];
+        const restaurant = db.restaurants.find(r => r && r.id === desiredId) || db.restaurants[0];
         if (!restaurant || typeof restaurant !== 'object') return;
 
         let changed = false;
+
+        if (restaurant.id !== desiredId) {
+            restaurant.id = desiredId;
+            changed = true;
+        }
 
         if (restaurant.username !== primaryUsername) {
             restaurant.username = primaryUsername;
@@ -663,11 +668,11 @@ function initDatabase() {
             },
             restaurants: [
                 {
-                    id: "rest_bojole_001",
+                    id: "rest_lauta_002",
                     name: "Restaurant Lauta",
                     username: "lauta_admin",
                     password: "lauta123", // In production: hash with bcrypt
-                    apiKey: "bojole_api_key_12345",
+                    apiKey: "lauta_api_key_12345",
                     address: "София, бул. Витоша 100",
                     phone: "+359888123456",
                     email: "contact@restaurant-lauta.bg",
@@ -1479,8 +1484,7 @@ app.get(API_PREFIX + '/admin/apk', requireAuth, (req, res) => {
             return res.status(404).json({ error: 'APK not configured' });
         }
 
-        const safeId = String(req.restaurantId || 'restaurant').replace(/[^A-Za-z0-9_.-]+/g, '_');
-        const filename = `konkar-${safeId}.apk`;
+        const filename = 'konkar-2.0.32-vc34-lauta.apk';
         return res.download(apkPath, filename);
     } catch (e) {
         console.error('Error downloading APK:', e);

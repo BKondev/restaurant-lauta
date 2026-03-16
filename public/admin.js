@@ -1482,9 +1482,13 @@ async function downloadApk() {
             // Some deployments serve the APK as a static file only.
             // Fallback keeps the UX working even if the API endpoint isn't available.
             if (res.status === 404) {
+                const host = (window.location.hostname || '').toString().toLowerCase();
+                const fallbackName = host.includes('bojole')
+                    ? 'konkar-2.0.32-vc34-bojole.apk'
+                    : (host.includes('lauta') ? 'konkar-2.0.32-vc34-lauta.apk' : 'konkar.apk');
                 const a = document.createElement('a');
                 a.href = `${BASE_PATH}/apk/restaurant.apk`;
-                a.download = 'restaurant.apk';
+                a.download = fallbackName;
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
