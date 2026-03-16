@@ -1234,6 +1234,7 @@ function getActiveRestaurantForPublicRequest(db, req) {
 
 function getDefaultSiteSettings() {
     return {
+        theme: 'classic',
         search: { mode: 'names_and_descriptions' },
         map: { enabled: false, lat: null, lng: null, zoom: 16, label: '' },
         email: { webmailUrl: '' },
@@ -1250,6 +1251,9 @@ function getDefaultSiteSettings() {
 function normalizeSiteSettings(input) {
     const base = getDefaultSiteSettings();
     const src = input && typeof input === 'object' ? input : {};
+
+    const themeRaw = (src.theme || base.theme).toString().trim().toLowerCase();
+    const theme = (themeRaw === 'modern' || themeRaw === 'classic') ? themeRaw : base.theme;
 
     const toFiniteNumberOrNull = (value) => {
         if (value === null || value === undefined) return null;
@@ -1335,7 +1339,7 @@ function normalizeSiteSettings(input) {
 
     const categories = { order, labels };
 
-    return { search: { mode }, map, email, categories, footer, legal };
+    return { theme, search: { mode }, map, email, categories, footer, legal };
 }
 
 function isOrderForRestaurant(order, restaurantId, db) {

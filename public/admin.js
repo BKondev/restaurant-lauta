@@ -100,6 +100,10 @@ const translations = {
         namesAndDescriptions: 'Names + Descriptions',
         namesOnly: 'Names only',
         searchModeHelp: 'Controls which fields are searchable in the storefront.',
+        siteTheme: 'Storefront theme',
+        siteThemeClassic: 'Classic',
+        siteThemeModern: 'Modern',
+        siteThemeHelp: 'Choose between the existing classic theme and a new modern theme.',
         categoriesManager: 'Categories',
         categoriesManagerHelp: 'Rename and reorder categories shown on the storefront.',
         saveCategories: 'Save categories',
@@ -565,6 +569,10 @@ const translations = {
         namesAndDescriptions: 'Имена + Описания',
         namesOnly: 'Само имена',
         searchModeHelp: 'Определя кои полета са търсими в магазина.',
+        siteTheme: 'Тема на магазина',
+        siteThemeClassic: 'Класическа',
+        siteThemeModern: 'Модерна',
+        siteThemeHelp: 'Изберете между текущата класическа тема и нова модерна тема.',
         categoriesManager: 'Категории',
         categoriesManagerHelp: 'Преименувайте и подредете категориите в магазина.',
         saveCategories: 'Запази категориите',
@@ -2256,6 +2264,9 @@ async function loadSiteSettings() {
         const modeEl = document.getElementById('site-search-mode');
         if (modeEl) modeEl.value = data?.search?.mode === 'names_only' ? 'names_only' : 'names_and_descriptions';
 
+        const themeEl = document.getElementById('site-theme');
+        if (themeEl) themeEl.value = data?.theme === 'modern' ? 'modern' : 'classic';
+
         const webmailUrlEl = document.getElementById('site-webmail-url');
         if (webmailUrlEl) webmailUrlEl.value = data?.email?.webmailUrl || '';
 
@@ -2328,6 +2339,7 @@ async function updateSiteSettings() {
         const categoriesDraft = collectCategoriesDraftFromDom();
 
         const mode = (document.getElementById('site-search-mode')?.value || 'names_and_descriptions').toString();
+        const theme = (document.getElementById('site-theme')?.value || 'classic').toString();
         const webmailUrl = (document.getElementById('site-webmail-url')?.value || '').toString();
         const phone = (document.getElementById('site-footer-phone')?.value || '').toString();
         const email = (document.getElementById('site-footer-email')?.value || '').toString();
@@ -2374,6 +2386,7 @@ async function updateSiteSettings() {
         const termsHtml = (document.getElementById('site-terms-html')?.value || '').toString();
 
         const payload = {
+            theme: theme === 'modern' ? 'modern' : 'classic',
             search: { mode: mode === 'names_only' ? 'names_only' : 'names_and_descriptions' },
             map: {
                 enabled: mapEnabled,
@@ -2435,6 +2448,7 @@ async function saveCategoriesOnly() {
         const baseline = baselineRes.ok ? await baselineRes.json().catch(() => ({})) : {};
 
         const payload = {
+            theme: (baseline?.theme === 'modern') ? 'modern' : 'classic',
             search: (baseline?.search && typeof baseline.search === 'object') ? baseline.search : { mode: 'names_and_descriptions' },
             map: (baseline?.map && typeof baseline.map === 'object') ? baseline.map : { enabled: false },
             email: (baseline?.email && typeof baseline.email === 'object') ? baseline.email : {},

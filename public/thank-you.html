@@ -4,7 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Thank you</title>
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('siteTheme');
+        if (t === 'modern') document.documentElement.classList.add('theme-modern');
+      } catch (e) {}
+    })();
+  </script>
+  <script src="theme-loader.js?v=20260316a" defer></script>
   <link rel="stylesheet" href="styles.css?v=20260313a">
+  <link rel="stylesheet" href="styles-modern.css?v=20260316a">
   <style>
     body { background: var(--background-color); }
     .thankyou-wrap { max-width: 820px; margin: 26px auto; padding: 0 16px; }
