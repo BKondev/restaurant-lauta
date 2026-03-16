@@ -104,6 +104,9 @@ const translations = {
         siteThemeClassic: 'Classic',
         siteThemeModern: 'Modern',
         siteThemeHelp: 'Choose between the existing classic theme and a new modern theme.',
+        siteFavicon: 'Favicon',
+        siteFaviconHelp: 'Upload a .ico or .png favicon used in the browser tab.',
+        upload: 'Upload',
         categoriesManager: 'Categories',
         categoriesManagerHelp: 'Rename and reorder categories shown on the storefront.',
         saveCategories: 'Save categories',
@@ -573,6 +576,9 @@ const translations = {
         siteThemeClassic: 'Класическа',
         siteThemeModern: 'Модерна',
         siteThemeHelp: 'Изберете между текущата класическа тема и нова модерна тема.',
+        siteFavicon: 'Фавикон',
+        siteFaviconHelp: 'Качете .ico или .png фавикон (иконата в таба на браузъра).',
+        upload: 'Качи',
         categoriesManager: 'Категории',
         categoriesManagerHelp: 'Преименувайте и подредете категориите в магазина.',
         saveCategories: 'Запази категориите',
@@ -2267,6 +2273,18 @@ async function loadSiteSettings() {
         const themeEl = document.getElementById('site-theme');
         if (themeEl) themeEl.value = data?.theme === 'modern' ? 'modern' : 'classic';
 
+        const favPreview = document.getElementById('site-favicon-preview');
+        if (favPreview) {
+            const fav = (data?.faviconUrl || '').toString().trim();
+            if (fav) {
+                favPreview.src = fav.startsWith('/') ? `${BASE_PATH}${fav}` : fav;
+                favPreview.style.display = 'inline-block';
+            } else {
+                favPreview.removeAttribute('src');
+                favPreview.style.display = 'none';
+            }
+        }
+
         const webmailUrlEl = document.getElementById('site-webmail-url');
         if (webmailUrlEl) webmailUrlEl.value = data?.email?.webmailUrl || '';
 
@@ -2316,6 +2334,56 @@ async function loadSiteSettings() {
         try { renderCategoriesManager(); } catch (e) {}
     } catch (e) {
         console.error('Error loading site settings:', e);
+    }
+}
+
+async function uploadFavicon() {
+    try {
+        const token = getAdminToken();
+        if (!token) {
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        const input = document.getElementById('site-favicon-file');
+        const file = input && input.files && input.files[0];
+        if (!file) {
+            alert(t('siteFaviconHelp', 'Upload a .ico or .png favicon used in the browser tab.'));
+            return;
+        }
+
+        const fd = new FormData();
+        fd.append('favicon', file);
+
+        const res = await fetch(`${API_URL}/settings/site/favicon`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: fd
+        });
+
+        if (res.status === 401) {
+            alert(t('sessionExpired', 'Session expired. Please login again.'));
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            alert(data.error || 'Failed to upload favicon');
+            return;
+        }
+
+        // Refresh site settings draft + preview
+        await loadSiteSettings();
+
+        try {
+            if (input) input.value = '';
+        } catch (e) {}
+
+        alert(t('siteSettingsSaved', 'Site content saved successfully!'));
+    } catch (e) {
+        console.error('Error uploading favicon:', e);
+        alert('Failed to upload favicon');
     }
 }
 
@@ -2387,6 +2455,7 @@ async function updateSiteSettings() {
 
         const payload = {
             theme: theme === 'modern' ? 'modern' : 'classic',
+            faviconUrl: (siteSettingsDraft?.faviconUrl || '').toString(),
             search: { mode: mode === 'names_only' ? 'names_only' : 'names_and_descriptions' },
             map: {
                 enabled: mapEnabled,
@@ -2426,6 +2495,12 @@ async function updateSiteSettings() {
             return;
         }
 
+        const saved = await res.json().catch(() => null);
+        if (saved && typeof saved === 'object') {
+            siteSettingsDraft = saved;
+            siteCategoriesDraft = normalizeCategoriesDraft(saved?.categories);
+        }
+
         alert(t('siteSettingsSaved', 'Site content saved successfully!'));
     } catch (e) {
         console.error('Error saving site settings:', e);
@@ -2449,6 +2524,7 @@ async function saveCategoriesOnly() {
 
         const payload = {
             theme: (baseline?.theme === 'modern') ? 'modern' : 'classic',
+            faviconUrl: (baseline?.faviconUrl || '').toString(),
             search: (baseline?.search && typeof baseline.search === 'object') ? baseline.search : { mode: 'names_and_descriptions' },
             map: (baseline?.map && typeof baseline.map === 'object') ? baseline.map : { enabled: false },
             email: (baseline?.email && typeof baseline.email === 'object') ? baseline.email : {},

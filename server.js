@@ -486,6 +486,41 @@ const upload = multer({
     }
 });
 
+// Favicon upload (allows .ico in addition to normal images)
+const faviconStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, UPLOADS_DIR);
+    },
+    filename: function (req, file, cb) {
+        const original = (file?.originalname || '').toString();
+        const mime = (file?.mimetype || '').toString().toLowerCase();
+        let ext = path.extname(original).toLowerCase();
+        if (!ext) {
+            if (mime === 'image/png') ext = '.png';
+            else if (mime === 'image/jpeg') ext = '.jpg';
+            else if (mime === 'image/webp') ext = '.webp';
+            else if (mime === 'image/gif') ext = '.gif';
+            else if (mime.includes('icon') || mime.includes('x-icon')) ext = '.ico';
+            else ext = '.png';
+        }
+        cb(null, `favicon${ext}`);
+    }
+});
+
+const uploadFavicon = multer({
+    storage: faviconStorage,
+    limits: { fileSize: 1 * 1024 * 1024 }, // 1MB
+    fileFilter: function (req, file, cb) {
+        const original = (file?.originalname || '').toString().toLowerCase();
+        const mime = (file?.mimetype || '').toString().toLowerCase();
+        const ext = path.extname(original).toLowerCase();
+        const okExt = ['.ico', '.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext) || !ext;
+        const okMime = mime.startsWith('image/') || mime.includes('icon') || mime.includes('x-icon');
+        if (okExt && okMime) return cb(null, true);
+        cb(new Error('Only favicon image files are allowed (.ico, .png, .jpg, .webp, .gif)'));
+    }
+});
+
 // Bulk product image upload: filename base must match product id (e.g. 1.jpg -> id 1)
 const productImageStorage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -1235,6 +1270,7 @@ function getActiveRestaurantForPublicRequest(db, req) {
 function getDefaultSiteSettings() {
     return {
         theme: 'classic',
+        faviconUrl: '',
         search: { mode: 'names_and_descriptions' },
         map: { enabled: false, lat: null, lng: null, zoom: 16, label: '' },
         email: { webmailUrl: '' },
@@ -1254,6 +1290,15 @@ function normalizeSiteSettings(input) {
 
     const themeRaw = (src.theme || base.theme).toString().trim().toLowerCase();
     const theme = (themeRaw === 'modern' || themeRaw === 'classic') ? themeRaw : base.theme;
+
+    const faviconRaw = normalizeText(src.faviconUrl, 320);
+    let faviconUrl = '';
+    if (faviconRaw) {
+        const clean = faviconRaw.split('#')[0].trim();
+        if (/^\/uploads\/favicon\.(ico|png|jpe?g|gif|webp)(\?v=\d+)?$/i.test(clean)) {
+            faviconUrl = clean;
+        }
+    }
 
     const toFiniteNumberOrNull = (value) => {
         if (value === null || value === undefined) return null;
@@ -1339,7 +1384,7 @@ function normalizeSiteSettings(input) {
 
     const categories = { order, labels };
 
-    return { theme, search: { mode }, map, email, categories, footer, legal };
+    return { theme, faviconUrl, search: { mode }, map, email, categories, footer, legal };
 }
 
 function isOrderForRestaurant(order, restaurantId, db) {
@@ -3918,6 +3963,56 @@ app.put(API_PREFIX + '/settings/site', requireAuth, (req, res) => {
         console.error('Error updating site settings:', error);
         res.status(500).json({ error: 'Failed to update site settings' });
     }
+});
+
+// Upload/update favicon (admin only)
+app.post(API_PREFIX + '/settings/site/favicon', requireAuth, (req, res) => {
+    uploadFavicon.single('favicon')(req, res, (err) => {
+        try {
+            if (err) {
+                return res.status(400).json({ error: err.message || 'Invalid favicon upload' });
+            }
+
+            if (!req.file) {
+                return res.status(400).json({ error: 'Missing favicon file' });
+            }
+
+            const db = readDatabase();
+            const restaurant = db.restaurants?.find(r => r.id === req.restaurantId);
+            if (!restaurant) {
+                return res.status(404).json({ error: 'Restaurant not found' });
+            }
+
+            const allowedExt = ['.ico', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+            const ext = path.extname(req.file.filename).toLowerCase();
+            const safeExt = allowedExt.includes(ext) ? ext : '.ico';
+
+            // Remove any previous favicon files with other extensions
+            for (const e of allowedExt) {
+                if (e === safeExt) continue;
+                try {
+                    fs.unlinkSync(path.join(UPLOADS_DIR, `favicon${e}`));
+                } catch (e2) {
+                    // ignore
+                }
+            }
+
+            const v = Date.now();
+            const faviconUrl = `/uploads/favicon${safeExt}?v=${v}`;
+
+            const current = normalizeSiteSettings(restaurant.siteSettings);
+            restaurant.siteSettings = normalizeSiteSettings({ ...current, faviconUrl });
+
+            if (!writeDatabase(db)) {
+                return res.status(500).json({ error: 'Failed to save favicon setting' });
+            }
+
+            return res.json({ ok: true, faviconUrl: restaurant.siteSettings.faviconUrl });
+        } catch (e) {
+            console.error('Error uploading favicon:', e);
+            return res.status(500).json({ error: 'Failed to upload favicon' });
+        }
+    });
 });
 
 // Update customization settings

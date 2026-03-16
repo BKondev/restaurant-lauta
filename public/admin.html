@@ -323,6 +323,18 @@
                 <small data-translate="siteThemeHelp">Choose between the existing classic theme and a new modern theme.</small>
             </div>
 
+            <div class="form-group">
+                <label for="site-favicon-file"><span data-translate="siteFavicon">Favicon</span>:</label>
+                <div class="form-row" style="align-items: center; gap: 12px;">
+                    <input type="file" id="site-favicon-file" accept="image/x-icon,image/png,.ico,.png" />
+                    <button type="button" onclick="uploadFavicon()" class="btn btn-secondary" style="white-space: nowrap;">
+                        <i class="fas fa-upload"></i> <span data-translate="upload">Upload</span>
+                    </button>
+                    <img id="site-favicon-preview" alt="Favicon" style="display:none; width: 24px; height: 24px; border-radius: 6px; border: 1px solid #eee;" />
+                </div>
+                <small data-translate="siteFaviconHelp">Upload a .ico or .png favicon used in the browser tab.</small>
+            </div>
+
             <hr style="margin: 18px 0; border: none; border-top: 1px solid #eee;" />
 
             <h3 style="margin: 0 0 10px;"><i class="fas fa-list"></i> <span data-translate="categoriesManager">Categories</span></h3>
