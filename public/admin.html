@@ -875,6 +875,14 @@
 
                 <div class="form-group">
                     <label class="checkbox-label">
+                        <input type="checkbox" id="auto-approve-orders">
+                        <span data-translate="autoApproveOrders">Auto-approve new orders</span>
+                    </label>
+                    <small style="color: #666; display: block; margin-top: 5px;" data-translate="autoApproveOrdersHelp">When enabled, new cash orders (including "Later") are auto-approved and printed immediately.</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
                         <input type="checkbox" id="restaurant-temporarily-closed">
                         <span data-translate="restaurantTemporarilyClosed">Temporarily close restaurant</span>
                     </label>
@@ -1660,7 +1668,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="vendor/jszip.min.js"></script>
-    <script src="admin.js?v=20260316c"></script>
+    <script src="admin.js?v=20260316e"></script>
 </body>
 </html>
 

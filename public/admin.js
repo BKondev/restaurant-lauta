@@ -174,6 +174,8 @@ const translations = {
         restaurantTemporarilyClosedHelp: 'Shows a warning banner and blocks checkout ordering.',
         enablePickup: 'Enable Pickup',
         enablePickupHelp: 'When disabled, customers cannot place pickup orders.',
+        autoApproveOrders: 'Auto-approve new orders',
+        autoApproveOrdersHelp: 'When enabled, new cash orders (including "Later") are auto-approved and printed immediately.',
         saveOrderSettings: 'Save Order Settings',
 
         openingTimeHelp: 'Restaurant opening time for pickup orders',
@@ -635,6 +637,8 @@ const translations = {
         restaurantTemporarilyClosedHelp: 'Показва предупреждение и блокира поръчките.',
         enablePickup: 'Разреши взимане от място',
         enablePickupHelp: 'Когато е изключено, клиентите не могат да правят поръчки за взимане.',
+        autoApproveOrders: 'Автоматично приемай нови поръчки',
+        autoApproveOrdersHelp: 'Когато е включено, нови поръчки в брой (включително "По-късно") се одобряват автоматично и се печатат веднага.',
         saveOrderSettings: 'Запази Настройките на Поръчки',
 
         openingTimeHelp: 'Час на отваряне за поръчки с вземане',
@@ -4241,6 +4245,7 @@ async function updateOrderSettings() {
         minimumOrderPickupEnabled: document.getElementById('minimum-order-pickup-enabled')?.checked === true,
         minimumOrderPickupAmount: parseFloat(document.getElementById('minimum-order-pickup-amount')?.value) || 0,
         allowOrderLater: document.getElementById('allow-order-later')?.checked !== false,
+        autoApproveOrders: document.getElementById('auto-approve-orders')?.checked === true,
         temporarilyClosed: document.getElementById('restaurant-temporarily-closed')?.checked === true,
         pickupEnabled: document.getElementById('pickup-enabled')?.checked !== false
     };
@@ -4285,6 +4290,9 @@ async function loadOrderSettings() {
 
         const allowLaterEl = document.getElementById('allow-order-later');
         if (allowLaterEl) allowLaterEl.checked = settings.allowOrderLater !== false;
+
+        const autoApproveEl = document.getElementById('auto-approve-orders');
+        if (autoApproveEl) autoApproveEl.checked = settings.autoApproveOrders === true;
 
         const tempClosedEl = document.getElementById('restaurant-temporarily-closed');
         if (tempClosedEl) tempClosedEl.checked = settings.temporarilyClosed === true;

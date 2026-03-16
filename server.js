@@ -3913,7 +3913,8 @@ app.get(API_PREFIX + '/settings/order', (req, res) => {
         minimumOrderPickupAmount: 0,
         allowOrderLater: true,
         temporarilyClosed: false,
-        pickupEnabled: true
+        pickupEnabled: true,
+        autoApproveOrders: false
     };
 
     const merged = {
@@ -3981,7 +3982,10 @@ app.put(API_PREFIX + '/settings/order', requireAuth, (req, res) => {
         minimumOrderPickupAmount: pickupAmount,
         allowOrderLater: req.body.allowOrderLater !== false,
         temporarilyClosed: req.body.temporarilyClosed === true,
-        pickupEnabled: req.body.pickupEnabled !== false
+        pickupEnabled: req.body.pickupEnabled !== false,
+        autoApproveOrders: req.body.autoApproveOrders !== undefined
+            ? (req.body.autoApproveOrders === true)
+            : (db.orderSettings?.autoApproveOrders === true)
     };
     
     if (writeDatabase(db)) {
@@ -6105,9 +6109,86 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         newOrder.paymentMethod = newOrder.payment.method;
         newOrder.paymentStatus = newOrder.payment.status;
 
+        const shouldAutoApprove = orderSettings.autoApproveOrders === true
+            && newOrder.status === 'pending';
+
+        if (shouldAutoApprove) {
+            const nowIso = new Date().toISOString();
+            newOrder.status = 'approved';
+            newOrder.approvedAt = newOrder.approvedAt || nowIso;
+            newOrder.updatedAt = nowIso;
+        }
+
         data.orders.push(newOrder);
         if (!writeDatabase(data)) {
             return res.status(500).json({ error: 'Failed to persist order' });
+        }
+
+        if (shouldAutoApprove) {
+            // Fire-and-forget: reuse the same side-effects as manual approval.
+            setImmediate(() => {
+                try {
+                    const printerNormalized = normalizePrinterConfig(restaurant?.printer);
+                    const printerCfg = printerNormalized.ok
+                        ? printerNormalized.value
+                        : { enabled: false, ip: '', port: 9100, autoPrintOnApproved: true, printPickup: true, allowAutoDiscovery: false };
+
+                    const method = (newOrder.deliveryMethod || newOrder.deliveryType || '').toString();
+                    const isPickup = method === 'pickup';
+                    const hasTargetPrinter = !!printerCfg.ip || printerCfg.allowAutoDiscovery;
+                    const shouldPrint = printerCfg.enabled && printerCfg.autoPrintOnApproved && hasTargetPrinter && (!isPickup || printerCfg.printPickup);
+
+                    if (shouldPrint) {
+                        const printerTarget = printerCfg.ip ? { ip: printerCfg.ip, port: printerCfg.port } : null;
+                        printOrder(newOrder, printerTarget)
+                            .then(printResult => {
+                                if (printResult.success) {
+                                    console.log('Order auto-approved and printed successfully to:', printResult.printer);
+                                } else {
+                                    console.error('Auto-approved order print failed:', printResult.error);
+                                }
+                            })
+                            .catch(err => console.error('Auto-approved order print error:', err));
+                    }
+
+                    // Email customer on approval (non-blocking)
+                    try {
+                        sendOrderStatusEmail(newOrder, 'approved')
+                            .then(() => console.log('[EMAIL] auto-approved order email attempted:', newOrder.id))
+                            .catch(err => console.error('[EMAIL] auto-approved order email failed:', err));
+                    } catch (e) {
+                        console.error('[EMAIL] auto-approved order email error:', e);
+                    }
+                } catch (e) {
+                    console.error('Error processing auto-approved order side-effects:', e);
+                }
+            });
+
+            if ((newOrder.deliveryMethod || newOrder.deliveryType) === 'delivery') {
+                setImmediate(() => {
+                    (async () => {
+                        try {
+                            const deliveryResult = await sendToDeliveryService(newOrder, { eurToBgnRate: data?.currencySettings?.eurToBgnRate });
+
+                            if (!deliveryResult.success) {
+                                console.error('Failed to send auto-approved order to delivery service:', deliveryResult.error);
+                                return;
+                            }
+
+                            const db2 = readDatabase();
+                            const idx = (db2.orders || []).findIndex(o => o && o.id === newOrder.id);
+                            if (idx === -1) return;
+
+                            db2.orders[idx].deliveryServiceId = deliveryResult.deliveryId;
+                            db2.orders[idx].deliveryClientId = deliveryResult.clientId;
+                            db2.orders[idx].updatedAt = new Date().toISOString();
+                            writeDatabase(db2);
+                        } catch (err) {
+                            console.error('Auto-approved delivery service error:', err);
+                        }
+                    })();
+                });
+            }
         }
 
         // Fire-and-forget emails (don't block checkout)
