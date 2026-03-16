@@ -16,6 +16,7 @@ function Require-Command([string]$name) {
 
 Require-Command git
 Require-Command ssh
+Require-Command scp
 
 function Convert-GithubHttpsToSsh([string]$url) {
     if (-not $url) { return $url }
@@ -198,6 +199,7 @@ run_fs mkdir -p "$PRESERVE_DIR"
 [ -f database.json ] && run_fs cp database.json "$PRESERVE_DIR/" || true
 [ -f .env ] && run_fs cp .env "$PRESERVE_DIR/" || true
 [ -d uploads ] && run_fs cp -r uploads "$PRESERVE_DIR/" || true
+[ -f public/apk/restaurant.apk ] && run_fs sh -lc "mkdir -p '$PRESERVE_DIR/apk'" && run_fs cp public/apk/restaurant.apk "$PRESERVE_DIR/apk/restaurant.apk" || true
 
 # Pull latest code
 echo "  Fetching latest code..."
@@ -209,6 +211,7 @@ echo "  Restoring production data..."
 [ -f "$PRESERVE_DIR/database.json" ] && run_fs cp "$PRESERVE_DIR/database.json" . || true
 [ -f "$PRESERVE_DIR/.env" ] && run_fs cp "$PRESERVE_DIR/.env" . || true
 [ -d "$PRESERVE_DIR/uploads" ] && run_fs cp -r "$PRESERVE_DIR/uploads" . || true
+[ -f "$PRESERVE_DIR/apk/restaurant.apk" ] && run_fs sh -lc "mkdir -p 'public/apk'" && run_fs cp "$PRESERVE_DIR/apk/restaurant.apk" public/apk/restaurant.apk || true
 
 # Install dependencies
 echo "  Installing dependencies..."
@@ -340,6 +343,52 @@ $remoteScript = $remoteScript -replace "`r`n", "`n"
 $remoteScript = $remoteScript -replace "`r", "`n"
 
 $remoteScript | ssh -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 "$ServerUser@$ServerIp" "bash -s"
+
+# Step 3: Upload APK (best-effort; required for the admin 'Download APK' button)
+$apkPath = ""
+if ($restaurantId -eq "rest_bojole_001") {
+        $apkPath = "C:\Users\User\Desktop\konkar-2.0.32-vc34-bojole.apk"
+} elseif ($restaurantId -eq "rest_lauta_002") {
+        $apkPath = "C:\Users\User\Desktop\konkar-2.0.32-vc34-lauta.apk"
+}
+
+if ($apkPath -and (Test-Path $apkPath)) {
+        Write-Host "`nStep 3: Upload APK to server" -ForegroundColor Green
+        $remoteTmp = "apk-upload-$restaurantId.apk"
+        Write-Host "  Uploading $apkPath -> ~/$remoteTmp" -ForegroundColor Yellow
+        scp "$apkPath" "$ServerUser@$ServerIp`:~/$remoteTmp"
+
+    $remoteApkScript = @'
+set -e
+DEPLOY_DIR="{DEPLOY_DIR}"
+SRC="$HOME/{REMOTE_TMP}"
+DST="$DEPLOY_DIR/public/apk/restaurant.apk"
+
+if [ ! -f "$SRC" ]; then
+  echo "ERROR: Uploaded APK missing: $SRC" >&2
+  exit 1
+fi
+
+if command -v sudo >/dev/null 2>&1; then
+  sudo -n mkdir -p "$DEPLOY_DIR/public/apk"
+  sudo -n mv "$SRC" "$DST"
+  sudo -n chmod 0644 "$DST" || true
+else
+  mkdir -p "$DEPLOY_DIR/public/apk"
+  mv "$SRC" "$DST"
+  chmod 0644 "$DST" || true
+fi
+
+echo "✓ APK uploaded to $DST"
+'@
+
+    $remoteApkScript = $remoteApkScript.Replace("{DEPLOY_DIR}", $targetDir).Replace("{REMOTE_TMP}", $remoteTmp)
+    $remoteApkScript = $remoteApkScript -replace "`r`n", "`n"
+    $remoteApkScript = $remoteApkScript -replace "`r", "`n"
+    $remoteApkScript | ssh -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 "$ServerUser@$ServerIp" "bash -s"
+} else {
+        Write-Host "`nWARN: Local APK not found; skipping APK upload: $apkPath" -ForegroundColor Yellow
+}
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`n========================================" -ForegroundColor Green

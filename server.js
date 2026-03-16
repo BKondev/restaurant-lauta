@@ -1471,6 +1471,23 @@ app.get(API_PREFIX + '/restaurants/me', requireAuthOrApiKey, (req, res) => {
     }
 });
 
+// Admin: download the restaurant APK (Bearer token required)
+app.get(API_PREFIX + '/admin/apk', requireAuth, (req, res) => {
+    try {
+        const apkPath = path.join(__dirname, 'public', 'apk', 'restaurant.apk');
+        if (!fs.existsSync(apkPath)) {
+            return res.status(404).json({ error: 'APK not configured' });
+        }
+
+        const safeId = String(req.restaurantId || 'restaurant').replace(/[^A-Za-z0-9_.-]+/g, '_');
+        const filename = `konkar-${safeId}.apk`;
+        return res.download(apkPath, filename);
+    } catch (e) {
+        console.error('Error downloading APK:', e);
+        return res.status(500).json({ error: 'Failed to download APK' });
+    }
+});
+
 // Restaurant API key (admin only; Bearer token required)
 app.get(API_PREFIX + '/restaurants/me/api-key', requireAuth, (req, res) => {
     try {

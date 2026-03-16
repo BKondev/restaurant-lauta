@@ -13,6 +13,7 @@ let siteCategoriesDraft = { order: [], labels: {} };
 const translations = {
     en: {
         adminPanel: 'Admin Panel',
+        downloadApk: 'Download APK',
         logout: 'Logout',
         pendingOrders: 'Pending Orders',
         allOrders: 'All Orders',
@@ -473,6 +474,7 @@ const translations = {
     },
     bg: {
         adminPanel: 'Админ Панел',
+        downloadApk: 'Свали APK',
         logout: 'Изход',
         pendingOrders: 'Чакащи Поръчки',
         allOrders: 'Всички Поръчки',
@@ -1457,6 +1459,50 @@ async function ensureAuthOrRedirect() {
 function logout() {
     clearAdminToken();
     window.location.href = `${BASE_PATH}/login`;
+}
+
+async function downloadApk() {
+    const ok = await ensureAuthOrRedirect();
+    if (!ok) return;
+
+    const token = getAdminToken();
+    if (!token) {
+        alert(t('sessionExpired', 'Session expired. Please login again.'));
+        window.location.href = `${BASE_PATH}/login`;
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/admin/apk`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+            const msg = res.status === 404
+                ? (currentLanguage === 'bg' ? 'APK файлът не е наличен.' : 'APK file is not available.')
+                : (currentLanguage === 'bg' ? 'Грешка при изтегляне на APK.' : 'Failed to download APK.');
+            alert(msg);
+            return;
+        }
+
+        const blob = await res.blob();
+        const cd = (res.headers.get('content-disposition') || '').toString();
+        const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
+        const filename = decodeURIComponent((m && (m[1] || m[2])) ? (m[1] || m[2]) : 'restaurant.apk');
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (e) {
+        console.error('downloadApk failed', e);
+        alert(currentLanguage === 'bg' ? 'Грешка при изтегляне на APK.' : 'Failed to download APK.');
+    }
 }
 
 // Load data on page load
