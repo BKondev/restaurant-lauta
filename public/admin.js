@@ -176,6 +176,8 @@ const translations = {
         enablePickupHelp: 'When disabled, customers cannot place pickup orders.',
         autoApproveOrders: 'Auto-approve new orders',
         autoApproveOrdersHelp: 'When enabled, new cash orders (including "Later") are auto-approved and printed immediately.',
+        autoApproveCardPayments: 'Auto-approve card payments',
+        autoApproveCardPaymentsHelp: 'When enabled, successful card payments are auto-approved and printed immediately.',
         saveOrderSettings: 'Save Order Settings',
 
         openingTimeHelp: 'Restaurant opening time for pickup orders',
@@ -639,6 +641,8 @@ const translations = {
         enablePickupHelp: 'Когато е изключено, клиентите не могат да правят поръчки за взимане.',
         autoApproveOrders: 'Автоматично приемай нови поръчки',
         autoApproveOrdersHelp: 'Когато е включено, нови поръчки в брой (включително "По-късно") се одобряват автоматично и се печатат веднага.',
+        autoApproveCardPayments: 'Автоматично приемай картови плащания',
+        autoApproveCardPaymentsHelp: 'Когато е включено, успешните картови плащания се одобряват автоматично и се печатат веднага.',
         saveOrderSettings: 'Запази Настройките на Поръчки',
 
         openingTimeHelp: 'Час на отваряне за поръчки с вземане',
@@ -4246,6 +4250,7 @@ async function updateOrderSettings() {
         minimumOrderPickupAmount: parseFloat(document.getElementById('minimum-order-pickup-amount')?.value) || 0,
         allowOrderLater: document.getElementById('allow-order-later')?.checked !== false,
         autoApproveOrders: document.getElementById('auto-approve-orders')?.checked === true,
+        autoApproveCardPayments: document.getElementById('auto-approve-card-payments')?.checked === true,
         temporarilyClosed: document.getElementById('restaurant-temporarily-closed')?.checked === true,
         pickupEnabled: document.getElementById('pickup-enabled')?.checked !== false
     };
@@ -4293,6 +4298,9 @@ async function loadOrderSettings() {
 
         const autoApproveEl = document.getElementById('auto-approve-orders');
         if (autoApproveEl) autoApproveEl.checked = settings.autoApproveOrders === true;
+
+        const autoApproveCardEl = document.getElementById('auto-approve-card-payments');
+        if (autoApproveCardEl) autoApproveCardEl.checked = settings.autoApproveCardPayments !== false;
 
         const tempClosedEl = document.getElementById('restaurant-temporarily-closed');
         if (tempClosedEl) tempClosedEl.checked = settings.temporarilyClosed === true;

@@ -1925,6 +1925,71 @@ function handleBoricaReturn(req, res) {
         const post = (req.body && typeof req.body === 'object') ? req.body : {};
         const looksLikeCgiReturn = !!(post.P_SIGN || post.RC || post.ACTION || post.ORDER);
 
+        function triggerAutoApprovedSideEffects(order, restaurant, eurToBgnRate) {
+            setImmediate(() => {
+                try {
+                    const printerNormalized = normalizePrinterConfig(restaurant?.printer);
+                    const printerCfg = printerNormalized.ok
+                        ? printerNormalized.value
+                        : { enabled: false, ip: '', port: 9100, autoPrintOnApproved: true, printPickup: true, allowAutoDiscovery: false };
+
+                    const method = (order.deliveryMethod || order.deliveryType || '').toString();
+                    const isPickup = method === 'pickup';
+                    const hasTargetPrinter = !!printerCfg.ip || printerCfg.allowAutoDiscovery;
+                    const shouldPrint = printerCfg.enabled && printerCfg.autoPrintOnApproved && hasTargetPrinter && (!isPickup || printerCfg.printPickup);
+
+                    if (shouldPrint) {
+                        const printerTarget = printerCfg.ip ? { ip: printerCfg.ip, port: printerCfg.port } : null;
+                        printOrder(order, printerTarget)
+                            .then(printResult => {
+                                if (printResult.success) {
+                                    console.log('Card payment order auto-approved and printed successfully to:', printResult.printer);
+                                } else {
+                                    console.error('Card payment auto-approved order print failed:', printResult.error);
+                                }
+                            })
+                            .catch(err => console.error('Card payment auto-approved order print error:', err));
+                    }
+
+                    try {
+                        sendOrderStatusEmail(order, 'approved')
+                            .then(() => console.log('[EMAIL] card auto-approved order email attempted:', order.id))
+                            .catch(err => console.error('[EMAIL] card auto-approved order email failed:', err));
+                    } catch (e) {
+                        console.error('[EMAIL] card auto-approved order email error:', e);
+                    }
+                } catch (e) {
+                    console.error('Error processing card auto-approved order side-effects:', e);
+                }
+            });
+
+            if ((order.deliveryMethod || order.deliveryType) === 'delivery') {
+                setImmediate(() => {
+                    (async () => {
+                        try {
+                            const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate });
+
+                            if (!deliveryResult.success) {
+                                console.error('Failed to send card auto-approved order to delivery service:', deliveryResult.error);
+                                return;
+                            }
+
+                            const db2 = readDatabase();
+                            const idx = (db2.orders || []).findIndex(o => o && o.id === order.id);
+                            if (idx === -1) return;
+
+                            db2.orders[idx].deliveryServiceId = deliveryResult.deliveryId;
+                            db2.orders[idx].deliveryClientId = deliveryResult.clientId;
+                            db2.orders[idx].updatedAt = new Date().toISOString();
+                            writeDatabase(db2);
+                        } catch (err) {
+                            console.error('Card auto-approved delivery service error:', err);
+                        }
+                    })();
+                });
+            }
+        }
+
         if (looksLikeCgiReturn) {
             const ACTION = (post.ACTION || '').toString();
             const RC = (post.RC || '').toString();
@@ -1943,6 +2008,8 @@ function handleBoricaReturn(req, res) {
             const P_SIGN = (post.P_SIGN || '').toString();
 
             const db = readDatabase();
+            const eurToBgnRate = db?.currencySettings?.eurToBgnRate;
+            const autoApproveCardPayments = db.orderSettings?.autoApproveCardPayments !== false;
 
             let order = null;
             const orderId = (req.query.order_id || req.query.orderId || req.query.order || '').toString().trim();
@@ -1992,6 +2059,8 @@ function handleBoricaReturn(req, res) {
                 return res.status(404).send('Order not found');
             }
 
+            const statusBeforePayment = (order.status || '').toString();
+
             // Amount/currency sanity check on success
             if (RC === '00') {
                 const paid = parseNumber(AMOUNT, NaN);
@@ -2031,8 +2100,16 @@ function handleBoricaReturn(req, res) {
                 order.payment.paidAt = new Date().toISOString();
                 order.paymentMethod = 'card';
                 order.paymentStatus = 'paid';
-                if (order.status === 'pending_payment') {
+                const nowIso = new Date().toISOString();
+                if (autoApproveCardPayments) {
+                    if (order.status === 'pending_payment' || order.status === 'pending') {
+                        order.status = 'approved';
+                        order.approvedAt = order.approvedAt || nowIso;
+                        order.updatedAt = nowIso;
+                    }
+                } else if (order.status === 'pending_payment') {
                     order.status = 'pending';
+                    order.updatedAt = nowIso;
                 }
 
                 setImmediate(() => {
@@ -2044,6 +2121,11 @@ function handleBoricaReturn(req, res) {
                         console.error('[EMAIL] post-payment emails error:', e);
                     }
                 });
+
+                const transitionedToApproved = autoApproveCardPayments && statusBeforePayment !== 'approved' && order.status === 'approved';
+                if (transitionedToApproved) {
+                    triggerAutoApprovedSideEffects(order, restaurant, eurToBgnRate);
+                }
             } else {
                 const actionLower = ACTION.toString().trim().toLowerCase();
                 const cancelled = RC === '17' || actionLower === 'cancel' || actionLower === 'canceled' || actionLower === 'cancelled';
@@ -2068,6 +2150,8 @@ function handleBoricaReturn(req, res) {
         }
 
         const db = readDatabase();
+        const eurToBgnRate = db?.currencySettings?.eurToBgnRate;
+        const autoApproveCardPayments = db.orderSettings?.autoApproveCardPayments !== false;
 
         // Guess terminalId from payload prefix to select correct cert.
         let terminalIdGuess = '';
@@ -2103,6 +2187,7 @@ function handleBoricaReturn(req, res) {
         }
 
         const order = db.orders[orderIndex];
+        const statusBeforePayment = (order.status || '').toString();
         order.payment = order.payment || { method: 'card', provider: 'borica' };
         order.payment.lastResponseCode = responseCode;
         order.payment.lastResponseAt = new Date().toISOString();
@@ -2111,8 +2196,18 @@ function handleBoricaReturn(req, res) {
         if (success) {
             order.payment.status = 'paid';
             order.payment.paidAt = new Date().toISOString();
-            if (order.status === 'pending_payment') {
+            order.paymentMethod = 'card';
+            order.paymentStatus = 'paid';
+            const nowIso = new Date().toISOString();
+            if (autoApproveCardPayments) {
+                if (order.status === 'pending_payment' || order.status === 'pending') {
+                    order.status = 'approved';
+                    order.approvedAt = order.approvedAt || nowIso;
+                    order.updatedAt = nowIso;
+                }
+            } else if (order.status === 'pending_payment') {
                 order.status = 'pending';
+                order.updatedAt = nowIso;
             }
 
             // Send emails now that payment is confirmed
@@ -2125,8 +2220,15 @@ function handleBoricaReturn(req, res) {
                     console.error('[EMAIL] post-payment emails error:', e);
                 }
             });
+
+            const transitionedToApproved = autoApproveCardPayments && statusBeforePayment !== 'approved' && order.status === 'approved';
+            if (transitionedToApproved) {
+                triggerAutoApprovedSideEffects(order, restaurant, eurToBgnRate);
+            }
         } else {
             order.payment.status = responseCode === '17' ? 'cancelled' : 'failed';
+            order.paymentMethod = 'card';
+            order.paymentStatus = order.payment.status;
             if (order.status === 'pending_payment') {
                 order.status = 'cancelled';
             }
@@ -3914,7 +4016,8 @@ app.get(API_PREFIX + '/settings/order', (req, res) => {
         allowOrderLater: true,
         temporarilyClosed: false,
         pickupEnabled: true,
-        autoApproveOrders: false
+        autoApproveOrders: false,
+        autoApproveCardPayments: true
     };
 
     const merged = {
@@ -3985,7 +4088,10 @@ app.put(API_PREFIX + '/settings/order', requireAuth, (req, res) => {
         pickupEnabled: req.body.pickupEnabled !== false,
         autoApproveOrders: req.body.autoApproveOrders !== undefined
             ? (req.body.autoApproveOrders === true)
-            : (db.orderSettings?.autoApproveOrders === true)
+            : (db.orderSettings?.autoApproveOrders === true),
+        autoApproveCardPayments: req.body.autoApproveCardPayments !== undefined
+            ? (req.body.autoApproveCardPayments === true)
+            : (db.orderSettings?.autoApproveCardPayments !== false)
     };
     
     if (writeDatabase(db)) {
