@@ -1479,9 +1479,19 @@ async function downloadApk() {
         });
 
         if (!res.ok) {
-            const msg = res.status === 404
-                ? (currentLanguage === 'bg' ? 'APK файлът не е наличен.' : 'APK file is not available.')
-                : (currentLanguage === 'bg' ? 'Грешка при изтегляне на APK.' : 'Failed to download APK.');
+            // Some deployments serve the APK as a static file only.
+            // Fallback keeps the UX working even if the API endpoint isn't available.
+            if (res.status === 404) {
+                const a = document.createElement('a');
+                a.href = `${BASE_PATH}/apk/restaurant.apk`;
+                a.download = 'restaurant.apk';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                return;
+            }
+
+            const msg = currentLanguage === 'bg' ? 'Грешка при изтегляне на APK.' : 'Failed to download APK.';
             alert(msg);
             return;
         }
