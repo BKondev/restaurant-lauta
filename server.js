@@ -5209,13 +5209,18 @@ function computeEffectiveDeliveryFee(deliverySettings, cityRaw, subtotal) {
         ? parseFloat(cityEntry.fee)
         : (Number.isFinite(parseFloat(settings.deliveryFee)) ? parseFloat(settings.deliveryFee) : 5);
 
+    const freeEnabled = settings.freeDeliveryEnabled === true;
+    if (!freeEnabled) {
+        return Math.max(0, baseFee);
+    }
+
     const cityThreshold = Number.isFinite(parseFloat(cityEntry?.freeDeliveryAmount)) ? Math.max(0, parseFloat(cityEntry.freeDeliveryAmount)) : null;
-    const globalThreshold = (settings.freeDeliveryEnabled && Number.isFinite(parseFloat(settings.freeDeliveryAmount)))
+    const globalThreshold = (Number.isFinite(parseFloat(settings.freeDeliveryAmount)))
         ? Math.max(0, parseFloat(settings.freeDeliveryAmount))
         : null;
     const threshold = (cityThreshold !== null) ? cityThreshold : globalThreshold;
 
-    if (threshold && subtotal >= threshold) {
+    if (threshold !== null && subtotal >= threshold) {
         return 0;
     }
 

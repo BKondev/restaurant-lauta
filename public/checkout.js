@@ -2321,16 +2321,18 @@ function calculateTotals() {
     if (deliveryMethod === 'delivery') {
         const city = (customerInfo?.city || '').toString().trim();
         const cityEntry = getCityDeliveryEntry(city);
-        const cityThreshold = cityEntry && Number.isFinite(cityEntry.freeDeliveryAmount)
+        const freeEnabled = deliverySettings.freeDeliveryEnabled === true;
+
+        const cityThreshold = (freeEnabled && cityEntry && Number.isFinite(cityEntry.freeDeliveryAmount))
             ? Math.max(0, cityEntry.freeDeliveryAmount)
             : null;
 
-        const globalThreshold = (deliverySettings.freeDeliveryEnabled && Number.isFinite(parseFloat(deliverySettings.freeDeliveryAmount)))
+        const globalThreshold = (freeEnabled && Number.isFinite(parseFloat(deliverySettings.freeDeliveryAmount)))
             ? Math.max(0, parseFloat(deliverySettings.freeDeliveryAmount))
             : null;
 
         const threshold = (cityThreshold !== null) ? cityThreshold : globalThreshold;
-        if (threshold && subtotal >= threshold) {
+        if (threshold !== null && subtotal >= threshold) {
             deliveryFee = 0;
             freeDeliveryApplied = true;
         } else {
