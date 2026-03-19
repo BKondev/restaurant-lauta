@@ -1528,12 +1528,11 @@ app.get(API_PREFIX + '/restaurants/me', requireAuthOrApiKey, (req, res) => {
 // Admin: download the restaurant APK (Bearer token required)
 app.get(API_PREFIX + '/admin/apk', requireAuth, (req, res) => {
     try {
-        const apkPath = path.join(__dirname, 'public', 'apk', 'restaurant.apk');
+        const filename = 'konkar-2.0.33-vc35-lauta.apk';
+        const apkPath = path.join(__dirname, 'public', 'apk', filename);
         if (!fs.existsSync(apkPath)) {
             return res.status(404).json({ error: 'APK not configured' });
         }
-
-        const filename = 'konkar-2.0.32-vc34-lauta.apk';
         return res.download(apkPath, filename);
     } catch (e) {
         console.error('Error downloading APK:', e);
@@ -4059,6 +4058,7 @@ app.get(API_PREFIX + '/settings/delivery', (req, res) => {
         deliveryEnabled: true,
         freeDeliveryEnabled: false,
         freeDeliveryAmount: 50,
+        freeDeliveryCities: null,
         deliveryFee: 5,
         deliveryHours: {
             openingTime: '11:00',
@@ -5211,6 +5211,16 @@ function computeEffectiveDeliveryFee(deliverySettings, cityRaw, subtotal) {
 
     const freeEnabled = settings.freeDeliveryEnabled === true;
     if (!freeEnabled) {
+        return Math.max(0, baseFee);
+    }
+
+    const selectedCitiesRaw = Array.isArray(settings.freeDeliveryCities) ? settings.freeDeliveryCities : null;
+    const selectedCityKeys = selectedCitiesRaw
+        ? new Set(selectedCitiesRaw.map(c => (c || '').toString().trim().toLowerCase()).filter(Boolean))
+        : null;
+    const cityKey = (cityRaw || '').toString().trim().toLowerCase();
+    const eligibleByCitySelection = !selectedCityKeys || selectedCityKeys.size === 0 || (cityKey && selectedCityKeys.has(cityKey));
+    if (!eligibleByCitySelection) {
         return Math.max(0, baseFee);
     }
 

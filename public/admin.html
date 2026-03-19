@@ -828,6 +828,11 @@
                         <input type="number" id="free-delivery-amount" min="0" step="0.01" placeholder="e.g., 50.00" data-translate-placeholder="minOrderAmountPlaceholder">
                         <small data-translate="freeDeliveryHelp">Orders above this amount get free delivery</small>
                     </div>
+                    <div class="form-group" id="free-delivery-cities-group" style="display: none;">
+                        <label for="free-delivery-cities"><span data-translate="freeDeliveryCities">Free delivery cities</span>:</label>
+                        <select id="free-delivery-cities" multiple size="6" style="width: 100%;"></select>
+                        <small data-translate="freeDeliveryCitiesHelp">Select the cities where the free delivery above amount should apply.</small>
+                    </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">

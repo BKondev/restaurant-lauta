@@ -2323,11 +2323,15 @@ function calculateTotals() {
         const cityEntry = getCityDeliveryEntry(city);
         const freeEnabled = deliverySettings.freeDeliveryEnabled === true;
 
-        const cityThreshold = (freeEnabled && cityEntry && Number.isFinite(cityEntry.freeDeliveryAmount))
+        const selectedCitiesRaw = Array.isArray(deliverySettings.freeDeliveryCities) ? deliverySettings.freeDeliveryCities : null;
+        const selectedCityKeys = selectedCitiesRaw ? new Set(selectedCitiesRaw.map(c => (c || '').toString().trim().toLowerCase()).filter(Boolean)) : null;
+        const eligibleByCitySelection = !selectedCityKeys || selectedCityKeys.size === 0 || selectedCityKeys.has(city.toLowerCase());
+
+        const cityThreshold = (freeEnabled && eligibleByCitySelection && cityEntry && Number.isFinite(cityEntry.freeDeliveryAmount))
             ? Math.max(0, cityEntry.freeDeliveryAmount)
             : null;
 
-        const globalThreshold = (freeEnabled && Number.isFinite(parseFloat(deliverySettings.freeDeliveryAmount)))
+        const globalThreshold = (freeEnabled && eligibleByCitySelection && Number.isFinite(parseFloat(deliverySettings.freeDeliveryAmount)))
             ? Math.max(0, parseFloat(deliverySettings.freeDeliveryAmount))
             : null;
 

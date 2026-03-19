@@ -83,6 +83,8 @@ const translations = {
         minimumOrderAmountEurSymbol: 'Minimum Order Amount (€)',
         minOrderAmountPlaceholder: 'e.g., 50.00',
         freeDeliveryHelp: 'Orders above this amount get free delivery',
+        freeDeliveryCities: 'Free delivery cities',
+        freeDeliveryCitiesHelp: 'Select the cities where the free delivery above amount should apply.',
         saveDeliverySettings: 'Save Delivery Settings',
         slideshowBanner: 'Promotional Slideshow Banner',
         enableSlideshow: 'Enable Promotional Slideshow (shown only in "All Items" category)',
@@ -555,6 +557,8 @@ const translations = {
         minimumOrderAmountEurSymbol: 'Минимална Сума (€)',
         minOrderAmountPlaceholder: 'напр. 50.00',
         freeDeliveryHelp: 'Поръчки над тази сума са с безплатна доставка',
+        freeDeliveryCities: 'Градове за безплатна доставка',
+        freeDeliveryCitiesHelp: 'Изберете градовете, за които да важи безплатна доставка над сумата.',
         saveDeliverySettings: 'Запази Настройки за Доставка',
         slideshowBanner: 'Промоционално Слайдшоу Банер',
         enableSlideshow: 'Активирай Промоционално Слайдшоу (показва се само в категория "Всички")',
@@ -1506,10 +1510,10 @@ async function downloadApk() {
             if (res.status === 404) {
                 const host = (window.location.hostname || '').toString().toLowerCase();
                 const fallbackName = host.includes('bojole')
-                    ? 'konkar-2.0.32-vc34-bojole.apk'
-                    : (host.includes('lauta') ? 'konkar-2.0.32-vc34-lauta.apk' : 'konkar.apk');
+                    ? 'konkar-2.0.33-vc35-bojole.apk'
+                    : (host.includes('lauta') ? 'konkar-2.0.33-vc35-lauta.apk' : 'konkar.apk');
                 const a = document.createElement('a');
-                a.href = `${BASE_PATH}/apk/restaurant.apk`;
+                a.href = `${BASE_PATH}/apk/${fallbackName}`;
                 a.download = fallbackName;
                 document.body.appendChild(a);
                 a.click();
@@ -7987,6 +7991,38 @@ window.addEventListener('beforeunload', function() {
 
 // ==================== DELIVERY SETTINGS ====================
 
+function normalizeCityNameKey(value) {
+    return (value || '').toString().trim().toLowerCase();
+}
+
+function isFallbackCityKey(value) {
+    const key = normalizeCityNameKey(value);
+    return key === 'други' || key === 'other' || key === '*' || key === 'default';
+}
+
+function populateFreeDeliveryCitiesSelect(settings) {
+    const select = document.getElementById('free-delivery-cities');
+    if (!select) return;
+
+    const cityPrices = (settings && typeof settings === 'object' && settings.cityPrices && typeof settings.cityPrices === 'object')
+        ? settings.cityPrices
+        : {};
+
+    const selected = Array.isArray(settings?.freeDeliveryCities) ? settings.freeDeliveryCities : [];
+    const selectedKeys = new Set(selected.map(normalizeCityNameKey));
+
+    const cityNames = Object.keys(cityPrices)
+        .map(c => (c || '').toString().trim())
+        .filter(Boolean)
+        .filter(c => !isFallbackCityKey(c))
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+    select.innerHTML = cityNames.map(name => {
+        const isSelected = selectedKeys.has(normalizeCityNameKey(name));
+        return `<option value="${escapeHtml(name)}"${isSelected ? ' selected' : ''}>${escapeHtml(name)}</option>`;
+    }).join('');
+}
+
 // Load delivery settings
 async function loadDeliverySettings() {
     try {
@@ -8004,6 +8040,8 @@ async function loadDeliverySettings() {
             document.getElementById('free-delivery-enabled').checked = settings.freeDeliveryEnabled || false;
             document.getElementById('free-delivery-amount').value = settings.freeDeliveryAmount || 50;
             document.getElementById('delivery-fee').value = settings.deliveryFee || 5;
+
+            populateFreeDeliveryCitiesSelect(settings);
             
             toggleDeliverySection();
             toggleFreeDelivery();
@@ -8017,11 +8055,14 @@ async function loadDeliverySettings() {
 function toggleFreeDelivery() {
     const enabled = document.getElementById('free-delivery-enabled').checked;
     const amountGroup = document.getElementById('free-delivery-amount-group');
+    const citiesGroup = document.getElementById('free-delivery-cities-group');
     
     if (enabled) {
-        amountGroup.style.display = 'block';
+        if (amountGroup) amountGroup.style.display = 'block';
+        if (citiesGroup) citiesGroup.style.display = 'block';
     } else {
-        amountGroup.style.display = 'none';
+        if (amountGroup) amountGroup.style.display = 'none';
+        if (citiesGroup) citiesGroup.style.display = 'none';
     }
 }
 
@@ -8045,6 +8086,11 @@ async function saveDeliverySettings() {
     const freeDeliveryAmount = parseFloat(document.getElementById('free-delivery-amount').value) || 50;
     const deliveryFee = parseFloat(document.getElementById('delivery-fee').value) || 5;
 
+    const citiesSelect = document.getElementById('free-delivery-cities');
+    const selectedCities = citiesSelect
+        ? Array.from(citiesSelect.selectedOptions || []).map(o => (o.value || '').toString().trim()).filter(Boolean)
+        : [];
+
     const deliveryHours = {
         openingTime: document.getElementById('delivery-opening-time')?.value || '11:00',
         closingTime: document.getElementById('delivery-closing-time')?.value || '21:30'
@@ -8054,11 +8100,16 @@ async function saveDeliverySettings() {
         // Get current settings to preserve cityPrices
         const currentResponse = await fetch(`${API_URL}/settings/delivery`);
         const currentSettings = await currentResponse.json();
+
+        const freeDeliveryCities = freeDeliveryEnabled
+            ? (selectedCities.length ? selectedCities : null)
+            : (currentSettings.freeDeliveryCities ?? null);
         
         const settings = {
             deliveryEnabled,
             freeDeliveryEnabled,
             freeDeliveryAmount,
+            freeDeliveryCities,
             deliveryFee,
             deliveryHours,
             cityPrices: currentSettings.cityPrices || {}
@@ -8704,6 +8755,7 @@ async function saveCities() {
             deliveryEnabled: currentSettings.deliveryEnabled !== false,
             freeDeliveryEnabled: currentSettings.freeDeliveryEnabled || false,
             freeDeliveryAmount: currentSettings.freeDeliveryAmount || 50,
+            freeDeliveryCities: currentSettings.freeDeliveryCities ?? null,
             deliveryFee: currentSettings.deliveryFee || 5,
             deliveryHours: currentSettings.deliveryHours,
             cityPrices: cityPrices
@@ -8720,6 +8772,7 @@ async function saveCities() {
         
         if (response.ok) {
             renderCities();
+            populateFreeDeliveryCitiesSelect({ cityPrices, freeDeliveryCities: currentSettings.freeDeliveryCities });
             alert(t('citiesSavedSuccess', 'Cities saved successfully!'));
         } else {
             alert(t('citiesFailedSave', 'Failed to save cities'));
