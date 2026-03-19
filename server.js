@@ -3040,7 +3040,7 @@ function formatOrderItemsHtml(order) {
 }
 
 function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl, contactPhone) {
-    const restaurantName = escapeHtml(restaurant?.name || order?.restaurantName || 'Ресторант');
+    const restaurantName = escapeHtml((process.env.RESTAURANT_NAME || restaurant?.name || order?.restaurantName || 'Ресторант').toString());
     const orderId = escapeHtml(order?.id || '');
     const customerName = escapeHtml(order?.customerInfo?.name || '');
     const deliverySummary = escapeHtml(getDeliverySummaryText(order));
