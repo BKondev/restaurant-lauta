@@ -10,7 +10,8 @@ const { printOrder } = require('./printer-service');
 
 // Optional: load environment variables from .env (useful for production without PM2 env wiring)
 try {
-    require('dotenv').config();
+    // PM2 may run with a different cwd (e.g. /root). Always resolve .env next to this file.
+    require('dotenv').config({ path: path.join(__dirname, '.env') });
 } catch (e) {
     // dotenv is optional
 }
