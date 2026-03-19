@@ -6667,7 +6667,7 @@ function renderOrdersHistory() {
                         </div>
 
                         <div class="order-section" style="margin-bottom: 10px;">
-                            <details ${((order.items || []).some(i => i?.note) ? 'open' : '')} style="border: none;">
+                            <details open style="border: none;">
                                 <summary style="cursor:pointer; font-weight: 700; color:#333; list-style:none;">
                                     ${t('products', 'Products')} (${(order.items || []).length || 0})
                                 </summary>
