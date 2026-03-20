@@ -43,6 +43,12 @@ let slideshowAutoplayTimer = null;
 function resolvePublicAssetUrl(url) {
     const s = (url || '').toString().trim();
     if (!s) return '';
+    // Backward compatibility: some instances stored absolute paths with /resturant-website prefix.
+    // If we're deployed at root (BASE_PATH == ''), strip that prefix so /uploads/... resolves.
+    if (s.startsWith('/resturant-website/')) {
+        const stripped = s.replace(/^\/resturant-website/, '');
+        return BASE_PATH ? `${BASE_PATH}${stripped}` : stripped;
+    }
     if (s.startsWith('/')) return `${BASE_PATH}${s}`;
     return s;
 }
