@@ -3192,7 +3192,7 @@ function editProduct(id) {
 // Delete product
 function deleteProduct(id) {
     deleteId = id;
-    document.getElementById('delete-modal').style.display = 'block';
+    document.getElementById('delete-modal').style.display = 'flex';
 }
 
 // Confirm delete
