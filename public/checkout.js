@@ -117,9 +117,6 @@ let customerInfo = {
 };
 let deliverySettings = {
     deliveryEnabled: true,
-    freeDeliveryEnabled: false,
-    freeDeliveryAmount: 50,
-    deliveryFee: 5,
     deliveryHours: {
         openingTime: '11:00',
         closingTime: '21:30'
@@ -130,11 +127,6 @@ let currencySettings = {
     showBgnPrices: false
 };
 let orderSettings = {
-    minimumOrderAmount: 0,
-    minimumOrderDeliveryEnabled: false,
-    minimumOrderDeliveryAmount: 0,
-    minimumOrderPickupEnabled: false,
-    minimumOrderPickupAmount: 0,
     allowOrderLater: true,
     temporarilyClosed: false,
     pickupEnabled: true
@@ -144,32 +136,19 @@ function getEffectiveMinimumOrderAmountForMethod(method) {
     const normalized = (method === 'delivery' || method === 'pickup') ? method : null;
     if (!normalized) return 0;
 
-    // City-specific override (delivery only)
     if (normalized === 'delivery') {
         const city = (customerInfo?.city || '').toString().trim();
+        if (!city) return 0;
         const cityEntry = getCityDeliveryEntry(city);
         const cityMin = cityEntry && Number.isFinite(cityEntry.minimumOrderAmount) ? cityEntry.minimumOrderAmount : NaN;
         if (Number.isFinite(cityMin)) {
             return Math.max(0, cityMin);
         }
+        return 0;
     }
 
-    const settings = orderSettings || {};
-    const legacyAmount = Math.max(0, Number(settings.minimumOrderAmount) || 0);
-
-    const hasDeliveryToggle = typeof settings.minimumOrderDeliveryEnabled === 'boolean';
-    const hasPickupToggle = typeof settings.minimumOrderPickupEnabled === 'boolean';
-    if (!hasDeliveryToggle && !hasPickupToggle) {
-        return legacyAmount;
-    }
-
-    if (normalized === 'delivery') {
-        if (settings.minimumOrderDeliveryEnabled !== true) return 0;
-        return Math.max(0, Number(settings.minimumOrderDeliveryAmount) || 0);
-    }
-
-    if (settings.minimumOrderPickupEnabled !== true) return 0;
-    return Math.max(0, Number(settings.minimumOrderPickupAmount) || 0);
+    // Pickup: no minimum order.
+    return 0;
 }
 let workingHours = {
     openingTime: '09:00',
@@ -255,11 +234,6 @@ function ensureValidPaymentMethod() {
     }
 }
 
-function getDefaultDeliveryFee() {
-    const val = parseFloat(deliverySettings?.deliveryFee);
-    return Number.isFinite(val) ? val : 5;
-}
-
 function normalizeCityPriceEntry(value) {
     if (value === undefined || value === null) return null;
 
@@ -317,14 +291,11 @@ function getCityDeliveryEntry(cityRaw) {
 
 function getDeliveryFeeForCity(cityRaw) {
     const city = String(cityRaw || '').trim();
-    if (!city) {
-        // If user hasn't chosen a city yet, use default fee (still show delivery cost for delivery orders).
-        return getDefaultDeliveryFee();
-    }
+    if (!city) return 0;
 
     const entry = getCityDeliveryEntry(city);
     const fee = entry && Number.isFinite(entry.fee) ? entry.fee : NaN;
-    return Number.isFinite(fee) ? fee : getDefaultDeliveryFee();
+    return Number.isFinite(fee) ? Math.max(0, fee) : 0;
 }
 
 function applyCheckoutStepVisibility() {
@@ -2321,21 +2292,10 @@ function calculateTotals() {
     if (deliveryMethod === 'delivery') {
         const city = (customerInfo?.city || '').toString().trim();
         const cityEntry = getCityDeliveryEntry(city);
-        const freeEnabled = deliverySettings.freeDeliveryEnabled === true;
-
-        const selectedCitiesRaw = Array.isArray(deliverySettings.freeDeliveryCities) ? deliverySettings.freeDeliveryCities : null;
-        const selectedCityKeys = selectedCitiesRaw ? new Set(selectedCitiesRaw.map(c => (c || '').toString().trim().toLowerCase()).filter(Boolean)) : null;
-        const eligibleByCitySelection = !selectedCityKeys || selectedCityKeys.size === 0 || selectedCityKeys.has(city.toLowerCase());
-
-        const cityThreshold = (freeEnabled && eligibleByCitySelection && cityEntry && Number.isFinite(cityEntry.freeDeliveryAmount))
+        const threshold = (cityEntry && Number.isFinite(cityEntry.freeDeliveryAmount))
             ? Math.max(0, cityEntry.freeDeliveryAmount)
             : null;
 
-        const globalThreshold = (freeEnabled && eligibleByCitySelection && Number.isFinite(parseFloat(deliverySettings.freeDeliveryAmount)))
-            ? Math.max(0, parseFloat(deliverySettings.freeDeliveryAmount))
-            : null;
-
-        const threshold = (cityThreshold !== null) ? cityThreshold : globalThreshold;
         if (threshold !== null && subtotal >= threshold) {
             deliveryFee = 0;
             freeDeliveryApplied = true;
@@ -2867,23 +2827,7 @@ function setupFormListeners() {
 
 // Calculate delivery fee based on selected city
 function calculateDeliveryFee() {
-    const city = customerInfo.city;
-    
-    if (!city || deliveryMethod !== 'delivery') {
-        if (deliveryMethod !== 'delivery') {
-            deliverySettings.deliveryFee = 0;
-            return;
-        }
-        deliverySettings.deliveryFee = getDeliveryFeeForCity('');
-        updateOrderSummary();
-        return;
-    }
-
-    deliverySettings.deliveryFee = getDeliveryFeeForCity(city);
-    
-    console.log(`Delivery fee for ${city}: ${deliverySettings.deliveryFee} EUR`);
-    
-    // Update order summary
+    // Fee is derived from per-city settings during totals calculation.
     updateOrderSummary();
 }
 

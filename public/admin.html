@@ -817,31 +817,6 @@
                         <small data-translate="deliveryClosingTimeHelp">Latest time delivery orders can be scheduled.</small>
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="free-delivery-enabled" onchange="toggleFreeDelivery()">
-                            <span data-translate="enableFreeDeliveryAbove">Enable Free Delivery Above Amount</span>
-                        </label>
-                    </div>
-                    <div class="form-group" id="free-delivery-amount-group" style="display: none;">
-                        <label for="free-delivery-amount"><span data-translate="minimumOrderAmountEurSymbol">Minimum Order Amount (€)</span>:</label>
-                        <input type="number" id="free-delivery-amount" min="0" step="0.01" placeholder="e.g., 50.00" data-translate-placeholder="minOrderAmountPlaceholder">
-                        <small data-translate="freeDeliveryHelp">Orders above this amount get free delivery</small>
-                    </div>
-                    <div class="form-group" id="free-delivery-cities-group" style="display: none;">
-                        <label for="free-delivery-cities"><span data-translate="freeDeliveryCities">Free delivery cities</span>:</label>
-                        <select id="free-delivery-cities" multiple size="6" style="width: 100%;"></select>
-                        <small data-translate="freeDeliveryCitiesHelp">Select the cities where the free delivery above amount should apply.</small>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="delivery-fee"><span data-translate="standardDeliveryFeeEur">Standard Delivery Fee (€)</span>:</label>
-                        <input type="number" id="delivery-fee" min="0" step="0.01" placeholder="e.g., 5.00" value="5.00" data-translate-placeholder="deliveryFeePlaceholder">
-                        <small data-translate="deliveryFeeHelp">Fee charged for delivery orders</small>
-                    </div>
-                </div>
             </div>
 
             <div class="form-row">
@@ -866,29 +841,7 @@
             </div>
 
             <div class="form-row">
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="minimum-order-delivery-enabled">
-                        <span data-translate="minimumOrderDeliveryEnabled">Enable minimum order for delivery</span>
-                    </label>
-                    <label for="minimum-order-delivery-amount" style="display: block; margin-top: 8px;">
-                        <span data-translate="minimumOrderDeliveryAmountEur">Delivery minimum (EUR)</span>:
-                    </label>
-                    <input type="number" id="minimum-order-delivery-amount" step="0.01" min="0" value="0" placeholder="0.00">
-                    <small data-translate="minimumOrderPerMethodHint">When disabled, there is no minimum order for this method.</small>
-                </div>
-
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="minimum-order-pickup-enabled">
-                        <span data-translate="minimumOrderPickupEnabled">Enable minimum order for pickup</span>
-                    </label>
-                    <label for="minimum-order-pickup-amount" style="display: block; margin-top: 8px;">
-                        <span data-translate="minimumOrderPickupAmountEur">Pickup minimum (EUR)</span>:
-                    </label>
-                    <input type="number" id="minimum-order-pickup-amount" step="0.01" min="0" value="0" placeholder="0.00">
-                    <small data-translate="minimumOrderPerMethodHint">When disabled, there is no minimum order for this method.</small>
-                </div>
+                <!-- Minimum order is configured per-city in the Delivery Cities & Prices table. -->
             </div>
 
             <div class="form-row">

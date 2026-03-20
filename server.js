@@ -5206,35 +5206,14 @@ function getCityDeliveryEntry(deliverySettings, cityRaw) {
 function computeEffectiveDeliveryFee(deliverySettings, cityRaw, subtotal) {
     const settings = deliverySettings || {};
     const cityEntry = getCityDeliveryEntry(settings, cityRaw);
-    const baseFee = Number.isFinite(parseFloat(cityEntry?.fee))
-        ? parseFloat(cityEntry.fee)
-        : (Number.isFinite(parseFloat(settings.deliveryFee)) ? parseFloat(settings.deliveryFee) : 5);
+    const baseFee = Number.isFinite(parseFloat(cityEntry?.fee)) ? parseFloat(cityEntry.fee) : 0;
 
-    const freeEnabled = settings.freeDeliveryEnabled === true;
-    if (!freeEnabled) {
-        return Math.max(0, baseFee);
-    }
-
-    const selectedCitiesRaw = Array.isArray(settings.freeDeliveryCities) ? settings.freeDeliveryCities : null;
-    const selectedCityKeys = selectedCitiesRaw
-        ? new Set(selectedCitiesRaw.map(c => (c || '').toString().trim().toLowerCase()).filter(Boolean))
+    // Delivery fee / minimum order / free delivery are defined ONLY by the per-city configuration.
+    const threshold = (Number.isFinite(parseFloat(cityEntry?.freeDeliveryAmount)))
+        ? Math.max(0, parseFloat(cityEntry.freeDeliveryAmount))
         : null;
-    const cityKey = (cityRaw || '').toString().trim().toLowerCase();
-    const eligibleByCitySelection = !selectedCityKeys || selectedCityKeys.size === 0 || (cityKey && selectedCityKeys.has(cityKey));
-    if (!eligibleByCitySelection) {
-        return Math.max(0, baseFee);
-    }
 
-    const cityThreshold = Number.isFinite(parseFloat(cityEntry?.freeDeliveryAmount)) ? Math.max(0, parseFloat(cityEntry.freeDeliveryAmount)) : null;
-    const globalThreshold = (Number.isFinite(parseFloat(settings.freeDeliveryAmount)))
-        ? Math.max(0, parseFloat(settings.freeDeliveryAmount))
-        : null;
-    const threshold = (cityThreshold !== null) ? cityThreshold : globalThreshold;
-
-    if (threshold !== null && subtotal >= threshold) {
-        return 0;
-    }
-
+    if (threshold !== null && subtotal >= threshold) return 0;
     return Math.max(0, baseFee);
 }
 
@@ -6206,15 +6185,16 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         // Ensure totals are consistent server-side (and rounded correctly).
         recomputeOrderTotals(newOrder, data);
 
-        // Enforce minimum order amount per fulfillment method (server-side)
-        let effectiveMinAmount = getEffectiveMinimumOrderAmount(orderSettings, normalizedDeliveryMethod);
+        // Enforce minimum order amount (server-side)
+        // Rules are defined ONLY by the per-city configuration (delivery only). Pickup has no minimum.
+        let effectiveMinAmount = 0;
         if (normalizedDeliveryMethod === 'delivery') {
             const city = (newOrder.customerInfo?.city || '').toString().trim();
             const cityEntry = getCityDeliveryEntry(deliverySettings, city);
-            const cityMin = cityEntry && Number.isFinite(parseFloat(cityEntry.minimumOrderAmount)) ? Math.max(0, parseFloat(cityEntry.minimumOrderAmount)) : NaN;
-            if (Number.isFinite(cityMin)) {
-                effectiveMinAmount = cityMin;
-            }
+            const cityMin = cityEntry && Number.isFinite(parseFloat(cityEntry.minimumOrderAmount))
+                ? Math.max(0, parseFloat(cityEntry.minimumOrderAmount))
+                : 0;
+            effectiveMinAmount = cityMin;
         }
 
         // Minimum order compares against items subtotal (excluding delivery fee).

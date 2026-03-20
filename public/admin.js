@@ -4338,10 +4338,6 @@ async function updateOrderSettings() {
     }
 
     const orderSettings = {
-        minimumOrderDeliveryEnabled: document.getElementById('minimum-order-delivery-enabled')?.checked === true,
-        minimumOrderDeliveryAmount: parseFloat(document.getElementById('minimum-order-delivery-amount')?.value) || 0,
-        minimumOrderPickupEnabled: document.getElementById('minimum-order-pickup-enabled')?.checked === true,
-        minimumOrderPickupAmount: parseFloat(document.getElementById('minimum-order-pickup-amount')?.value) || 0,
         allowOrderLater: document.getElementById('allow-order-later')?.checked !== false,
         autoApproveOrders: document.getElementById('auto-approve-orders')?.checked === true,
         autoApproveCardPayments: document.getElementById('auto-approve-card-payments')?.checked === true,
@@ -8035,16 +8031,11 @@ async function loadDeliverySettings() {
             const deliveryClosing = document.getElementById('delivery-closing-time');
             if (deliveryOpening) deliveryOpening.value = deliveryHours.openingTime || '11:00';
             if (deliveryClosing) deliveryClosing.value = deliveryHours.closingTime || '21:30';
-            
-            document.getElementById('delivery-enabled').checked = settings.deliveryEnabled !== false;
-            document.getElementById('free-delivery-enabled').checked = settings.freeDeliveryEnabled || false;
-            document.getElementById('free-delivery-amount').value = settings.freeDeliveryAmount || 50;
-            document.getElementById('delivery-fee').value = settings.deliveryFee || 5;
 
-            populateFreeDeliveryCitiesSelect(settings);
-            
+            const deliveryEnabledEl = document.getElementById('delivery-enabled');
+            if (deliveryEnabledEl) deliveryEnabledEl.checked = settings.deliveryEnabled !== false;
+
             toggleDeliverySection();
-            toggleFreeDelivery();
         }
     } catch (error) {
         console.error('Error loading delivery settings:', error);
@@ -8053,10 +8044,18 @@ async function loadDeliverySettings() {
 
 // Toggle free delivery amount field
 function toggleFreeDelivery() {
-    const enabled = document.getElementById('free-delivery-enabled').checked;
+    // Global free delivery configuration has been removed.
+    // Keep as a safe no-op for older cached admin.html.
+    const enabledEl = document.getElementById('free-delivery-enabled');
     const amountGroup = document.getElementById('free-delivery-amount-group');
     const citiesGroup = document.getElementById('free-delivery-cities-group');
-    
+    if (!enabledEl) {
+        if (amountGroup) amountGroup.style.display = 'none';
+        if (citiesGroup) citiesGroup.style.display = 'none';
+        return;
+    }
+
+    const enabled = enabledEl.checked === true;
     if (enabled) {
         if (amountGroup) amountGroup.style.display = 'block';
         if (citiesGroup) citiesGroup.style.display = 'block';
@@ -8081,15 +8080,7 @@ function togglePickupEnabled() {}
 
 // Save delivery settings
 async function saveDeliverySettings() {
-    const deliveryEnabled = document.getElementById('delivery-enabled').checked;
-    const freeDeliveryEnabled = document.getElementById('free-delivery-enabled').checked;
-    const freeDeliveryAmount = parseFloat(document.getElementById('free-delivery-amount').value) || 50;
-    const deliveryFee = parseFloat(document.getElementById('delivery-fee').value) || 5;
-
-    const citiesSelect = document.getElementById('free-delivery-cities');
-    const selectedCities = citiesSelect
-        ? Array.from(citiesSelect.selectedOptions || []).map(o => (o.value || '').toString().trim()).filter(Boolean)
-        : [];
+    const deliveryEnabled = document.getElementById('delivery-enabled')?.checked !== false;
 
     const deliveryHours = {
         openingTime: document.getElementById('delivery-opening-time')?.value || '11:00',
@@ -8101,16 +8092,8 @@ async function saveDeliverySettings() {
         const currentResponse = await fetch(`${API_URL}/settings/delivery`);
         const currentSettings = await currentResponse.json();
 
-        const freeDeliveryCities = freeDeliveryEnabled
-            ? (selectedCities.length ? selectedCities : null)
-            : (currentSettings.freeDeliveryCities ?? null);
-        
         const settings = {
             deliveryEnabled,
-            freeDeliveryEnabled,
-            freeDeliveryAmount,
-            freeDeliveryCities,
-            deliveryFee,
             deliveryHours,
             cityPrices: currentSettings.cityPrices || {}
         };
