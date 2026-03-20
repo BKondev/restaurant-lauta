@@ -29,6 +29,7 @@ function saveAppliedPromoState() {
             discount: Number.isFinite(discount) ? discount : 0,
             scope: (appliedPromo.scope || '').toString(),
             category: (appliedPromo.category || '').toString(),
+            categories: Array.isArray(appliedPromo.categories) ? appliedPromo.categories : [],
             productIds: Array.isArray(appliedPromo.productIds) ? appliedPromo.productIds : [],
             startDate: appliedPromo.startDate || null,
             endDate: appliedPromo.endDate || null,
@@ -66,6 +67,7 @@ function loadAppliedPromoState() {
             discount: Number.isFinite(discount) ? discount : 0,
             scope: (parsed.scope || '').toString().trim().toLowerCase(),
             category: (parsed.category || '').toString(),
+            categories: Array.isArray(parsed.categories) ? parsed.categories : [],
             productIds: Array.isArray(parsed.productIds) ? parsed.productIds : [],
             startDate: parsed.startDate || null,
             endDate: parsed.endDate || null,
@@ -75,6 +77,11 @@ function loadAppliedPromoState() {
         // Backward compatibility for older stored promos.
         if (!(restored.scope === 'all' || restored.scope === 'category' || restored.scope === 'products')) {
             restored.scope = (restored.category && restored.category !== 'all') ? 'category' : 'all';
+        }
+
+        if ((!Array.isArray(restored.categories) || restored.categories.length === 0) && restored.scope === 'category') {
+            const cat = (restored.category || '').toString();
+            if (cat) restored.categories = [cat];
         }
 
         // If checkout state already has a selected delivery method, ensure the promo is compatible.
@@ -2258,16 +2265,19 @@ function calculateTotals() {
         if (!promo) return 0;
         const scope = (promo.scope || '').toString().trim().toLowerCase();
         const category = (promo.category || 'all').toString();
+        const categories = Array.isArray(promo.categories) ? promo.categories.map(c => (c || '').toString()).filter(Boolean) : [];
+        const normSet = new Set(categories.map(c => c.toLowerCase()));
 
-        if (scope === 'all' || category === 'all' || !scope) {
+        if (scope === 'all' || category === 'all' || normSet.has('all') || !scope) {
             return subtotal;
         }
 
         if (scope === 'category') {
-            const targetNorm = category.toLowerCase();
+            const fallback = category.toLowerCase();
             return cart.reduce((sum, item) => {
                 const itemCat = (item.category || '').toString().toLowerCase();
-                if (itemCat !== targetNorm) return sum;
+                const match = normSet.size ? normSet.has(itemCat) : (itemCat === fallback);
+                if (!match) return sum;
                 return sum + (Number(item.price) * Number(item.quantity));
             }, 0);
         }
@@ -2344,11 +2354,15 @@ async function applyPromoCode() {
         const validPromo = await response.json();
 
         if (validPromo && validPromo.valid) {
+            const promoCategories = Array.isArray(validPromo.categories)
+                ? validPromo.categories.map(c => (c || '').toString()).filter(Boolean)
+                : [];
             appliedPromo = {
                 code: code,
                 discount: validPromo.discount,
                 scope: validPromo.scope || ((validPromo.category && validPromo.category !== 'all') ? 'category' : 'all'),
                 category: validPromo.category || 'all',
+                categories: promoCategories.length ? promoCategories : ((validPromo.category && validPromo.category !== 'all') ? [validPromo.category] : []),
                 productIds: Array.isArray(validPromo.productIds) ? validPromo.productIds : [],
                 startDate: validPromo.startDate || null,
                 endDate: validPromo.endDate || null,

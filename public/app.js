@@ -719,6 +719,10 @@ function renderSiteFooter() {
     const contacts = siteSettings?.footer?.contacts || {};
     const mapCfg = siteSettings?.map || {};
     const aboutText = (siteSettings?.footer?.aboutText || '').toString().trim();
+    const aboutLogoRaw = (siteSettings?.footer?.aboutLogoUrl || '').toString().trim();
+    const aboutLogoUrl = aboutLogoRaw
+        ? (aboutLogoRaw.startsWith('/') ? `${BASE_PATH}${aboutLogoRaw}` : aboutLogoRaw)
+        : '';
     const socials = Array.isArray(siteSettings?.footer?.socials) ? siteSettings.footer.socials : [];
 
     const labels = currentLanguage === 'bg'
@@ -850,6 +854,7 @@ function renderSiteFooter() {
                 </div>
                 <div class="footer-col">
                     <h3>${escapeHtml(labels.about)}</h3>
+                    ${aboutLogoUrl ? `<img class="footer-about-logo" src="${escapeHtml(aboutLogoUrl)}" alt="${escapeHtml(labels.about)}" />` : ''}
                     <p>${aboutText ? escapeHtml(aboutText) : '—'}</p>
                     ${socialLinks ? `<div class="footer-socials">${socialLinks}</div>` : ''}
                 </div>
@@ -1849,12 +1854,15 @@ function getEffectivePrice(product) {
     if (appliedPromoCode) {
         const scope = (appliedPromoCode.scope || '').toString().trim().toLowerCase();
         const category = (appliedPromoCode.category || 'all').toString();
+        const categories = Array.isArray(appliedPromoCode.categories) ? appliedPromoCode.categories.map(c => (c || '').toString()).filter(Boolean) : [];
+        const normSet = new Set(categories.map(c => c.toLowerCase()));
 
         let applies = false;
-        if (!scope || scope === 'all' || category === 'all') {
+        if (!scope || scope === 'all' || category === 'all' || normSet.has('all')) {
             applies = true;
         } else if (scope === 'category') {
-            applies = (category === product.category);
+            const itemNorm = (product.category || '').toString().toLowerCase();
+            applies = normSet.size ? normSet.has(itemNorm) : ((category || '').toString().toLowerCase() === itemNorm);
         } else if (scope === 'products') {
             const ids = Array.isArray(appliedPromoCode.productIds) ? appliedPromoCode.productIds : [];
             applies = ids.map(String).includes(String(product.id));
@@ -1893,11 +1901,15 @@ async function applyPromoCode() {
         const result = await response.json();
         
         if (result.valid) {
+            const promoCategories = Array.isArray(result.categories)
+                ? result.categories.map(c => (c || '').toString()).filter(Boolean)
+                : [];
             appliedPromoCode = {
                 code,
                 discount: result.discount,
                 scope: result.scope || ((result.category && result.category !== 'all') ? 'category' : 'all'),
                 category: result.category || 'all',
+                categories: promoCategories.length ? promoCategories : ((result.category && result.category !== 'all') ? [result.category] : []),
                 productIds: Array.isArray(result.productIds) ? result.productIds : [],
                 allowedMethod: result.allowedMethod || 'all',
                 startDate: result.startDate || null,
@@ -1987,11 +1999,14 @@ function addToCartWithQuantity(productId, quantity) {
     } else if (appliedPromoCode && effectivePrice < originalPrice) {
         const scope = (appliedPromoCode.scope || '').toString().trim().toLowerCase();
         const category = (appliedPromoCode.category || 'all').toString();
+        const categories = Array.isArray(appliedPromoCode.categories) ? appliedPromoCode.categories.map(c => (c || '').toString()).filter(Boolean) : [];
+        const normSet = new Set(categories.map(c => c.toLowerCase()));
         let applies = false;
-        if (!scope || scope === 'all' || category === 'all') {
+        if (!scope || scope === 'all' || category === 'all' || normSet.has('all')) {
             applies = true;
         } else if (scope === 'category') {
-            applies = category === product.category;
+            const itemNorm = (product.category || '').toString().toLowerCase();
+            applies = normSet.size ? normSet.has(itemNorm) : ((category || '').toString().toLowerCase() === itemNorm);
         } else if (scope === 'products') {
             const ids = Array.isArray(appliedPromoCode.productIds) ? appliedPromoCode.productIds : [];
             applies = ids.map(String).includes(String(product.id));

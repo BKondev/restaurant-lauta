@@ -2351,6 +2351,14 @@ body {
     flex-wrap: wrap;
 }
 
+.site-footer .footer-about-logo {
+    display: block;
+    max-width: 180px;
+    height: auto;
+    margin: 0 0 10px;
+    border-radius: 10px;
+}
+
 .site-footer .footer-socials a {
     display: inline-flex;
     align-items: center;
@@ -2391,5 +2399,10 @@ body {
     .site-footer .footer-bottom {
         justify-content: center;
         text-align: center;
+    }
+
+    .site-footer .footer-about-logo {
+        margin-left: auto;
+        margin-right: auto;
     }
 }

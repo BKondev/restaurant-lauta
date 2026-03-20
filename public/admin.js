@@ -126,6 +126,9 @@ const translations = {
         openWebmail: 'Open Webmail',
         footer: 'Footer',
         footerAboutText: 'About text',
+        footerAboutLogo: 'About logo',
+        footerAboutLogoPlaceholder: 'https://...',
+        footerAboutLogoHelp: 'Optional. Upload a logo shown above the About text in the footer.',
         footerAddressPlaceholder: 'Street, city',
         footerAddressMapsUrl: 'Address (Google Maps link)',
         footerAddressMapsUrlPlaceholder: 'https://www.google.com/maps?...',
@@ -334,8 +337,8 @@ const translations = {
         promoCode: 'Promo Code',
         promoCodePlaceholder: 'e.g., SUMMER25',
         promoUppercaseHelp: 'Code will be converted to uppercase automatically',
-        applyToCategory: 'Apply to Category',
-        promoCategoryHelp: 'Promo code will apply only to items in this category',
+        applyToCategory: 'Apply to Categories',
+        promoCategoryHelp: 'Hold Ctrl/Cmd to select multiple categories',
         discountPercentage: 'Discount Percentage',
         discountPercentPlaceholder: 'e.g., 25',
         discountPercentHelp: 'Percentage discount (1-100%)',
@@ -600,6 +603,9 @@ const translations = {
         openWebmail: 'Отвори уеб поща',
         footer: 'Футър',
         footerAboutText: 'Текст „За нас“',
+        footerAboutLogo: 'Лого „За нас“',
+        footerAboutLogoPlaceholder: 'https://...',
+        footerAboutLogoHelp: 'По избор. Качете лого, което се показва над текста „За нас“ във футъра.',
         footerAddressPlaceholder: 'Улица, град',
         footerAddressMapsUrl: 'Адрес (Google Maps линк)',
         footerAddressMapsUrlPlaceholder: 'https://www.google.com/maps?...',
@@ -808,8 +814,8 @@ const translations = {
         promoCode: 'Промо код',
         promoCodePlaceholder: 'напр. SUMMER25',
         promoUppercaseHelp: 'Кодът се конвертира автоматично в главни букви',
-        applyToCategory: 'Приложи към категория',
-        promoCategoryHelp: 'Промо кодът важи само за продукти от тази категория',
+        applyToCategory: 'Приложи към категории',
+        promoCategoryHelp: 'Задръж Ctrl/Cmd за избор на няколко категории',
         discountPercentage: 'Процент отстъпка',
         discountPercentPlaceholder: 'напр. 25',
         discountPercentHelp: 'Отстъпка в проценти (1–100%)',
@@ -2297,12 +2303,26 @@ async function loadSiteSettings() {
         const addressEl = document.getElementById('site-footer-address');
         const addressMapsUrlEl = document.getElementById('site-footer-address-maps-url');
         const aboutEl = document.getElementById('site-footer-about');
+        const aboutLogoUrlEl = document.getElementById('site-footer-about-logo-url');
+        const aboutLogoPreviewEl = document.getElementById('site-footer-about-logo-preview');
 
         if (phoneEl) phoneEl.value = data?.footer?.contacts?.phone || '';
         if (emailEl) emailEl.value = data?.footer?.contacts?.email || '';
         if (addressEl) addressEl.value = data?.footer?.contacts?.address || '';
         if (addressMapsUrlEl) addressMapsUrlEl.value = data?.footer?.contacts?.addressMapsUrl || '';
         if (aboutEl) aboutEl.value = data?.footer?.aboutText || '';
+
+        if (aboutLogoUrlEl) aboutLogoUrlEl.value = (data?.footer?.aboutLogoUrl || '').toString();
+        if (aboutLogoPreviewEl) {
+            const raw = (data?.footer?.aboutLogoUrl || '').toString().trim();
+            if (raw) {
+                aboutLogoPreviewEl.src = raw.startsWith('/') ? `${BASE_PATH}${raw}` : raw;
+                aboutLogoPreviewEl.style.display = 'inline-block';
+            } else {
+                aboutLogoPreviewEl.removeAttribute('src');
+                aboutLogoPreviewEl.style.display = 'none';
+            }
+        }
 
         const mapEnabledEl = document.getElementById('site-map-enabled');
         const mapLabelEl = document.getElementById('site-map-label');
@@ -2391,6 +2411,55 @@ async function uploadFavicon() {
     }
 }
 
+async function uploadFooterAboutLogo() {
+    try {
+        const token = getAdminToken();
+        if (!token) {
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        const input = document.getElementById('site-footer-about-logo-file');
+        const file = input && input.files && input.files[0];
+        if (!file) {
+            alert(t('footerAboutLogoHelp', 'Optional. Upload a logo shown above the About text in the footer.'));
+            return;
+        }
+
+        const fd = new FormData();
+        fd.append('aboutLogo', file);
+
+        const res = await fetch(`${API_URL}/settings/site/footer-about-logo`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: fd
+        });
+
+        if (res.status === 401) {
+            alert(t('sessionExpired', 'Session expired. Please login again.'));
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            alert(data.error || 'Failed to upload footer logo');
+            return;
+        }
+
+        await loadSiteSettings();
+
+        try {
+            if (input) input.value = '';
+        } catch (e) {}
+
+        alert(t('siteSettingsSaved', 'Site content saved successfully!'));
+    } catch (e) {
+        console.error('Error uploading footer about logo:', e);
+        alert('Failed to upload footer logo');
+    }
+}
+
 function openWebmail() {
     const url = (document.getElementById('site-webmail-url')?.value || '').toString().trim();
     if (!url) {
@@ -2418,6 +2487,7 @@ async function updateSiteSettings() {
         const address = (document.getElementById('site-footer-address')?.value || '').toString();
         const addressMapsUrl = (document.getElementById('site-footer-address-maps-url')?.value || '').toString();
         const aboutText = (document.getElementById('site-footer-about')?.value || '').toString();
+        const aboutLogoUrl = (document.getElementById('site-footer-about-logo-url')?.value || '').toString();
 
         const mapEnabled = !!document.getElementById('site-map-enabled')?.checked;
         const mapLabel = (document.getElementById('site-map-label')?.value || '').toString();
@@ -2473,6 +2543,7 @@ async function updateSiteSettings() {
             footer: {
                 contacts: { phone, email, address, addressMapsUrl },
                 aboutText,
+                aboutLogoUrl,
                 socials
             },
             legal: { privacyHtml, termsHtml }
@@ -5397,8 +5468,8 @@ function updatePromoCodeCategoryDropdown() {
     const select = document.getElementById('promo-code-category');
     if (!select) return;
     const categories = [...new Set(products.map(p => p.category))].sort();
-    
-    const currentValue = select.value;
+
+    const currentSelected = new Set(Array.from(select.selectedOptions || []).map(o => String(o.value)));
     select.innerHTML = `<option value="all">${t('allCategories', 'All Categories')}</option>`;
     
     categories.forEach(category => {
@@ -5407,9 +5478,18 @@ function updatePromoCodeCategoryDropdown() {
         option.textContent = category;
         select.appendChild(option);
     });
-    
-    if (currentValue && (currentValue === 'all' || categories.includes(currentValue))) {
-        select.value = currentValue;
+
+    // Restore multi-selection where possible.
+    const valid = new Set(['all', ...categories]);
+    const toRestore = Array.from(currentSelected).filter(v => valid.has(v));
+    if (toRestore.length) {
+        Array.from(select.options || []).forEach(opt => {
+            opt.selected = toRestore.includes(String(opt.value));
+        });
+    } else {
+        // Default to "all" to preserve prior single-select behavior.
+        const allOpt = Array.from(select.options || []).find(o => String(o.value) === 'all');
+        if (allOpt) allOpt.selected = true;
     }
 }
 
@@ -5440,6 +5520,11 @@ function derivePromoScopeFromPromo(promo) {
     if (scope === 'all' || scope === 'category' || scope === 'products') return scope;
     const productIds = Array.isArray(promo?.productIds) ? promo.productIds : [];
     if (productIds.length) return 'products';
+
+    const categories = Array.isArray(promo?.categories) ? promo.categories : [];
+    const cleaned = categories.map(c => (c || '').toString()).filter(Boolean);
+    if (cleaned.length && !cleaned.map(x => x.toLowerCase()).includes('all')) return 'category';
+
     const category = (promo?.category || 'all').toString();
     return category && category !== 'all' ? 'category' : 'all';
 }
@@ -5486,6 +5571,16 @@ function renderPromoCodes() {
             return t('allProducts', 'All products');
         }
         if (scope === 'category') {
+            const categories = Array.isArray(promo?.categories) ? promo.categories.map(c => (c || '').toString()).filter(Boolean) : [];
+            if (categories.length) {
+                const cleaned = categories.filter(c => c.toLowerCase() !== 'all');
+                if (cleaned.length === 1) return cleaned[0];
+                if (cleaned.length > 1) {
+                    const preview = cleaned.slice(0, 3).join(', ');
+                    const suffix = cleaned.length > 3 ? '…' : '';
+                    return `${preview}${suffix}`;
+                }
+            }
             return promo.category || '—';
         }
         if (scope === 'products') {
@@ -5830,7 +5925,9 @@ function initPromoFlyersUI() {
 async function savePromoCode() {
     const code = document.getElementById('promo-code-input').value.trim().toUpperCase();
     const scope = (document.getElementById('promo-code-scope')?.value || 'all').toString().trim().toLowerCase();
-    const category = document.getElementById('promo-code-category')?.value;
+    const categorySel = document.getElementById('promo-code-category');
+    const selectedCategories = Array.from(categorySel?.selectedOptions || []).map(o => String(o.value));
+    const category = selectedCategories[0];
     const discount = parseFloat(document.getElementById('promo-code-discount').value);
     const isActive = document.getElementById('promo-code-active').value === 'true';
     const allowedMethod = (document.getElementById('promo-code-method')?.value || 'all').toString();
@@ -5860,6 +5957,7 @@ async function savePromoCode() {
 
     let normalizedScope = (scope === 'all' || scope === 'category' || scope === 'products') ? scope : 'all';
     let normalizedCategory = (category || 'all').toString();
+    let normalizedCategories = Array.from(new Set(selectedCategories.map(c => (c || '').toString()).filter(Boolean)));
     let productIds = [];
 
     if (normalizedScope === 'all') {
@@ -5867,9 +5965,16 @@ async function savePromoCode() {
     }
 
     if (normalizedScope === 'category') {
-        if (!normalizedCategory) normalizedCategory = 'all';
-        if (normalizedCategory === 'all') {
+        if (!normalizedCategories.length) {
+            normalizedCategories = ['all'];
+        }
+        const hasAll = normalizedCategories.map(x => x.toLowerCase()).includes('all');
+        if (hasAll) {
             normalizedScope = 'all';
+            normalizedCategories = ['all'];
+            normalizedCategory = 'all';
+        } else {
+            normalizedCategory = (normalizedCategories[0] || 'all').toString();
         }
     }
 
@@ -5888,6 +5993,7 @@ async function savePromoCode() {
         code,
         scope: normalizedScope,
         category: normalizedCategory,
+        ...(normalizedScope === 'category' ? { categories: normalizedCategories } : {}),
         ...(normalizedScope === 'products' ? { productIds } : {}),
         discount,
         isActive,
@@ -5951,7 +6057,18 @@ function editPromoCode(id) {
     onPromoCodeScopeChange();
 
     const categorySel = document.getElementById('promo-code-category');
-    if (categorySel) categorySel.value = promo.category || 'all';
+    if (categorySel) {
+        const categories = Array.isArray(promo?.categories) ? promo.categories.map(c => (c || '').toString()).filter(Boolean) : [];
+        const toSelect = categories.length ? categories : [(promo.category || 'all').toString()];
+        const set = new Set(toSelect.map(String));
+        Array.from(categorySel.options || []).forEach(opt => {
+            opt.selected = set.has(String(opt.value));
+        });
+        if (!Array.from(categorySel.selectedOptions || []).length) {
+            const allOpt = Array.from(categorySel.options || []).find(o => String(o.value) === 'all');
+            if (allOpt) allOpt.selected = true;
+        }
+    }
 
     const prodSel = document.getElementById('promo-code-products');
     if (prodSel) {
@@ -6013,7 +6130,9 @@ function resetPromoForm() {
     if (scopeSel) scopeSel.value = 'all';
 
     const catSel = document.getElementById('promo-code-category');
-    if (catSel) catSel.value = 'all';
+    if (catSel) {
+        Array.from(catSel.options || []).forEach(opt => { opt.selected = (String(opt.value) === 'all'); });
+    }
 
     const prodSel = document.getElementById('promo-code-products');
     if (prodSel) {

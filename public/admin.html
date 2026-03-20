@@ -393,6 +393,25 @@
                 <textarea id="site-footer-about" rows="4" placeholder="Short about text..." data-translate-placeholder="footerAboutPlaceholder"></textarea>
             </div>
 
+            <div class="form-group">
+                <label for="site-footer-about-logo-url"><span data-translate="footerAboutLogo">About logo</span>:</label>
+                <input type="url" id="site-footer-about-logo-url" placeholder="https://..." data-translate-placeholder="footerAboutLogoPlaceholder">
+                <div class="form-row" style="align-items: flex-end; margin-top: 8px;">
+                    <div class="form-group" style="flex: 2; min-width: 240px;">
+                        <input type="file" id="site-footer-about-logo-file" accept="image/*" />
+                        <small data-translate="footerAboutLogoHelp">Optional. Upload a logo shown above the About text in the footer.</small>
+                    </div>
+                    <div class="form-group" style="flex: 0; min-width: 180px;">
+                        <button type="button" onclick="uploadFooterAboutLogo()" class="btn btn-secondary" style="width: 100%; white-space: nowrap;">
+                            <i class="fas fa-upload"></i> <span data-translate="upload">Upload</span>
+                        </button>
+                    </div>
+                    <div class="form-group" style="flex: 0; min-width: 60px;">
+                        <img id="site-footer-about-logo-preview" alt="Footer logo" style="display:none; height: 44px; width: auto; border-radius: 6px; border: 1px solid #eee;" />
+                    </div>
+                </div>
+            </div>
+
             <h4 style="margin: 10px 0 6px;" data-translate="socialLinks">Social links</h4>
             <div class="form-row">
                 <div class="form-group">
@@ -911,10 +930,10 @@
             <div class="form-row">
                 <div class="form-group" id="promo-code-category-group" style="display: none;">
                     <label for="promo-code-category"><span data-translate="applyToCategory">Apply to Category</span>:</label>
-                    <select id="promo-code-category">
+                    <select id="promo-code-category" multiple size="6" style="min-height: 140px;">
                         <option value="all" data-translate="allCategories">All Categories</option>
                     </select>
-                    <small data-translate="promoCategoryHelp">Promo code will apply only to items in this category</small>
+                    <small data-translate="promoCategoryHelp">Hold Ctrl/Cmd to select multiple categories</small>
                 </div>
 
                 <div class="form-group" id="promo-code-products-group" style="display: none;">

@@ -522,6 +522,41 @@ const uploadFavicon = multer({
     }
 });
 
+// Footer "About us" logo upload
+const footerAboutLogoStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, UPLOADS_DIR);
+    },
+    filename: function (req, file, cb) {
+        const original = (file?.originalname || '').toString();
+        const mime = (file?.mimetype || '').toString().toLowerCase();
+        let ext = path.extname(original).toLowerCase();
+        if (!ext) {
+            if (mime === 'image/png') ext = '.png';
+            else if (mime === 'image/jpeg') ext = '.jpg';
+            else if (mime === 'image/webp') ext = '.webp';
+            else if (mime === 'image/gif') ext = '.gif';
+            else if (mime === 'image/svg+xml') ext = '.svg';
+            else ext = '.png';
+        }
+        cb(null, `footer-about-logo${ext}`);
+    }
+});
+
+const uploadFooterAboutLogo = multer({
+    storage: footerAboutLogoStorage,
+    limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+    fileFilter: function (req, file, cb) {
+        const original = (file?.originalname || '').toString().toLowerCase();
+        const mime = (file?.mimetype || '').toString().toLowerCase();
+        const ext = path.extname(original).toLowerCase();
+        const okExt = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext) || !ext;
+        const okMime = mime.startsWith('image/');
+        if (okExt && okMime) return cb(null, true);
+        cb(new Error('Only image files are allowed (.png, .jpg, .webp, .gif, .svg)'));
+    }
+});
+
 // Bulk product image upload: filename base must match product id (e.g. 1.jpg -> id 1)
 const productImageStorage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -1279,6 +1314,7 @@ function getDefaultSiteSettings() {
         footer: {
             contacts: { phone: '', email: '', address: '', addressMapsUrl: '' },
             aboutText: '',
+            aboutLogoUrl: '',
             socials: []
         },
         legal: { privacyHtml: '', termsHtml: '' }
@@ -1332,6 +1368,18 @@ function normalizeSiteSettings(input) {
     };
 
     const contacts = src.footer?.contacts || {};
+
+    const aboutLogoRaw = normalizeText(src.footer?.aboutLogoUrl, 500);
+    let aboutLogoUrl = '';
+    if (aboutLogoRaw) {
+        const clean = aboutLogoRaw.split('#')[0].trim();
+        if (/^https?:\/\//i.test(clean)) {
+            aboutLogoUrl = clean;
+        } else if (/^\/uploads\/footer-about-logo\.(png|jpe?g|gif|webp|svg)(\?v=\d+)?$/i.test(clean)) {
+            aboutLogoUrl = clean;
+        }
+    }
+
     const footer = {
         contacts: {
             phone: normalizeText(contacts.phone, 100),
@@ -1340,6 +1388,7 @@ function normalizeSiteSettings(input) {
             addressMapsUrl: normalizeText(contacts.addressMapsUrl, 500)
         },
         aboutText: normalizeText(src.footer?.aboutText, 600),
+        aboutLogoUrl,
         socials: Array.isArray(src.footer?.socials)
             ? src.footer.socials.slice(0, 6).map(s => ({
                 label: normalizeText(s?.label, 40),
@@ -4015,6 +4064,62 @@ app.post(API_PREFIX + '/settings/site/favicon', requireAuth, (req, res) => {
     });
 });
 
+// Upload/update footer "About us" logo (admin only)
+app.post(API_PREFIX + '/settings/site/footer-about-logo', requireAuth, (req, res) => {
+    uploadFooterAboutLogo.single('aboutLogo')(req, res, (err) => {
+        try {
+            if (err) {
+                return res.status(400).json({ error: err.message || 'Invalid logo upload' });
+            }
+
+            if (!req.file) {
+                return res.status(400).json({ error: 'Missing logo file' });
+            }
+
+            const db = readDatabase();
+            const restaurant = db.restaurants?.find(r => r.id === req.restaurantId);
+            if (!restaurant) {
+                return res.status(404).json({ error: 'Restaurant not found' });
+            }
+
+            const allowedExt = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+            const ext = path.extname(req.file.filename).toLowerCase();
+            const safeExt = allowedExt.includes(ext) ? ext : '.png';
+
+            // Remove any previous logo files with other extensions
+            for (const e of allowedExt) {
+                if (e === safeExt) continue;
+                try {
+                    fs.unlinkSync(path.join(UPLOADS_DIR, `footer-about-logo${e}`));
+                } catch (e2) {
+                    // ignore
+                }
+            }
+
+            const v = Date.now();
+            const aboutLogoUrl = `/uploads/footer-about-logo${safeExt}?v=${v}`;
+
+            const current = normalizeSiteSettings(restaurant.siteSettings);
+            restaurant.siteSettings = normalizeSiteSettings({
+                ...current,
+                footer: {
+                    ...(current.footer || {}),
+                    aboutLogoUrl
+                }
+            });
+
+            if (!writeDatabase(db)) {
+                return res.status(500).json({ error: 'Failed to save logo setting' });
+            }
+
+            return res.json({ ok: true, aboutLogoUrl: restaurant.siteSettings.footer?.aboutLogoUrl || '' });
+        } catch (e) {
+            console.error('Error uploading footer about logo:', e);
+            return res.status(500).json({ error: 'Failed to upload footer logo' });
+        }
+    });
+});
+
 // Update customization settings
 app.put(API_PREFIX + '/settings/customization', requireAuth, (req, res) => {
     const db = readDatabase();
@@ -4359,12 +4464,34 @@ app.post(API_PREFIX + '/reset', requireAuth, (req, res) => {
 
 // ==================== PROMO CODE ROUTES ====================
 
+function normalizePromoCodeCategories(value) {
+    if (!Array.isArray(value)) return [];
+    const cleaned = value
+        .map(v => (v === undefined || v === null) ? '' : String(v))
+        .map(s => s.trim())
+        .filter(Boolean);
+    const unique = Array.from(new Set(cleaned));
+    return unique.slice(0, 200);
+}
+
+function getPromoTargetCategories(promo) {
+    const fromArray = normalizePromoCodeCategories(promo?.categories);
+    if (fromArray.length) return fromArray;
+    const fromSingle = (promo?.category || '').toString().trim();
+    return fromSingle ? [fromSingle] : [];
+}
+
 function normalizePromoCodeScope(promo) {
     const scopeRaw = (promo?.scope || '').toString().trim().toLowerCase();
     if (scopeRaw === 'all' || scopeRaw === 'category' || scopeRaw === 'products') return scopeRaw;
 
     const productIds = Array.isArray(promo?.productIds) ? promo.productIds : [];
     if (productIds.length) return 'products';
+
+    const categories = getPromoTargetCategories(promo);
+    const hasCategory = categories.some(c => (c || '').toString().trim().toLowerCase() !== 'all');
+    const hasAll = categories.some(c => (c || '').toString().trim().toLowerCase() === 'all');
+    if (hasCategory && !hasAll) return 'category';
 
     const category = (promo?.category || 'all').toString();
     return category && category !== 'all' ? 'category' : 'all';
@@ -4405,8 +4532,9 @@ function computePromoEligibleSubtotal(items, promo, db) {
     const safeItems = Array.isArray(items) ? items : [];
     if (!promo) return 0;
     const scope = normalizePromoCodeScope(promo);
+    const targetCategories = getPromoTargetCategories(promo);
+    const targetNorms = new Set(targetCategories.map(c => (c || '').toString().toLowerCase()));
     const category = (promo?.category || 'all').toString();
-    const categoryNorm = category.toLowerCase();
     const productIds = normalizePromoCodeProductIds(promo?.productIds);
     const productIdSet = new Set(productIds.map(String));
 
@@ -4417,7 +4545,7 @@ function computePromoEligibleSubtotal(items, promo, db) {
         const line = (parseNumber(it?.price, 0) * parseNumber(it?.quantity, 0));
         if (line <= 0) return sum;
 
-        if (scope === 'all' || category === 'all') {
+        if (scope === 'all' || category === 'all' || targetNorms.has('all')) {
             return sum + line;
         }
 
@@ -4428,7 +4556,7 @@ function computePromoEligibleSubtotal(items, promo, db) {
         const itemCategoryNorm = itemCategory.toLowerCase();
 
         if (scope === 'category') {
-            return itemCategoryNorm === categoryNorm ? (sum + line) : sum;
+            return targetNorms.has(itemCategoryNorm) ? (sum + line) : sum;
         }
         if (scope === 'products') {
             return productIdSet.has(idStr) ? (sum + line) : sum;
@@ -4552,12 +4680,13 @@ app.post(API_PREFIX + '/promo-codes/validate', (req, res) => {
 
         // Eligibility in cart: if caller provides category/categories/productIds, enforce target match.
         const scope = normalizePromoCodeScope(pc);
-        const targetCategory = (pc.category || 'all').toString();
-        const targetCategoryNorm = targetCategory.toLowerCase();
+        const targetCategories = getPromoTargetCategories(pc);
+        const targetNorms = new Set(targetCategories.map(c => (c || '').toString().toLowerCase()));
+        const targetCategory = (pc.category || (targetCategories[0] || 'all')).toString();
         const targetProductIds = normalizePromoCodeProductIds(pc.productIds);
         const targetSet = new Set(targetProductIds.map(String));
 
-        if (scope === 'all' || targetCategory === 'all') {
+        if (scope === 'all' || targetCategory === 'all' || targetNorms.has('all')) {
             return true;
         }
 
@@ -4566,8 +4695,8 @@ app.post(API_PREFIX + '/promo-codes/validate', (req, res) => {
                 // Browse-mode validation
                 return true;
             }
-            if (inCategory && inCategory.toLowerCase() === targetCategoryNorm) return true;
-            if (inCategories && inCategories.some(c => (c || '').toString().toLowerCase() === targetCategoryNorm)) return true;
+            if (inCategory && targetNorms.has(inCategory.toLowerCase())) return true;
+            if (inCategories && inCategories.some(c => targetNorms.has((c || '').toString().toLowerCase()))) return true;
             return false;
         }
 
@@ -4583,11 +4712,13 @@ app.post(API_PREFIX + '/promo-codes/validate', (req, res) => {
     });
     
     if (promoCode) {
+        const targetCategories = getPromoTargetCategories(promoCode);
         res.json({
             valid: true,
             discount: promoCode.discount,
             scope: normalizePromoCodeScope(promoCode),
-            category: (promoCode.category || 'all'),
+            category: (promoCode.category || (targetCategories[0] || 'all')),
+            categories: targetCategories.length ? targetCategories : undefined,
             productIds: normalizePromoCodeProductIds(promoCode.productIds),
             allowedMethod: (promoCode.allowedMethod || 'all'),
             startDate: promoCode.startDate || null,
@@ -4604,7 +4735,8 @@ app.post(API_PREFIX + '/promo-codes', requireAuth, (req, res) => {
     const allowedMethodRaw = (req.body.allowedMethod || 'all').toString().trim().toLowerCase();
     const allowedMethod = (allowedMethodRaw === 'delivery' || allowedMethodRaw === 'pickup' || allowedMethodRaw === 'all') ? allowedMethodRaw : 'all';
     const scope = normalizePromoCodeScope(req.body);
-    const category = (req.body.category || 'all').toString();
+    let categories = normalizePromoCodeCategories(req.body.categories);
+    let category = (req.body.category || 'all').toString();
     const productIds = normalizePromoCodeProductIds(req.body.productIds);
     const startDate = (req.body.startDate || '').toString().trim();
     const endDate = (req.body.endDate || '').toString().trim();
@@ -4620,11 +4752,28 @@ app.post(API_PREFIX + '/promo-codes', requireAuth, (req, res) => {
         return res.status(400).json({ error: 'productIds required for products-scoped promo codes' });
     }
 
+    if (scope === 'category') {
+        if (!categories.length) {
+            categories = category ? [category] : [];
+        }
+        const hasAll = categories.some(c => (c || '').toString().trim().toLowerCase() === 'all');
+        if (hasAll) {
+            categories = ['all'];
+            category = 'all';
+        } else {
+            category = (categories[0] || 'all').toString();
+        }
+    } else {
+        categories = [];
+        if (scope === 'all') category = 'all';
+    }
+
     const newPromoCode = {
         id: Date.now(),
         code: req.body.code.toUpperCase(),
         scope,
         category,
+        ...(scope === 'category' ? { categories } : {}),
         ...(scope === 'products' ? { productIds } : {}),
         discount: parseFloat(req.body.discount),
         isActive: req.body.isActive !== undefined ? req.body.isActive : true,
@@ -4733,7 +4882,8 @@ app.put(API_PREFIX + '/promo-codes/:id', requireAuth, (req, res) => {
         const allowedMethod = (allowedMethodRaw === 'delivery' || allowedMethodRaw === 'pickup' || allowedMethodRaw === 'all') ? allowedMethodRaw : 'all';
 
         const scope = normalizePromoCodeScope(req.body);
-        const category = (req.body.category || 'all').toString();
+        let categories = normalizePromoCodeCategories(req.body.categories);
+        let category = (req.body.category || 'all').toString();
         const productIds = normalizePromoCodeProductIds(req.body.productIds);
         const startDate = (req.body.startDate || '').toString().trim();
         const endDate = (req.body.endDate || '').toString().trim();
@@ -4750,11 +4900,28 @@ app.put(API_PREFIX + '/promo-codes/:id', requireAuth, (req, res) => {
             }
         }
 
+        if (scope === 'category') {
+            if (!categories.length) {
+                categories = category ? [category] : [];
+            }
+            const hasAll = categories.some(c => (c || '').toString().trim().toLowerCase() === 'all');
+            if (hasAll) {
+                categories = ['all'];
+                category = 'all';
+            } else {
+                category = (categories[0] || 'all').toString();
+            }
+        } else {
+            categories = [];
+            if (scope === 'all') category = 'all';
+        }
+
         db.promoCodes[index] = {
             id: parseInt(req.params.id),
             code: req.body.code.toUpperCase(),
             scope,
             category,
+            ...(scope === 'category' ? { categories } : {}),
             ...(scope === 'products' ? { productIds } : {}),
             discount: parseFloat(req.body.discount),
             isActive: req.body.isActive,
@@ -5123,6 +5290,7 @@ function recomputeOrderTotals(order, db) {
                 discountBaseSubtotal = computePromoEligibleSubtotal(items, promo, db);
                 order.discountScope = normalizePromoCodeScope(promo);
                 order.discountCategory = (promo.category || 'all');
+                order.discountCategories = (order.discountScope === 'category') ? getPromoTargetCategories(promo) : undefined;
                 order.discountProductIds = normalizePromoCodeProductIds(promo.productIds);
             }
         }
