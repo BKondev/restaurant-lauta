@@ -8121,11 +8121,120 @@ async function saveDeliverySettings() {
 
 // ==================== COMBO & BUNDLE OFFERS ====================
 
-let selectedComboProducts = new Set();
+let selectedComboProducts = new Map(); // productId -> qty
+let editingComboId = null;
+let comboDescriptionManuallyEdited = false;
+let comboDescriptionBgManuallyEdited = false;
+let lastAutoComboDescription = '';
+let lastAutoComboDescriptionBg = '';
+let comboDescriptionListenersAttached = false;
+let combosById = new Map();
 let allComboProducts = [];
 let comboCurrentPage = 1;
 let comboItemsPerPage = 10;
 let comboFilteredProducts = [];
+
+function normalizeComboProductsSelection(comboProducts) {
+    const selection = new Map();
+    if (!Array.isArray(comboProducts)) return selection;
+
+    comboProducts.forEach(item => {
+        // Legacy format: [1,2,3]
+        if (typeof item === 'number' || typeof item === 'string') {
+            const pid = Number(item);
+            if (Number.isFinite(pid)) selection.set(String(pid), 1);
+            return;
+        }
+
+        // New format: [{ productId, qty }]
+        if (item && typeof item === 'object') {
+            const pid = Number(item.productId);
+            const qty = Math.max(1, Math.floor(Number(item.qty ?? 1)));
+            if (Number.isFinite(pid)) selection.set(String(pid), Number.isFinite(qty) ? qty : 1);
+        }
+    });
+
+    return selection;
+}
+
+function getComboSaveButtonEls() {
+    const btn = document.getElementById('combo-save-btn');
+    const text = document.getElementById('combo-save-btn-text');
+    return { btn, text };
+}
+
+function setComboEditMode(comboId) {
+    editingComboId = comboId || null;
+    const { btn, text } = getComboSaveButtonEls();
+    if (!btn || !text) return;
+
+    const icon = btn.querySelector('i');
+    if (editingComboId) {
+        if (icon) icon.className = 'fas fa-save';
+        text.textContent = t('updateComboBundle', 'Update Combo/Bundle');
+    } else {
+        if (icon) icon.className = 'fas fa-plus';
+        text.textContent = t('createComboBundle', 'Create Combo/Bundle');
+    }
+}
+
+function buildComboAutoDescriptions() {
+    const partsEn = [];
+    const partsBg = [];
+
+    for (const [pidStr, qtyVal] of selectedComboProducts.entries()) {
+        const pid = Number(pidStr);
+        const qty = Math.max(1, Math.floor(Number(qtyVal) || 1));
+        const product = allComboProducts.find(p => Number(p.id) === pid);
+        const nameEn = (product && product.name) ? product.name : `#${pidStr}`;
+        const nameBg = (product && product.translations && product.translations.bg && product.translations.bg.name)
+            ? product.translations.bg.name
+            : ((product && (product.nameBg || product.name)) ? (product.nameBg || product.name) : nameEn);
+        const prefix = qty > 1 ? `${qty}x ` : '';
+        partsEn.push(`${prefix}${nameEn}`);
+        partsBg.push(`${prefix}${nameBg}`);
+    }
+
+    const en = partsEn.length ? `Includes: ${partsEn.join(', ')}` : 'Includes:';
+    const bg = partsBg.length ? `Включва: ${partsBg.join(', ')}` : 'Включва:';
+    return { en, bg };
+}
+
+function updateComboDescriptionsIfAuto() {
+    const descEl = document.getElementById('combo-description');
+    const descBgEl = document.getElementById('combo-description-bg');
+    if (!descEl || !descBgEl) return;
+
+    const next = buildComboAutoDescriptions();
+
+    const currentEn = String(descEl.value || '').trim();
+    const currentBg = String(descBgEl.value || '').trim();
+
+    if (!comboDescriptionManuallyEdited || !currentEn || currentEn === lastAutoComboDescription) {
+        descEl.value = next.en;
+        lastAutoComboDescription = next.en;
+    }
+    if (!comboDescriptionBgManuallyEdited || !currentBg || currentBg === lastAutoComboDescriptionBg) {
+        descBgEl.value = next.bg;
+        lastAutoComboDescriptionBg = next.bg;
+    }
+}
+
+function ensureComboDescriptionListeners() {
+    if (comboDescriptionListenersAttached) return;
+
+    const descEl = document.getElementById('combo-description');
+    const descBgEl = document.getElementById('combo-description-bg');
+    if (!descEl || !descBgEl) return;
+
+    descEl.addEventListener('input', () => {
+        comboDescriptionManuallyEdited = true;
+    });
+    descBgEl.addEventListener('input', () => {
+        comboDescriptionBgManuallyEdited = true;
+    });
+    comboDescriptionListenersAttached = true;
+}
 
 // Load products for combo selector
 async function loadProductsForCombo() {
@@ -8138,6 +8247,7 @@ async function loadProductsForCombo() {
             populateComboCategoryFilter();
             renderComboProductSelector();
             setupComboFilters();
+            ensureComboDescriptionListeners();
             loadCombos();
         }
     } catch (error) {
@@ -8185,6 +8295,7 @@ function filterComboProducts() {
     if (searchTerm) {
         filtered = filtered.filter(p => 
             p.name.toLowerCase().includes(searchTerm) || 
+            (p.translations && p.translations.bg && p.translations.bg.name && p.translations.bg.name.toLowerCase().includes(searchTerm)) ||
             (p.nameBg && p.nameBg.toLowerCase().includes(searchTerm)) ||
             String(p.id).includes(searchTerm)
         );
@@ -8201,7 +8312,7 @@ function renderComboProductSelector() {
     const pageInfo = document.getElementById('combo-page-info');
     if (!container) return;
     
-    const products = comboFilteredProducts.length > 0 ? comboFilteredProducts : allComboProducts;
+    const products = comboFilteredProducts;
     
     if (products.length === 0) {
         container.innerHTML = `<p style="color: #999; text-align: center;">${t('noProductsFound', 'No products found')}</p>`;
@@ -8219,34 +8330,41 @@ function renderComboProductSelector() {
     container.innerHTML = `
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px;">
             ${pageProducts.map(product => `
-                <label style="
+                <div style="
                     display: flex;
                     align-items: center;
                     gap: 12px;
                     padding: 12px;
-                    border: 2px solid ${selectedComboProducts.has(product.id) ? '#4CAF50' : '#e0e0e0'};
+                    border: 2px solid ${selectedComboProducts.has(String(product.id)) ? '#4CAF50' : '#e0e0e0'};
                     border-radius: 8px;
-                    cursor: pointer;
-                    background: ${selectedComboProducts.has(product.id) ? '#f1f8f4' : 'white'};
-                    transition: all 0.2s;
-                    &:hover {
-                        border-color: #4CAF50;
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                    }
+                    background: ${selectedComboProducts.has(String(product.id)) ? '#f1f8f4' : 'white'};
                 ">
-                    <input type="checkbox" 
-                           value="${product.id}" 
-                           ${selectedComboProducts.has(product.id) ? 'checked' : ''}
-                           onchange="toggleComboProduct(${product.id})"
-                           style="cursor: pointer; width: 18px; height: 18px;">
-                    <img src="${product.image}" 
-                         alt="${product.name}" 
-                         style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; flex-shrink: 0;">
-                    <div style="flex: 1; min-width: 0;">
-                        <div style="font-weight: 500; font-size: 14px; color: #333; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${product.name}</div>
-                        <div style="font-size: 13px; color: #4CAF50; font-weight: 600;">${product.price.toFixed(2)} €</div>
+                    <label style="display: flex; align-items: center; gap: 12px; flex: 1; cursor: pointer; min-width: 0;">
+                        <input type="checkbox" 
+                               value="${product.id}" 
+                               ${selectedComboProducts.has(String(product.id)) ? 'checked' : ''}
+                               onchange="toggleComboProduct(${product.id})"
+                               style="cursor: pointer; width: 18px; height: 18px;">
+                        <img src="${product.image}" 
+                             alt="${product.name}" 
+                             style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; flex-shrink: 0;">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 500; font-size: 14px; color: #333; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${product.name}</div>
+                            <div style="font-size: 13px; color: #4CAF50; font-weight: 600;">${product.price.toFixed(2)} €</div>
+                        </div>
+                    </label>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:12px; color:#666;">${t('qtyShort', 'Qty')}</span>
+                        <input type="number"
+                               min="1"
+                               step="1"
+                               value="${selectedComboProducts.get(String(product.id)) || 1}"
+                               ${selectedComboProducts.has(String(product.id)) ? '' : 'disabled'}
+                               onclick="event.stopPropagation()"
+                               oninput="event.stopPropagation(); setComboProductQuantity(${product.id}, this.value)"
+                               style="width: 64px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px;">
                     </div>
-                </label>
+                </div>
             `).join('')}
         </div>
     `;
@@ -8269,7 +8387,7 @@ function previousComboPage() {
 }
 
 function nextComboPage() {
-    const products = comboFilteredProducts.length > 0 ? comboFilteredProducts : allComboProducts;
+    const products = comboFilteredProducts;
     const totalPages = Math.ceil(products.length / comboItemsPerPage);
     if (comboCurrentPage < totalPages) {
         comboCurrentPage++;
@@ -8279,11 +8397,23 @@ function nextComboPage() {
 
 // Toggle product selection for combo
 function toggleComboProduct(productId) {
-    if (selectedComboProducts.has(productId)) {
-        selectedComboProducts.delete(productId);
+    const key = String(productId);
+    if (selectedComboProducts.has(key)) {
+        selectedComboProducts.delete(key);
     } else {
-        selectedComboProducts.add(productId);
+        selectedComboProducts.set(key, 1);
     }
+
+    renderComboProductSelector();
+    updateComboDescriptionsIfAuto();
+}
+
+function setComboProductQuantity(productId, value) {
+    const key = String(productId);
+    if (!selectedComboProducts.has(key)) return;
+    const qty = Math.max(1, Math.floor(Number(value) || 1));
+    selectedComboProducts.set(key, qty);
+    updateComboDescriptionsIfAuto();
 }
 
 // Save combo/bundle
@@ -8305,25 +8435,41 @@ async function saveCombo() {
         alert(t('comboSelectAtLeastOne', 'Please select at least one product for this combo!'));
         return;
     }
+
+    // Auto-generate bilingual descriptions unless user explicitly edited.
+    updateComboDescriptionsIfAuto();
+    const effectiveDescription = document.getElementById('combo-description').value.trim();
+    const effectiveDescriptionBg = document.getElementById('combo-description-bg').value.trim();
+
+    const comboProductsPayload = Array.from(selectedComboProducts.entries()).map(([pidStr, qtyVal]) => ({
+        productId: Number(pidStr),
+        qty: Math.max(1, Math.floor(Number(qtyVal) || 1))
+    })).filter(x => Number.isFinite(x.productId));
     
     const comboProduct = {
         name: name,
-        nameBg: nameBg || name,
-        description: description || 'Special combo offer',
-        descriptionBg: descriptionBg || description || 'Специална комбо оферта',
+        description: effectiveDescription || 'Special combo offer',
         price: price,
         category: 'Combos & Bundles',
-        categoryBg: 'Комбо и Бъндъл Оферти',
         image: image || 'https://via.placeholder.com/300x200?text=Combo+Offer',
         isCombo: true,
         comboType: type,
-        comboProducts: Array.from(selectedComboProducts)
+        comboProducts: comboProductsPayload,
+        translations: {
+            bg: {
+                name: nameBg || name,
+                description: effectiveDescriptionBg || effectiveDescription || 'Специална комбо оферта',
+                category: 'Комбо и Бъндъл Оферти'
+            }
+        }
     };
     
     try {
         const token = sessionStorage.getItem('adminToken');
-        const response = await fetch(`${API_URL}/products`, {
-            method: 'POST',
+        const url = editingComboId ? `${API_URL}/products/${editingComboId}` : `${API_URL}/products`;
+        const method = editingComboId ? 'PUT' : 'POST';
+        const response = await fetch(url, {
+            method,
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
@@ -8332,12 +8478,12 @@ async function saveCombo() {
         });
         
         if (response.ok) {
-            alert(t('comboCreatedSuccess', 'Combo/Bundle created successfully!'));
+            alert(editingComboId ? t('comboUpdatedSuccess', 'Combo/Bundle updated successfully!') : t('comboCreatedSuccess', 'Combo/Bundle created successfully!'));
             clearComboForm();
             loadProductsForCombo();
             loadProducts(); // Refresh main products list
         } else {
-            alert(t('comboCreateFailed', 'Failed to create combo/bundle'));
+            alert(editingComboId ? t('comboUpdateFailed', 'Failed to update combo/bundle') : t('comboCreateFailed', 'Failed to create combo/bundle'));
         }
     } catch (error) {
         console.error('Error creating combo:', error);
@@ -8355,10 +8501,22 @@ function clearComboForm() {
     document.getElementById('combo-image').value = '';
     document.getElementById('combo-type').value = 'combo';
     selectedComboProducts.clear();
+    comboDescriptionManuallyEdited = false;
+    comboDescriptionBgManuallyEdited = false;
+    lastAutoComboDescription = '';
+    lastAutoComboDescriptionBg = '';
+    setComboEditMode(null);
     
     // Uncheck all checkboxes
     const checkboxes = document.querySelectorAll('#combo-products-selector input[type="checkbox"]');
     checkboxes.forEach(cb => cb.checked = false);
+
+    // Reset quantity inputs
+    const qtyInputs = document.querySelectorAll('#combo-products-selector input[type="number"]');
+    qtyInputs.forEach(inp => {
+        inp.value = '1';
+        inp.disabled = true;
+    });
 }
 
 // Load and display combos
@@ -8368,6 +8526,7 @@ async function loadCombos() {
         if (response.ok) {
             const products = await response.json();
             const combos = products.filter(p => p.isCombo);
+            combosById = new Map(combos.map(c => [String(c.id), c]));
             renderCombosTable(combos);
         }
     } catch (error) {
@@ -8392,7 +8551,7 @@ function renderCombosTable(combos) {
     }
     
     tbody.innerHTML = combos.map(combo => `
-        <tr>
+        <tr onclick="editCombo(${combo.id})" style="cursor: pointer;">
             <td><img src="${combo.image}" alt="${combo.name}" class="product-img-thumb"></td>
             <td>${combo.name}</td>
             <td><span style="padding: 4px 8px; background: #3498db; color: white; border-radius: 4px; font-size: 12px;">
@@ -8400,12 +8559,46 @@ function renderCombosTable(combos) {
             </span></td>
             <td>${combo.price.toFixed(2)} €</td>
             <td>
-                <button onclick="deleteProduct(${combo.id})" class="btn btn-danger btn-sm">
+                <button onclick="event.stopPropagation(); deleteProduct(${combo.id})" class="btn btn-danger btn-sm">
                     <i class="fas fa-trash"></i> ${t('delete', 'Delete')}
                 </button>
             </td>
         </tr>
     `).join('');
+}
+
+// Edit existing combo/bundle
+async function editCombo(comboId) {
+    const combo = combosById.get(String(comboId));
+    if (!combo) return;
+
+    if (!allComboProducts || allComboProducts.length === 0) {
+        await loadProductsForCombo();
+    }
+
+    document.getElementById('combo-name').value = combo.name || '';
+    document.getElementById('combo-name-bg').value = (combo.translations && combo.translations.bg && combo.translations.bg.name) ? combo.translations.bg.name : (combo.nameBg || '');
+    document.getElementById('combo-price').value = (Number(combo.price) || 0).toFixed(2);
+    document.getElementById('combo-type').value = combo.comboType || 'combo';
+    document.getElementById('combo-image').value = combo.image || '';
+
+    selectedComboProducts = normalizeComboProductsSelection(combo.comboProducts);
+
+    const descEl = document.getElementById('combo-description');
+    const descBgEl = document.getElementById('combo-description-bg');
+    if (descEl) descEl.value = combo.description || '';
+    if (descBgEl) descBgEl.value = (combo.translations && combo.translations.bg && combo.translations.bg.description) ? combo.translations.bg.description : (combo.descriptionBg || '');
+
+    // Decide whether to preserve existing descriptions (manual) or keep auto.
+    const auto = buildComboAutoDescriptions();
+    comboDescriptionManuallyEdited = !!(descEl && descEl.value.trim() && descEl.value.trim() !== auto.en);
+    comboDescriptionBgManuallyEdited = !!(descBgEl && descBgEl.value.trim() && descBgEl.value.trim() !== auto.bg);
+    lastAutoComboDescription = auto.en;
+    lastAutoComboDescriptionBg = auto.bg;
+
+    setComboEditMode(combo.id);
+    renderComboProductSelector();
+    updateComboDescriptionsIfAuto();
 }
 
 // ==================== BUNDLE CREATION FROM MANAGE PRODUCTS ====================
@@ -8437,7 +8630,7 @@ function openBundleModal() {
     
     // Auto-generate bundle name
     const autoName = selectedProducts.map(p => p.name).join(' + ');
-    const autoNameBg = selectedProducts.map(p => p.nameBg || p.name).join(' + ');
+    const autoNameBg = selectedProducts.map(p => (p.translations && p.translations.bg && p.translations.bg.name) ? p.translations.bg.name : (p.nameBg || p.name)).join(' + ');
     document.getElementById('bundle-name-input').value = autoName;
     document.getElementById('bundle-name-bg-input').value = autoNameBg;
     
@@ -8477,21 +8670,25 @@ async function confirmBundleCreation() {
     
     // Create bundle description
     const description = `Bundle includes: ${selectedProducts.map(p => p.name).join(', ')}`;
-    const descriptionBg = `Бъндълът включва: ${selectedProducts.map(p => p.nameBg || p.name).join(', ')}`;
+    const descriptionBg = `Бъндълът включва: ${selectedProducts.map(p => (p.translations && p.translations.bg && p.translations.bg.name) ? p.translations.bg.name : (p.nameBg || p.name)).join(', ')}`;
     
     const bundleProduct = {
         name: name,
-        nameBg: nameBg || name,
         description: description,
-        descriptionBg: descriptionBg,
         price: price,
         category: 'Combos & Bundles',
-        categoryBg: 'Комбо и Бъндъл Оферти',
         image: image || selectedProducts[0].image,
         isCombo: true,
         comboType: 'bundle',
         comboProducts: selectedIds,
-        specialLabel: label || null
+        specialLabel: label || null,
+        translations: {
+            bg: {
+                name: nameBg || name,
+                description: descriptionBg,
+                category: 'Комбо и Бъндъл Оферти'
+            }
+        }
     };
     
     try {

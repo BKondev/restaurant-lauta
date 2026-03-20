@@ -1245,6 +1245,29 @@ function formatPrice(priceEUR, { showBgn = true } = {}) {
 }
 
 // Create product card element
+function normalizeComboProductsList(comboProducts) {
+    if (!Array.isArray(comboProducts)) return [];
+
+    return comboProducts.map(item => {
+        // Legacy format: [1,2,3]
+        if (typeof item === 'number' || typeof item === 'string') {
+            const pid = Number(item);
+            if (!Number.isFinite(pid)) return null;
+            return { productId: pid, qty: 1 };
+        }
+
+        // New format: [{ productId, qty }]
+        if (item && typeof item === 'object') {
+            const pid = Number(item.productId);
+            const qty = Math.max(1, Math.floor(Number(item.qty ?? 1)));
+            if (!Number.isFinite(pid)) return null;
+            return { productId: pid, qty: Number.isFinite(qty) ? qty : 1 };
+        }
+
+        return null;
+    }).filter(Boolean);
+}
+
 function createProductCard(product) {
     const card = document.createElement('div');
     card.className = 'product-card';
@@ -1285,9 +1308,11 @@ function createProductCard(product) {
         discountPercent = Math.round(((product.price - effectivePrice) / product.price) * 100);
     } else if (product.isCombo && product.comboProducts && product.comboProducts.length > 0) {
         // Calculate bundle discount
-        const originalTotal = product.comboProducts.reduce((sum, productId) => {
-            const bundleProduct = products.find(p => p.id === productId);
-            return sum + (bundleProduct ? bundleProduct.price : 0);
+        const comboItems = normalizeComboProductsList(product.comboProducts);
+        const originalTotal = comboItems.reduce((sum, item) => {
+            const bundleProduct = products.find(p => p.id === item.productId);
+            const unitPrice = bundleProduct ? (Number(bundleProduct.price) || 0) : 0;
+            return sum + (unitPrice * (Number(item.qty) || 1));
         }, 0);
         bundleOriginalPrice = originalTotal;
         // Calculate discount percentage even if price equals or exceeds original
@@ -1432,9 +1457,11 @@ function openProductModal(product) {
     if (hasPromo && product.price > 0) {
         discountPercent = Math.round(((product.price - effectivePrice) / product.price) * 100);
     } else if (product.isCombo && product.comboProducts && product.comboProducts.length > 0) {
-        const originalTotal = product.comboProducts.reduce((sum, productId) => {
-            const bundleProduct = products.find(p => p.id === productId);
-            return sum + (bundleProduct ? bundleProduct.price : 0);
+        const comboItems = normalizeComboProductsList(product.comboProducts);
+        const originalTotal = comboItems.reduce((sum, item) => {
+            const bundleProduct = products.find(p => p.id === item.productId);
+            const unitPrice = bundleProduct ? (Number(bundleProduct.price) || 0) : 0;
+            return sum + (unitPrice * (Number(item.qty) || 1));
         }, 0);
         bundleOriginalPrice = originalTotal;
         if (originalTotal > 0 && product.price < originalTotal) {
@@ -1947,9 +1974,11 @@ function addToCartWithQuantity(productId, quantity) {
 
     // Bundle/combo: preserve original sum price so it can be shown later (email/track/admin).
     if (product.isCombo && Array.isArray(product.comboProducts) && product.comboProducts.length > 0) {
-        const originalTotal = product.comboProducts.reduce((sum, pid) => {
-            const p = products.find(x => x.id === pid);
-            return sum + (p ? (Number(p.price) || 0) : 0);
+        const comboItems = normalizeComboProductsList(product.comboProducts);
+        const originalTotal = comboItems.reduce((sum, item) => {
+            const p = products.find(x => x.id === item.productId);
+            const unitPrice = p ? (Number(p.price) || 0) : 0;
+            return sum + (unitPrice * (Number(item.qty) || 1));
         }, 0);
         if (originalTotal > 0) originalPrice = originalTotal;
         discountLabel = (translations && translations[currentLanguage] && translations[currentLanguage].bundle) ? translations[currentLanguage].bundle : 'Bundle';

@@ -1382,9 +1382,9 @@ function renderCheckout() {
     const summarySection = document.createElement('div');
     summarySection.className = 'summary-section';
     
-    const { subtotal, discount, deliveryFee, freeDeliveryApplied, total } = calculateTotals();
+    const { subtotal, discount, intermediateSubtotal, deliveryFee, freeDeliveryApplied, total } = calculateTotals();
     const minOrderAmountNow = getEffectiveMinimumOrderAmountForMethod(deliveryMethod);
-    const minCompareAmount = subtotal;
+    const minCompareAmount = intermediateSubtotal;
     const minNotMet = (minOrderAmountNow > 0 && minCompareAmount < minOrderAmountNow);
     const isClosed = (!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true);
 
@@ -1399,6 +1399,10 @@ function renderCheckout() {
             <span>-${formatPrice(discount)}</span>
         </div>
         ` : ''}
+        <div class="summary-row subtotal">
+            <span>${currentLanguage === 'bg' ? 'Междинна сума' : 'Subtotal after discount'}</span>
+            <span>${formatPrice(intermediateSubtotal)}</span>
+        </div>
         ${deliveryMethod === 'delivery' ? `
         <div class="summary-row ${freeDeliveryApplied ? 'promo' : ''}">
             <span data-translate="deliveryFee">${freeDeliveryApplied ? translations[currentLanguage].freeDelivery : translations[currentLanguage].deliveryFee}</span>
@@ -2284,6 +2288,8 @@ function calculateTotals() {
         const eligibleSubtotal = computeEligibleSubtotalForPromo(appliedPromo);
         discount = eligibleSubtotal * (appliedPromo.discount / 100);
     }
+
+    const intermediateSubtotal = round2(subtotal - discount);
     
     // Calculate delivery fee
     let deliveryFee = 0;
@@ -2296,17 +2302,18 @@ function calculateTotals() {
             ? Math.max(0, cityEntry.freeDeliveryAmount)
             : null;
 
-        if (threshold !== null && subtotal >= threshold) {
+        if (threshold !== null && intermediateSubtotal >= threshold) {
             deliveryFee = 0;
             freeDeliveryApplied = true;
         } else {
             deliveryFee = getDeliveryFeeForCity(city);
         }
     }
-    
-    const total = subtotal - discount + deliveryFee;
-    
-    return { subtotal, discount, deliveryFee, freeDeliveryApplied, total };
+
+    deliveryFee = round2(deliveryFee);
+    const total = round2(intermediateSubtotal + deliveryFee);
+
+    return { subtotal: round2(subtotal), discount: round2(discount), intermediateSubtotal, deliveryFee, freeDeliveryApplied, total };
 }
 
 // Apply promo code
@@ -2836,10 +2843,10 @@ function updateOrderSummary() {
     const summarySection = document.querySelector('.summary-section');
     if (!summarySection) return;
     
-    const { subtotal, discount, deliveryFee, freeDeliveryApplied, total } = calculateTotals();
+    const { subtotal, discount, intermediateSubtotal, deliveryFee, freeDeliveryApplied, total } = calculateTotals();
     const restaurantClosedReason = getRestaurantClosedReason();
     const minOrderAmountNow = getEffectiveMinimumOrderAmountForMethod(deliveryMethod);
-    const minCompareAmount = subtotal;
+    const minCompareAmount = intermediateSubtotal;
     const minNotMet = (minOrderAmountNow > 0 && minCompareAmount < minOrderAmountNow);
     const isClosed = (!!restaurantClosedReason) || (orderSettings?.temporarilyClosed === true);
     
@@ -2854,6 +2861,10 @@ function updateOrderSummary() {
             <span>-${formatPrice(discount)}</span>
         </div>
         ` : ''}
+        <div class="summary-row subtotal">
+            <span>${currentLanguage === 'bg' ? 'Междинна сума' : 'Subtotal after discount'}</span>
+            <span>${formatPrice(intermediateSubtotal)}</span>
+        </div>
         ${deliveryMethod === 'delivery' ? `
         <div class="summary-row ${freeDeliveryApplied ? 'promo' : ''}">
             <span data-translate="deliveryFee">${freeDeliveryApplied ? translations[currentLanguage].freeDelivery : translations[currentLanguage].deliveryFee}</span>
