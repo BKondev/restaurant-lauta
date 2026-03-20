@@ -47,6 +47,22 @@ function resolvePublicAssetUrl(url) {
     return s;
 }
 
+function normalizeSlideshowSlides(rawSlides) {
+    const arr = Array.isArray(rawSlides) ? rawSlides : [];
+    return arr
+        .slice(0, 10)
+        .map(s => {
+            if (typeof s === 'string') {
+                return { image: s, title: '' };
+            }
+            const obj = (s && typeof s === 'object') ? s : {};
+            const image = (obj.image || obj.imageUrl || obj.url || '').toString();
+            const title = (obj.title || obj.caption || '').toString();
+            return { image, title };
+        })
+        .filter(s => !!(s.image || '').toString().trim());
+}
+
 function stopSlideshowAutoplay() {
     if (slideshowAutoplayTimer) {
         clearInterval(slideshowAutoplayTimer);
@@ -107,13 +123,13 @@ function renderSlideshow() {
     const dots = document.getElementById('slide-dots');
     if (!root || !wrapper || !dots) return;
 
-    const slides = Array.isArray(slideshowSettings?.slides) ? slideshowSettings.slides : [];
+    const slides = normalizeSlideshowSlides(slideshowSettings?.slides);
     wrapper.innerHTML = '';
     dots.innerHTML = '';
 
     slides.forEach((slide, idx) => {
-        const imageUrl = resolvePublicAssetUrl(slide?.image);
-        const title = (slide?.title || '').toString().trim();
+        const imageUrl = resolvePublicAssetUrl(slide.image);
+        const title = (slide.title || '').toString().trim();
 
         const slideEl = document.createElement('div');
         slideEl.className = 'slide';
@@ -155,9 +171,8 @@ function updateSlideshowVisibility() {
     const root = document.getElementById('promo-slideshow');
     if (!root) return;
 
-    const slides = Array.isArray(slideshowSettings?.slides) ? slideshowSettings.slides : [];
-    const hasSlides = slides.some(s => !!(s && typeof s === 'object' && (s.image || '').toString().trim()));
-    const shouldShow = !!(slideshowSettings?.enabled && hasSlides && currentCategory === 'all');
+    const slides = normalizeSlideshowSlides(slideshowSettings?.slides);
+    const shouldShow = !!(slideshowSettings?.enabled && slides.length > 0 && currentCategory === 'all');
 
     root.style.display = shouldShow ? '' : 'none';
     if (shouldShow) startSlideshowAutoplay();
@@ -173,7 +188,7 @@ async function loadSlideshowSettingsPublic() {
         slideshowSettings = {
             enabled: !!data.enabled,
             autoPlayInterval: data.autoPlayInterval || 5000,
-            slides: Array.isArray(data.slides) ? data.slides : []
+            slides: normalizeSlideshowSlides(data.slides)
         };
 
         renderSlideshow();

@@ -1,6 +1,6 @@
 param(
     [string]$ServerIp = "46.62.174.218",
-    [string]$ServerUser = "root",
+    [string]$ServerUser = "adminuser",
     [string]$CommitMessage = "deploy-lauta"
 )
 
@@ -67,25 +67,25 @@ cd "$DEPLOY_DIR"
 
 # Preserve production files
 echo "  Preserving production data..."
-mkdir -p "$PRESERVE_DIR"
-[ -f database.json ] && cp database.json "$PRESERVE_DIR/" || true
-[ -f .env ] && cp .env "$PRESERVE_DIR/" || true
-[ -d uploads ] && cp -r uploads "$PRESERVE_DIR/" || true
+sudo mkdir -p "$PRESERVE_DIR"
+[ -f database.json ] && sudo cp database.json "$PRESERVE_DIR/" || true
+[ -f .env ] && sudo cp .env "$PRESERVE_DIR/" || true
+[ -d uploads ] && sudo cp -r uploads "$PRESERVE_DIR/" || true
 
 # Pull latest code
 echo "  Fetching latest code..."
-git fetch origin
-git reset --hard origin/main
+sudo git fetch origin
+sudo git reset --hard origin/main
 
 # Restore production files
 echo "  Restoring production data..."
-[ -f "$PRESERVE_DIR/database.json" ] && cp "$PRESERVE_DIR/database.json" . || true
-[ -f "$PRESERVE_DIR/.env" ] && cp "$PRESERVE_DIR/.env" . || true
-[ -d "$PRESERVE_DIR/uploads" ] && cp -r "$PRESERVE_DIR/uploads" . || true
+[ -f "$PRESERVE_DIR/database.json" ] && sudo cp "$PRESERVE_DIR/database.json" . || true
+[ -f "$PRESERVE_DIR/.env" ] && sudo cp "$PRESERVE_DIR/.env" . || true
+[ -d "$PRESERVE_DIR/uploads" ] && sudo cp -r "$PRESERVE_DIR/uploads" . || true
 
 # Install dependencies
 echo "  Installing dependencies..."
-npm ci --omit=dev 2>/dev/null || npm install --omit=dev
+sudo npm ci --omit=dev 2>/dev/null || sudo npm install --omit=dev
 
 # Get PM2 process name from .env
 PM2_PROCESS="restaurant-backend-lauta"
@@ -98,13 +98,26 @@ fi
 
 # Restart PM2
 echo "  Restarting PM2 process: $PM2_PROCESS"
-pm2 restart "$PM2_PROCESS" || pm2 start server.js --name "$PM2_PROCESS"
-pm2 save
+sudo pm2 restart "$PM2_PROCESS" || sudo pm2 start server.js --name "$PM2_PROCESS"
+sudo pm2 save
 
 echo "✓ LAUTA deployment complete!"
 '@
 
-ssh "$ServerUser@$ServerIp" "bash -s" <<< $remoteScript
+$tmpRemoteScriptPath = Join-Path $env:TEMP ("deploy-lauta-remote-{0}.sh" -f ([Guid]::NewGuid().ToString("N")))
+try {
+    # Write as UTF-8 without BOM to avoid remote bash parsing issues.
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($tmpRemoteScriptPath, ($remoteScript + "`n"), $utf8NoBom)
+
+    # Windows PowerShell 5.1 does not support `< file` redirection; use cmd.exe for that.
+    $sshTarget = "$ServerUser@$ServerIp"
+    $cmdLine = "ssh $sshTarget `"bash -s`" < `"$tmpRemoteScriptPath`""
+    cmd /c $cmdLine
+}
+finally {
+    Remove-Item -LiteralPath $tmpRemoteScriptPath -ErrorAction SilentlyContinue
+}
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`n========================================" -ForegroundColor Green

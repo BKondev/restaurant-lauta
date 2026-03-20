@@ -1,6 +1,6 @@
 param(
     [string]$ServerIp = "46.62.174.218",
-    [string]$ServerUser = "root",
+  [string]$ServerUser = "adminuser",
     [string]$DeployDir = "/opt/resturant-website",
     [string]$Branch = "main",
     [string]$RemoteName = "origin",
@@ -95,26 +95,28 @@ REMOTE="__REMOTE__"
 REPO_URL="__REPO_URL__"
 PM2_NAME="__PM2__"
 
+SUDO="sudo"
+
 PRESERVE_DIR="$DEPLOY_DIR/.preserve"
 TS=$(date +%Y%m%d-%H%M%S)
 
-mkdir -p "$PRESERVE_DIR"
+$SUDO mkdir -p "$PRESERVE_DIR"
 
 # Preserve production-only files (they should not be committed)
 if [ -f "$DEPLOY_DIR/database.json" ]; then
-  cp -a "$DEPLOY_DIR/database.json" "$PRESERVE_DIR/database.json.$TS" || true
+  $SUDO cp -a "$DEPLOY_DIR/database.json" "$PRESERVE_DIR/database.json.$TS" || true
 fi
 if [ -f "$DEPLOY_DIR/.env" ]; then
-  cp -a "$DEPLOY_DIR/.env" "$PRESERVE_DIR/.env.$TS" || true
+  $SUDO cp -a "$DEPLOY_DIR/.env" "$PRESERVE_DIR/.env.$TS" || true
 fi
 if [ -d "$DEPLOY_DIR/uploads" ]; then
-  tar -czf "$PRESERVE_DIR/uploads.$TS.tgz" -C "$DEPLOY_DIR" uploads || true
+  $SUDO tar -czf "$PRESERVE_DIR/uploads.$TS.tgz" -C "$DEPLOY_DIR" uploads || true
 fi
 
 if ! command -v git >/dev/null 2>&1; then
   echo "Installing git..."
-  apt-get update -y
-  apt-get install -y git
+  $SUDO apt-get update -y
+  $SUDO apt-get install -y git
 fi
 
 if ! command -v node >/dev/null 2>&1; then
@@ -122,7 +124,7 @@ if ! command -v node >/dev/null 2>&1; then
   exit 3
 fi
 
-mkdir -p "$DEPLOY_DIR"
+$SUDO mkdir -p "$DEPLOY_DIR"
 cd "$DEPLOY_DIR"
 
 if [ ! -d .git ]; then
@@ -131,60 +133,61 @@ if [ ! -d .git ]; then
     exit 2
   fi
   echo "Initializing server repo in $DEPLOY_DIR"
-  git init
-  git remote add "$REMOTE" "$REPO_URL" || true
+  $SUDO git init
+  $SUDO git remote add "$REMOTE" "$REPO_URL" || true
 fi
 
 # If server working tree has local changes, preserve a patch and force reset.
 # (Production should be driven by Git; database/.env/uploads are preserved separately above.)
 if [ -d .git ]; then
   # Ignore untracked files (like .preserve/) when checking for local changes.
-  if [ -n "$(git status --porcelain -uno 2>/dev/null)" ]; then
+  if [ -n "$($SUDO git status --porcelain -uno 2>/dev/null)" ]; then
     echo "Server repo has local changes; preserving patch and resetting..."
-    git diff > "$PRESERVE_DIR/local-changes.$TS.patch" || true
-    git diff --cached > "$PRESERVE_DIR/local-staged.$TS.patch" || true
-    git reset --hard || true
+    $SUDO git diff > "$PRESERVE_DIR/local-changes.$TS.patch" || true
+    $SUDO git diff --cached > "$PRESERVE_DIR/local-staged.$TS.patch" || true
+    $SUDO git reset --hard || true
     # Keep backups/uploads while cleaning untracked repo junk
-    git clean -fd -e .preserve -e uploads || true
+    $SUDO git clean -fd -e .preserve -e uploads || true
   fi
 fi
 
-git remote set-url "$REMOTE" "$REPO_URL" || true
 
-git fetch "$REMOTE" --prune
+$SUDO git remote set-url "$REMOTE" "$REPO_URL" || true
 
-git checkout -f -B "$BRANCH" "$REMOTE/$BRANCH"
+$SUDO git fetch "$REMOTE" --prune
 
-git reset --hard "$REMOTE/$BRANCH"
+$SUDO git checkout -f -B "$BRANCH" "$REMOTE/$BRANCH"
+
+$SUDO git reset --hard "$REMOTE/$BRANCH"
 
 # Keep docs that are tracked in the repo (removing them makes the server working tree dirty)
 
 # Ensure preserved files still exist after switching branches
 if [ ! -f "$DEPLOY_DIR/database.json" ] && [ -f "$PRESERVE_DIR/database.json.$TS" ]; then
-  cp -a "$PRESERVE_DIR/database.json.$TS" "$DEPLOY_DIR/database.json" || true
+  $SUDO cp -a "$PRESERVE_DIR/database.json.$TS" "$DEPLOY_DIR/database.json" || true
 fi
 if [ ! -f "$DEPLOY_DIR/.env" ] && [ -f "$PRESERVE_DIR/.env.$TS" ]; then
-  cp -a "$PRESERVE_DIR/.env.$TS" "$DEPLOY_DIR/.env" || true
+  $SUDO cp -a "$PRESERVE_DIR/.env.$TS" "$DEPLOY_DIR/.env" || true
 fi
 
 echo "Installing dependencies (production)..."
 if [ -f package-lock.json ]; then
-  npm ci --omit=dev
+  $SUDO npm ci --omit=dev
 else
-  npm install --omit=dev
+  $SUDO npm install --omit=dev
 fi
 
 # Ensure uploads dir exists (server.js also creates it, but keep it explicit)
-mkdir -p uploads
+$SUDO mkdir -p uploads
 
 if command -v pm2 >/dev/null 2>&1; then
-  pm2 restart "$PM2_NAME" || pm2 start server.js --name "$PM2_NAME"
-  pm2 save || true
+  $SUDO pm2 restart "$PM2_NAME" || $SUDO pm2 start server.js --name "$PM2_NAME"
+  $SUDO pm2 save || true
 else
   echo "pm2 not found; installing pm2 globally..."
-  npm install -g pm2
-  pm2 restart "$PM2_NAME" || pm2 start server.js --name "$PM2_NAME"
-  pm2 save || true
+  $SUDO npm install -g pm2
+  $SUDO pm2 restart "$PM2_NAME" || $SUDO pm2 start server.js --name "$PM2_NAME"
+  $SUDO pm2 save || true
 fi
 
 echo "Deploy done."

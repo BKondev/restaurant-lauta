@@ -7,13 +7,13 @@ Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "MULTI-TENANT RESTAURANT SYSTEM DEPLOYMENT" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan
 
-$SERVER = "root@46.62.174.218"
-$REMOTE_PATH = "/root/resturant-website"
+$SERVER = "adminuser@46.62.174.218"
+$REMOTE_PATH = "/opt/resturant-website"
 $LOCAL_PATH = "C:\Users\User\Desktop\resturant-template"
 
 # Step 1: Backup current database
 Write-Host "[1/6] Backing up current database..." -ForegroundColor Yellow
-ssh $SERVER "cp $REMOTE_PATH/database.json $REMOTE_PATH/database.json.backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+ssh $SERVER "sudo cp $REMOTE_PATH/database.json $REMOTE_PATH/database.json.backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✓ Database backed up successfully" -ForegroundColor Green
@@ -53,7 +53,7 @@ if ($uploadDb -eq 'y') {
 
 # Step 4: Restart service
 Write-Host "`n[4/6] Restarting restaurant service..." -ForegroundColor Yellow
-ssh $SERVER "systemctl restart restaurant.service"
+ssh $SERVER "sudo systemctl restart restaurant.service"
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✓ Service restarted successfully" -ForegroundColor Green
@@ -67,14 +67,14 @@ Start-Sleep -Seconds 3
 
 # Step 5: Check service status
 Write-Host "`n[5/6] Checking service status..." -ForegroundColor Yellow
-ssh $SERVER "systemctl is-active restaurant.service"
+ssh $SERVER "sudo systemctl is-active restaurant.service"
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✓ Service is running" -ForegroundColor Green
 } else {
     Write-Host "✗ Service is not running!" -ForegroundColor Red
     Write-Host "`nShowing logs:" -ForegroundColor Yellow
-    ssh $SERVER "journalctl -u restaurant.service -n 50 --no-pager"
+    ssh $SERVER "sudo journalctl -u restaurant.service -n 50 --no-pager"
     exit 1
 }
 

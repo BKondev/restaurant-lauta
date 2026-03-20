@@ -6,7 +6,7 @@
 # Use: .\deploy-git.ps1 -RepoUrl "<YOUR_GITHUB_REPO_URL>" -CommitMessage "deploy"
 
 $SERVER_IP = "46.62.174.218"
-$SERVER_USER = "root"
+$SERVER_USER = "adminuser"
 $DEPLOY_DIR = "/opt/resturant-website"
 $LOCAL_DIR = "C:\Users\User\Desktop\resturant-template"
 
@@ -32,7 +32,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host "Step 2: Creating directories on server..." -ForegroundColor Green
-ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p $DEPLOY_DIR"
+ssh ${SERVER_USER}@${SERVER_IP} "sudo mkdir -p $DEPLOY_DIR; sudo chown -R ${SERVER_USER}:${SERVER_USER} $DEPLOY_DIR"
 
 Write-Host ""
 Write-Host "Step 3: Uploading project files..." -ForegroundColor Green

@@ -185,7 +185,7 @@ DEPLOYMENT STEPS
 ========================================
 
 1. UPDATE DATABASE:
-   ssh root@46.62.174.218
+    ssh adminuser@46.62.174.218
    nano /root/resturant-website/database.json
    # Add the database entry above to 'restaurants' array
    systemctl restart restaurant.service
@@ -195,7 +195,7 @@ DEPLOYMENT STEPS
    cp -r public $restaurantSlug-web
    # Edit $restaurantSlug-web/checkout.js - add RESTAURANT_CONFIG
    # Upload to server:
-   scp -r $restaurantSlug-web root@46.62.174.218:/var/www/$restaurantSlug/
+    scp -r $restaurantSlug-web adminuser@46.62.174.218:/var/www/$restaurantSlug/
 
 3. UPDATE MOBILE APP:
    # Edit src/config/restaurants.js - add restaurant entry
@@ -235,13 +235,13 @@ Write-Host "# 1. Copy web app template" -ForegroundColor Gray
 Write-Host "cp -r public $restaurantSlug-web" -ForegroundColor White
 Write-Host ""
 Write-Host "# 2. Upload database entry (after editing database.json)" -ForegroundColor Gray
-Write-Host "scp database.json root@46.62.174.218:/root/resturant-website/" -ForegroundColor White
+Write-Host "scp database.json adminuser@46.62.174.218:/opt/resturant-website/" -ForegroundColor White
 Write-Host ""
 Write-Host "# 3. Restart service" -ForegroundColor Gray
-Write-Host "ssh root@46.62.174.218 'systemctl restart restaurant.service'" -ForegroundColor White
+Write-Host "ssh adminuser@46.62.174.218 'sudo systemctl restart restaurant.service'" -ForegroundColor White
 Write-Host ""
 Write-Host "# 4. Upload web app" -ForegroundColor Gray
-Write-Host "scp -r $restaurantSlug-web root@46.62.174.218:/var/www/$restaurantSlug/" -ForegroundColor White
+Write-Host "scp -r $restaurantSlug-web adminuser@46.62.174.218:/var/www/$restaurantSlug/" -ForegroundColor White
 Write-Host ""
 
 Write-Host "`n🎉 Restaurant configuration generated successfully!" -ForegroundColor Green

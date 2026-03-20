@@ -1,6 +1,6 @@
 param(
     [string]$ServerIp = "46.62.174.218",
-    [string]$ServerUser = "root",
+  [string]$ServerUser = "adminuser",
 
     # Root folder that contains all instances
     [string]$DeployRoot = "/opt",
