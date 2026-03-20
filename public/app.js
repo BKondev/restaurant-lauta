@@ -35,6 +35,154 @@ let siteOrderSettings = null;
 let modalProductId = null;
 let modalQuantity = 1;
 
+// Promotional slideshow state
+let slideshowSettings = null;
+let slideshowCurrentIndex = 0;
+let slideshowAutoplayTimer = null;
+
+function resolvePublicAssetUrl(url) {
+    const s = (url || '').toString().trim();
+    if (!s) return '';
+    if (s.startsWith('/')) return `${BASE_PATH}${s}`;
+    return s;
+}
+
+function stopSlideshowAutoplay() {
+    if (slideshowAutoplayTimer) {
+        clearInterval(slideshowAutoplayTimer);
+        slideshowAutoplayTimer = null;
+    }
+}
+
+function startSlideshowAutoplay() {
+    stopSlideshowAutoplay();
+
+    const slides = slideshowSettings?.slides;
+    if (!slideshowSettings?.enabled) return;
+    if (!Array.isArray(slides) || slides.length <= 1) return;
+    if (currentCategory !== 'all') return;
+
+    const intervalRaw = slideshowSettings?.autoPlayInterval;
+    const ms = (typeof intervalRaw === 'number' ? intervalRaw : parseInt((intervalRaw ?? '').toString(), 10)) || 5000;
+    if (!Number.isFinite(ms) || ms < 1000) return;
+
+    slideshowAutoplayTimer = setInterval(() => {
+        try { changeSlide(1); } catch (e) {}
+    }, ms);
+}
+
+function showSlideAt(index) {
+    const wrapper = document.getElementById('slides-wrapper');
+    const dots = document.getElementById('slide-dots');
+    if (!wrapper) return;
+
+    const slideEls = Array.from(wrapper.children || []);
+    if (slideEls.length === 0) return;
+
+    const next = ((index % slideEls.length) + slideEls.length) % slideEls.length;
+    slideshowCurrentIndex = next;
+
+    slideEls.forEach((el, idx) => {
+        el.style.display = idx === next ? '' : 'none';
+    });
+
+    if (dots) {
+        const dotEls = Array.from(dots.children || []);
+        dotEls.forEach((el, idx) => {
+            el.classList.toggle('active', idx === next);
+        });
+    }
+}
+
+function changeSlide(direction) {
+    const slides = slideshowSettings?.slides;
+    if (!Array.isArray(slides) || slides.length === 0) return;
+    showSlideAt(slideshowCurrentIndex + (parseInt(direction, 10) || 0));
+    startSlideshowAutoplay();
+}
+
+function renderSlideshow() {
+    const root = document.getElementById('promo-slideshow');
+    const wrapper = document.getElementById('slides-wrapper');
+    const dots = document.getElementById('slide-dots');
+    if (!root || !wrapper || !dots) return;
+
+    const slides = Array.isArray(slideshowSettings?.slides) ? slideshowSettings.slides : [];
+    wrapper.innerHTML = '';
+    dots.innerHTML = '';
+
+    slides.forEach((slide, idx) => {
+        const imageUrl = resolvePublicAssetUrl(slide?.image);
+        const title = (slide?.title || '').toString().trim();
+
+        const slideEl = document.createElement('div');
+        slideEl.className = 'slide';
+        slideEl.style.display = 'none';
+
+        const img = document.createElement('img');
+        img.src = imageUrl;
+        img.alt = title || `Slide ${idx + 1}`;
+        img.loading = 'lazy';
+        img.style.width = '100%';
+        img.style.height = 'auto';
+        img.style.display = 'block';
+        slideEl.appendChild(img);
+
+        if (title) {
+            const titleEl = document.createElement('div');
+            titleEl.className = 'slide-title';
+            titleEl.textContent = title;
+            slideEl.appendChild(titleEl);
+        }
+
+        wrapper.appendChild(slideEl);
+
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'slide-dot';
+        dot.setAttribute('aria-label', `Slide ${idx + 1}`);
+        dot.onclick = () => {
+            showSlideAt(idx);
+            startSlideshowAutoplay();
+        };
+        dots.appendChild(dot);
+    });
+
+    showSlideAt(0);
+}
+
+function updateSlideshowVisibility() {
+    const root = document.getElementById('promo-slideshow');
+    if (!root) return;
+
+    const slides = Array.isArray(slideshowSettings?.slides) ? slideshowSettings.slides : [];
+    const hasSlides = slides.some(s => !!(s && typeof s === 'object' && (s.image || '').toString().trim()));
+    const shouldShow = !!(slideshowSettings?.enabled && hasSlides && currentCategory === 'all');
+
+    root.style.display = shouldShow ? '' : 'none';
+    if (shouldShow) startSlideshowAutoplay();
+    else stopSlideshowAutoplay();
+}
+
+async function loadSlideshowSettingsPublic() {
+    try {
+        const res = await fetch(`${API_URL}/slideshow`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        slideshowSettings = {
+            enabled: !!data.enabled,
+            autoPlayInterval: data.autoPlayInterval || 5000,
+            slides: Array.isArray(data.slides) ? data.slides : []
+        };
+
+        renderSlideshow();
+        updateSlideshowVisibility();
+    } catch (e) {
+        // ignore
+    }
+}
+
 let topBarHeightSyncInitialized = false;
 
 function syncTopBarHeightCssVar() {
@@ -699,6 +847,8 @@ async function loadData() {
 
         renderRestaurantStatusBanner();
         maybeShowClosedModalOnce();
+
+        try { await loadSlideshowSettingsPublic(); } catch (e) {}
         
         extractCategories();
         renderCategories();
@@ -1076,6 +1226,8 @@ function filterByCategory(category, options = {}) {
 
     // Keep restaurant status visible/updated even when switching categories.
     renderRestaurantStatusBanner();
+
+    try { updateSlideshowVisibility(); } catch (e) {}
 
     if (scrollToTop) {
         // Run after render so layout is stable and scroll target is correct.
@@ -2102,6 +2254,7 @@ function navigateToMenu() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     renderCategories();
     renderProducts();
+    try { updateSlideshowVisibility(); } catch (e) {}
 }
 
 // Initialize cart on page load
