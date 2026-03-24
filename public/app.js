@@ -40,6 +40,182 @@ let slideshowSettings = null;
 let slideshowCurrentIndex = 0;
 let slideshowAutoplayTimer = null;
 
+// Broken image retry throttle
+const BROKEN_IMAGE_COOLDOWN_MS = 5 * 60 * 1000;
+const BROKEN_IMAGE_COOLDOWN_STORAGE_KEY = 'broken_image_cooldown_v1';
+let brokenImageCooldown = new Map();
+
+function loadBrokenImageCooldown() {
+    try {
+        const raw = (localStorage.getItem(BROKEN_IMAGE_COOLDOWN_STORAGE_KEY) || '').toString();
+        const obj = raw ? JSON.parse(raw) : {};
+        const now = Date.now();
+        brokenImageCooldown = new Map();
+        if (obj && typeof obj === 'object') {
+            for (const [k, v] of Object.entries(obj)) {
+                const key = (k || '').toString().trim();
+                const ts = Number(v);
+                if (!key) continue;
+                if (!Number.isFinite(ts)) continue;
+                if (ts <= now) continue;
+                brokenImageCooldown.set(key, ts);
+            }
+        }
+    } catch (e) {
+        brokenImageCooldown = new Map();
+    }
+}
+
+function persistBrokenImageCooldown() {
+    try {
+        const now = Date.now();
+        const obj = {};
+        for (const [k, ts] of brokenImageCooldown.entries()) {
+            if (!k) continue;
+            if (!Number.isFinite(ts)) continue;
+            if (ts <= now) continue;
+            obj[k] = ts;
+        }
+        localStorage.setItem(BROKEN_IMAGE_COOLDOWN_STORAGE_KEY, JSON.stringify(obj));
+    } catch (e) {}
+}
+
+function isImageInCooldown(url) {
+    const key = (url || '').toString().trim();
+    if (!key) return false;
+    const until = brokenImageCooldown.get(key);
+    if (!Number.isFinite(until)) return false;
+    if (until <= Date.now()) {
+        brokenImageCooldown.delete(key);
+        return false;
+    }
+    return true;
+}
+
+function markImageBroken(url) {
+    const key = (url || '').toString().trim();
+    if (!key) return;
+    brokenImageCooldown.set(key, Date.now() + BROKEN_IMAGE_COOLDOWN_MS);
+    persistBrokenImageCooldown();
+}
+
+function getSafeImageSrc(originalUrl, fallbackUrl) {
+    const original = (originalUrl || '').toString().trim();
+    if (!original) return fallbackUrl;
+    if (isImageInCooldown(original)) return fallbackUrl;
+    return original;
+}
+
+function handleBrokenProductImage(imgEl) {
+    try {
+        if (!imgEl) return;
+        const original = (imgEl.getAttribute('data-orig-src') || '').toString().trim();
+        const fallback = (imgEl.getAttribute('data-fallback-src') || '').toString().trim();
+
+        if (original && (!fallback || original !== fallback)) {
+            markImageBroken(original);
+        }
+
+        imgEl.onerror = null;
+        if (fallback) imgEl.src = fallback;
+    } catch (e) {}
+}
+
+loadBrokenImageCooldown();
+
+function ensureMetaTag(selector, createAttrs) {
+    let el = document.head ? document.head.querySelector(selector) : null;
+    if (el) return el;
+    if (!document.head) return null;
+    el = document.createElement('meta');
+    for (const [k, v] of Object.entries(createAttrs || {})) {
+        el.setAttribute(k, v);
+    }
+    document.head.appendChild(el);
+    return el;
+}
+
+function ensureLinkTag(selector, createAttrs) {
+    let el = document.head ? document.head.querySelector(selector) : null;
+    if (el) return el;
+    if (!document.head) return null;
+    el = document.createElement('link');
+    for (const [k, v] of Object.entries(createAttrs || {})) {
+        el.setAttribute(k, v);
+    }
+    document.head.appendChild(el);
+    return el;
+}
+
+function updateSeoMeta({ restaurantName, logoUrl, contacts, seo }) {
+    const seoObj = (seo && typeof seo === 'object') ? seo : {};
+    const name = (restaurantName || '').toString().trim() || 'Restaurant';
+    const canonicalDefault = `${window.location.origin}${BASE_PATH}/`;
+    const canonicalOverride = (seoObj.canonicalUrl || '').toString().trim();
+    const canonical = canonicalOverride || canonicalDefault;
+
+    const title = (seoObj.title || '').toString().trim() || `${name} | Online Menu`;
+    const description = (seoObj.description || '').toString().trim() || `${name} online menu. Order for delivery or pickup.`;
+
+    const robotsDefault = 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1';
+    const robots = (seoObj.robots || '').toString().trim() || robotsDefault;
+    const googleSiteVerification = (seoObj.googleSiteVerification || '').toString().trim();
+
+    try { document.title = title; } catch (e) {}
+
+    const canonicalLink = ensureLinkTag('link[rel="canonical"]', { rel: 'canonical' });
+    if (canonicalLink) canonicalLink.setAttribute('href', canonical);
+
+    const desc = ensureMetaTag('meta[name="description"]', { name: 'description' });
+    if (desc) desc.setAttribute('content', description);
+
+    const robotsEl = ensureMetaTag('meta[name="robots"]', { name: 'robots' });
+    if (robotsEl) robotsEl.setAttribute('content', robots);
+    const googlebotEl = ensureMetaTag('meta[name="googlebot"]', { name: 'googlebot' });
+    if (googlebotEl) googlebotEl.setAttribute('content', robots);
+    const gsvEl = ensureMetaTag('meta[name="google-site-verification"]', { name: 'google-site-verification' });
+    if (gsvEl && googleSiteVerification) gsvEl.setAttribute('content', googleSiteVerification);
+
+    const ogTitle = ensureMetaTag('meta[property="og:title"]', { property: 'og:title' });
+    if (ogTitle) ogTitle.setAttribute('content', title);
+    const ogDesc = ensureMetaTag('meta[property="og:description"]', { property: 'og:description' });
+    if (ogDesc) ogDesc.setAttribute('content', description);
+    const ogUrl = ensureMetaTag('meta[property="og:url"]', { property: 'og:url' });
+    if (ogUrl) ogUrl.setAttribute('content', canonical);
+
+    const image = ((seoObj.ogImageUrl || '').toString().trim() || (logoUrl || '').toString().trim());
+    if (image) {
+        const img = resolvePublicAssetUrl(image);
+        const abs = img.startsWith('http') ? img : `${window.location.origin}${img.startsWith('/') ? img : `/${img}`}`;
+        const ogImg = ensureMetaTag('meta[property="og:image"]', { property: 'og:image' });
+        if (ogImg) ogImg.setAttribute('content', abs);
+        const twImg = ensureMetaTag('meta[name="twitter:image"]', { name: 'twitter:image' });
+        if (twImg) twImg.setAttribute('content', abs);
+    }
+
+    const twTitle = ensureMetaTag('meta[name="twitter:title"]', { name: 'twitter:title' });
+    if (twTitle) twTitle.setAttribute('content', title);
+    const twDesc = ensureMetaTag('meta[name="twitter:description"]', { name: 'twitter:description' });
+    if (twDesc) twDesc.setAttribute('content', description);
+
+    const ldEl = document.getElementById('ld-restaurant');
+    if (ldEl) {
+        const phone = (contacts?.phone || '').toString().trim();
+        const address = (contacts?.address || '').toString().trim();
+        const payload = {
+            '@context': 'https://schema.org',
+            '@type': 'Restaurant',
+            name,
+            url: canonical,
+            telephone: phone || undefined,
+            address: address ? { '@type': 'PostalAddress', streetAddress: address } : undefined
+        };
+        try {
+            ldEl.textContent = JSON.stringify(payload).replace(/</g, '\\u003c');
+        } catch (e) {}
+    }
+}
+
 function resolvePublicAssetUrl(url) {
     const s = (url || '').toString().trim();
     if (!s) return '';
@@ -840,6 +1016,17 @@ async function loadData() {
             // ignore
         }
 
+        try {
+            updateSeoMeta({
+                restaurantName: settingsData?.name,
+                logoUrl: settingsData?.logo,
+                contacts: siteSettings?.footer?.contacts,
+                seo: siteSettings?.seo
+            });
+        } catch (e) {
+            // ignore
+        }
+
         // Load working hours for footer display
         try {
             const whRes = await fetch(`${API_URL}/settings/working-hours`);
@@ -1460,13 +1647,14 @@ function createProductCard(product) {
     // Name wrapping is handled in CSS (2-line clamp), avoid JS truncation.
     
     // Handle image URL (check if it's a server upload or external URL)
-    let imageUrl = product.image;
-    if (imageUrl && imageUrl.startsWith('/uploads/')) {
+    const fallbackImageUrl = 'https://via.placeholder.com/280x200?text=No+Image';
+    const imageRaw = (product.image || '').toString().trim();
+    let originalImageUrl = imageRaw;
+    if (originalImageUrl && originalImageUrl.startsWith('/uploads/')) {
         // Serve uploads relative to BASE_PATH
-        imageUrl = `${BASE_PATH}${imageUrl}`;
-    } else if (!imageUrl) {
-        imageUrl = 'https://via.placeholder.com/280x200?text=No+Image';
+        originalImageUrl = `${BASE_PATH}${originalImageUrl}`;
     }
+    const imageUrl = getSafeImageSrc(originalImageUrl, fallbackImageUrl);
     
     const hasPromo = isPromoActive(product.promo);
     const effectivePrice = getEffectivePrice(product);
@@ -1580,7 +1768,9 @@ function createProductCard(product) {
             <img src="${imageUrl}" 
                  alt="${name}" 
                  class="product-image"
-                 onerror="this.src='https://via.placeholder.com/280x200?text=No+Image'">
+                 data-orig-src="${originalImageUrl}"
+                 data-fallback-src="${fallbackImageUrl}"
+                 onerror="handleBrokenProductImage(this)">
             ${product.weight ? `<span class="product-weight-overlay">${product.weight}</span>` : ''}
         </div>
         <div class="product-info">
@@ -1619,12 +1809,13 @@ function openProductModal(product) {
     const name = (currentLanguage === 'bg' && product.translations?.bg?.name) ? product.translations.bg.name : product.name;
     const description = (currentLanguage === 'bg' && product.translations?.bg?.description) ? product.translations.bg.description : product.description;
     
-    let imageUrl = product.image;
-    if (imageUrl && imageUrl.startsWith('/uploads/')) {
-        imageUrl = `${BASE_PATH}${imageUrl}`;
-    } else if (!imageUrl) {
-        imageUrl = 'https://via.placeholder.com/300x300?text=No+Image';
+    const modalFallbackImageUrl = 'https://via.placeholder.com/300x300?text=No+Image';
+    const imageRaw = (product.image || '').toString().trim();
+    let originalImageUrl = imageRaw;
+    if (originalImageUrl && originalImageUrl.startsWith('/uploads/')) {
+        originalImageUrl = `${BASE_PATH}${originalImageUrl}`;
     }
+    const imageUrl = getSafeImageSrc(originalImageUrl, modalFallbackImageUrl);
     
     const hasPromo = isPromoActive(product.promo);
     const effectivePrice = getEffectivePrice(product);
@@ -1648,8 +1839,13 @@ function openProductModal(product) {
     }
     
     const modalImage = document.getElementById('modal-image');
-    modalImage.src = imageUrl;
-    modalImage.alt = name;
+    if (modalImage) {
+        modalImage.setAttribute('data-orig-src', originalImageUrl);
+        modalImage.setAttribute('data-fallback-src', modalFallbackImageUrl);
+        modalImage.onerror = () => handleBrokenProductImage(modalImage);
+        modalImage.src = imageUrl;
+        modalImage.alt = name;
+    }
 
     document.getElementById('modal-name').textContent = name;
     document.getElementById('modal-description').textContent = description;
@@ -1820,17 +2016,18 @@ function renderSearchDropdown() {
             const name = (currentLanguage === 'bg' && product.translations?.bg?.name) ? product.translations.bg.name : product.name;
             const effectivePrice = getEffectivePrice(product);
 
-            let imageUrl = product.image;
-            if (imageUrl && imageUrl.startsWith('/uploads/')) {
-                imageUrl = `${BASE_PATH}${imageUrl}`;
-            } else if (!imageUrl) {
-                imageUrl = 'https://via.placeholder.com/80x80?text=No+Image';
+            const fallbackImageUrl = 'https://via.placeholder.com/80x80?text=No+Image';
+            const imageRaw = (product.image || '').toString().trim();
+            let originalImageUrl = imageRaw;
+            if (originalImageUrl && originalImageUrl.startsWith('/uploads/')) {
+                originalImageUrl = `${BASE_PATH}${originalImageUrl}`;
             }
+            const imageUrl = getSafeImageSrc(originalImageUrl, fallbackImageUrl);
 
             const item = document.createElement('div');
             item.className = 'search-result-item';
             item.innerHTML = `
-                <img class="search-result-img" src="${imageUrl}" alt="${name}" onerror="this.src='https://via.placeholder.com/80x80?text=No+Image'">
+                <img class="search-result-img" src="${imageUrl}" alt="${name}" data-orig-src="${originalImageUrl}" data-fallback-src="${fallbackImageUrl}" onerror="handleBrokenProductImage(this)">
                 <div class="search-result-info">
                     <div class="search-result-name">${name}</div>
                     <div class="search-result-meta">

@@ -565,6 +565,7 @@
                 itemsTitle: 'Ordered items',
                 promo: 'Promo',
                 subtotal: 'Subtotal',
+                intermediateSubtotal: 'Subtotal after discount',
                 discount: 'Discount',
                 deliveryFee: 'Delivery fee',
                 savings: 'You saved',
@@ -617,6 +618,7 @@
                 itemsTitle: 'Поръчани продукти',
                 promo: 'Промо',
                 subtotal: 'Сума',
+                intermediateSubtotal: 'Междинна сума',
                 discount: 'Отстъпка',
                 deliveryFee: 'Доставка',
                 savings: 'Спестявате',
@@ -786,6 +788,7 @@
             const discountPct = Math.max(0, Math.min(100, toNumber(order.discount)));
             const subtotal = toNumber(order.subtotal);
             const discountAmount = toNumber(order.discountAmount);
+            const intermediateSubtotal = Math.max(0, toNumber(order.intermediateSubtotal) || (subtotal - discountAmount));
             const deliveryFee = toNumber(order.deliveryFee);
             const orderNote = (order.orderNote || '').toString().replace(/\r/g, '').trim();
 
@@ -902,6 +905,12 @@
                         <div class="item-row">
                             <div class="item-name">${t('discount')}</div>
                             <div class="item-price">-${formatMoney(discountAmount, currency)}</div>
+                        </div>
+                    ` : ''}
+                    ${(discountAmount > 0) ? `
+                        <div class="item-row">
+                            <div class="item-name">${t('intermediateSubtotal')}</div>
+                            <div class="item-price">${formatMoney(intermediateSubtotal, currency)}</div>
                         </div>
                     ` : ''}
                     ${(deliveryFee > 0) ? `

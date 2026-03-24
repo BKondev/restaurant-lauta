@@ -1307,6 +1307,14 @@ function getDefaultSiteSettings() {
     return {
         theme: 'classic',
         faviconUrl: '',
+        seo: {
+            title: '',
+            description: '',
+            canonicalUrl: '',
+            ogImageUrl: '',
+            robots: '',
+            googleSiteVerification: ''
+        },
         search: { mode: 'names_and_descriptions' },
         map: { enabled: false, lat: null, lng: null, zoom: 16, label: '' },
         email: { webmailUrl: '' },
@@ -1407,6 +1415,39 @@ function normalizeSiteSettings(input) {
         webmailUrl: normalizeText(src.email?.webmailUrl, 500)
     };
 
+    const seoSrc = (src.seo && typeof src.seo === 'object') ? src.seo : {};
+    const seoTitle = normalizeText(seoSrc.title, 120);
+    const seoDescription = normalizeText(seoSrc.description, 260);
+    const seoCanonicalRaw = normalizeText(seoSrc.canonicalUrl, 500);
+    const seoOgImageRaw = normalizeText(seoSrc.ogImageUrl, 500);
+    const seoRobots = normalizeText(seoSrc.robots, 120);
+    const seoGsv = normalizeText(seoSrc.googleSiteVerification, 120);
+
+    const normalizeOptionalAbsUrl = (raw) => {
+        const s = (raw || '').toString().trim();
+        if (!s) return '';
+        if (/^https?:\/\//i.test(s)) return s;
+        return '';
+    };
+
+    const normalizeOptionalPublicImageUrl = (raw) => {
+        const s = (raw || '').toString().trim();
+        if (!s) return '';
+        if (/^https?:\/\//i.test(s)) return s;
+        // Allow local uploads only.
+        if (/^\/uploads\//i.test(s)) return s;
+        return '';
+    };
+
+    const seo = {
+        title: seoTitle,
+        description: seoDescription,
+        canonicalUrl: normalizeOptionalAbsUrl(seoCanonicalRaw),
+        ogImageUrl: normalizeOptionalPublicImageUrl(seoOgImageRaw),
+        robots: seoRobots,
+        googleSiteVerification: seoGsv
+    };
+
     const categoriesSrc = src.categories && typeof src.categories === 'object' ? src.categories : {};
     const orderSrc = Array.isArray(categoriesSrc.order) ? categoriesSrc.order : [];
     const order = [];
@@ -1434,7 +1475,7 @@ function normalizeSiteSettings(input) {
 
     const categories = { order, labels };
 
-    return { theme, faviconUrl, search: { mode }, map, email, categories, footer, legal };
+    return { theme, faviconUrl, seo, search: { mode }, map, email, categories, footer, legal };
 }
 
 function isOrderForRestaurant(order, restaurantId, db) {
@@ -2915,16 +2956,25 @@ function formatOrderItemsText(order) {
 
 function formatOrderTotalsText(order) {
     const subtotalNum = Math.max(0, parseNumber(order?.subtotal, 0));
+    const discountAmountNum = Math.max(0, parseNumber(order?.discountAmount, 0));
+    const intermediateSubtotalNum = Math.max(0, parseNumber(
+        order?.intermediateSubtotal,
+        Math.max(0, subtotalNum - discountAmountNum)
+    ));
     const deliveryFeeNum = Math.max(0, parseNumber(order?.deliveryFee, 0));
     const totalNum = Math.max(0, parseNumber(order?.total, 0));
     const isDelivery = order?.deliveryMethod === 'delivery';
 
-    // Match the requested ordering: Subtotal, Delivery (if applicable), Total.
+    // Match checkout ordering: Subtotal, Discount, Intermediate subtotal, Delivery (if applicable), Total.
     const labelCol = 34;
     const lines = [];
 
     if (subtotalNum > 0) {
-        lines.push(`${'Междинна сума:'.padEnd(labelCol)}${formatMoneyEUR(subtotalNum)}`);
+        lines.push(`${'Сума:'.padEnd(labelCol)}${formatMoneyEUR(subtotalNum)}`);
+    }
+    if (discountAmountNum > 0) {
+        lines.push(`${'Отстъпка:'.padEnd(labelCol)}-${formatMoneyEUR(discountAmountNum)}`);
+        lines.push(`${'Междинна сума:'.padEnd(labelCol)}${formatMoneyEUR(intermediateSubtotalNum)}`);
     }
     if (isDelivery) {
         lines.push(`${'Доставка:'.padEnd(labelCol)}${formatMoneyEUR(deliveryFeeNum)}`);
@@ -3095,6 +3145,10 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl, contactP
     const deliverySummary = escapeHtml(getDeliverySummaryText(order));
     const subtotalNum = Math.max(0, parseNumber(order?.subtotal, 0));
     const discountAmountNum = Math.max(0, parseNumber(order?.discountAmount, 0));
+    const intermediateSubtotalNum = Math.max(0, parseNumber(
+        order?.intermediateSubtotal,
+        Math.max(0, subtotalNum - discountAmountNum)
+    ));
     const deliveryFeeNum = Math.max(0, parseNumber(order?.deliveryFee, 0));
     const itemsSavingsNum = computeItemsPromoSavingsEUR(order);
     const totalSavingsNum = roundMoneyEUR(discountAmountNum + itemsSavingsNum);
@@ -3118,28 +3172,27 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl, contactP
         ? `<p style="margin:6px 0; text-align:right;">Промо код: <strong>${escapeHtml(promoCode)}</strong>${discountPct ? ` (-${escapeHtml(discountPct)}%)` : ''}</p>`
         : '';
 
-    const discountBlock = discountAmountNum > 0
-        ? `<p style="margin:6px 0; text-align:right;">Отстъпка${promoCode ? ` (${escapeHtml(promoCode)})` : ''}: <strong>-${escapeHtml(formatMoneyEUR(discountAmountNum))}</strong></p>`
-        : '';
-
     const savingsBlock = totalSavingsNum > 0
         ? `<p style="margin:6px 0; text-align:right;">Спестявате: <strong>${escapeHtml(formatMoneyEUR(totalSavingsNum))}</strong></p>`
         : '';
 
     const isDelivery = order?.deliveryMethod === 'delivery';
-    const subtotalBlock = subtotalNum > 0
-        ? `
-            <table style="margin:12px 0 0 auto; border-collapse:collapse; width:auto;">
-                <tr>
-                    <td style="padding:4px 0; text-align:right; color:#374151;">Междинна сума:</td>
-                    <td style="padding:4px 0 4px 16px; text-align:right; font-weight:800; white-space:nowrap;">${escapeHtml(formatMoneyEUR(subtotalNum))}</td>
-                </tr>
-            </table>
-        `
-        : '';
-
     const totalsBlock = `
         <table style="margin:16px 0 0 auto; border-collapse:collapse; width:auto;">
+            ${(subtotalNum > 0) ? `
+            <tr>
+                <td style="padding:4px 0; text-align:right; color:#374151;">Сума:</td>
+                <td style="padding:4px 0 4px 16px; text-align:right; font-weight:800; white-space:nowrap;">${escapeHtml(formatMoneyEUR(subtotalNum))}</td>
+            </tr>` : ''}
+            ${(discountAmountNum > 0) ? `
+            <tr>
+                <td style="padding:4px 0; text-align:right; color:#374151;">Отстъпка:</td>
+                <td style="padding:4px 0 4px 16px; text-align:right; font-weight:800; white-space:nowrap;">-${escapeHtml(formatMoneyEUR(discountAmountNum))}</td>
+            </tr>
+            <tr>
+                <td style="padding:4px 0; text-align:right; color:#374151;">Междинна сума:</td>
+                <td style="padding:4px 0 4px 16px; text-align:right; font-weight:800; white-space:nowrap;">${escapeHtml(formatMoneyEUR(intermediateSubtotalNum))}</td>
+            </tr>` : ''}
             ${isDelivery ? `
             <tr>
                 <td style="padding:4px 0; text-align:right; color:#374151;">Доставка:</td>
@@ -3183,12 +3236,9 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl, contactP
             <h3 style="margin:18px 0 8px 0;">Артикули</h3>
             ${formatOrderItemsHtml(order)}
 
-            ${subtotalBlock}
-
-            ${(promoBlock || savingsBlock || discountBlock) ? `
+            ${(promoBlock || savingsBlock) ? `
                 <div style="margin:12px 0 0 0; padding: 12px; border-radius: 10px; background: #f9fafb; text-align:right;">
                     ${promoBlock}
-                    ${discountBlock}
                     ${savingsBlock}
                 </div>
             ` : ''}
@@ -3233,6 +3283,14 @@ async function sendOrderPlacedEmails(order, restaurant) {
     const fulfillment = getFulfillmentTimeHeader(order);
     const promoCode = (order?.promoCode || '').toString().trim();
     const discountPct = Math.max(0, Math.min(100, parseNumber(order?.discount, 0)));
+    const subtotalNum = Math.max(0, parseNumber(order?.subtotal, 0));
+    const discountAmountNum = Math.max(0, parseNumber(order?.discountAmount, 0));
+    const intermediateSubtotalNum = Math.max(0, parseNumber(
+        order?.intermediateSubtotal,
+        Math.max(0, subtotalNum - discountAmountNum)
+    ));
+    const deliveryFeeNum = Math.max(0, parseNumber(order?.deliveryFee, 0));
+    const totalNum = Math.max(0, parseNumber(order?.total, 0));
     const promoText = promoCode ? `Промо код: ${promoCode}${discountPct ? ` (-${discountPct}%)` : ''}` : '';
     const orderNote = (order?.customerInfo?.notes || '').toString().replace(/\r/g, '').trim();
     const orderNoteText = orderNote ? `Бележка към поръчката: ${orderNote}` : '';
@@ -3243,9 +3301,21 @@ async function sendOrderPlacedEmails(order, restaurant) {
         customerName: order.customerInfo?.name || '',
         customerPhone: order.customerInfo?.phone || '',
         customerEmail: order.customerInfo?.email || '',
+        currency: (order.currency || 'EUR').toString(),
         itemsText,
         totalText,
         totalsText,
+        subtotal: subtotalNum,
+        discountPercent: discountPct,
+        discountAmount: discountAmountNum,
+        intermediateSubtotal: intermediateSubtotalNum,
+        deliveryFee: deliveryFeeNum,
+        total: totalNum,
+        subtotalText: formatMoneyEUR(subtotalNum),
+        discountAmountText: formatMoneyEUR(discountAmountNum),
+        intermediateSubtotalText: formatMoneyEUR(intermediateSubtotalNum),
+        deliveryFeeText: formatMoneyEUR(deliveryFeeNum),
+        totalAmountText: formatMoneyEUR(totalNum),
         deliveryText,
         fulfillmentTimeLine: `${fulfillment.label}: ${fulfillment.value}`,
         promoText,
@@ -5302,11 +5372,13 @@ function recomputeOrderTotals(order, db) {
     const discountAmount = discountBaseSubtotal * (discountPercent / 100);
     const deliveryFee = Math.max(0, parseNumber(order.deliveryFee, 0));
     const total = Math.max(0, subtotal - discountAmount + deliveryFee);
+    const intermediateSubtotal = Math.max(0, subtotal - discountAmount);
 
     order.subtotal = roundMoneyEUR(subtotal);
     order.discount = discountPercent;
     order.discountBaseSubtotal = roundMoneyEUR(discountBaseSubtotal);
     order.discountAmount = roundMoneyEUR(discountAmount);
+    order.intermediateSubtotal = roundMoneyEUR(intermediateSubtotal);
     order.deliveryFee = roundMoneyEUR(deliveryFee);
     order.total = roundMoneyEUR(total);
 
@@ -7264,6 +7336,111 @@ app.get(API_PREFIX + '/delivery/status/:deliveryId', requireAuth, async (req, re
 
 // ==================== FRONTEND ROUTES ====================
 
+function getPublicOrigin(req) {
+    const env = (process.env.PUBLIC_BASE_URL || '').toString().trim().replace(/\/$/, '');
+    if (env) return env;
+
+    const xfProto = (req.headers['x-forwarded-proto'] || '').toString().split(',')[0].trim();
+    const proto = xfProto || (req.protocol || 'https');
+    const xfHost = (req.headers['x-forwarded-host'] || '').toString().split(',')[0].trim();
+    const host = xfHost || (req.get('host') || '').toString().split(',')[0].trim();
+    if (!host) return '';
+    return `${proto}://${host}`;
+}
+
+function normalizePublicBasePath(raw) {
+    let p = (raw ?? '').toString().trim();
+    if (p === '/') p = '';
+    if (p && !p.startsWith('/')) p = `/${p}`;
+    if (p.endsWith('/') && p.length > 1) p = p.slice(0, -1);
+    return p;
+}
+
+function getPublicBasePath(req) {
+    const env = (process.env.PUBLIC_BASE_PATH ?? '').toString().trim();
+    if (env) return normalizePublicBasePath(env);
+
+    const original = (req.originalUrl || '').toString();
+    if (BASE_PATH && original.startsWith(BASE_PATH)) return normalizePublicBasePath(BASE_PATH);
+    return '';
+}
+
+function toPublicAbsoluteUrl(req, rawPath) {
+    const origin = getPublicOrigin(req);
+    if (!origin) return rawPath;
+    const basePath = getPublicBasePath(req);
+
+    let p = (rawPath || '').toString().trim();
+    if (!p) return '';
+    if (/^https?:\/\//i.test(p)) return p;
+
+    // Backward compatibility: stored paths may contain the internal mount prefix.
+    if (p.startsWith('/resturant-website/')) p = p.replace(/^\/resturant-website/, '');
+
+    if (p.startsWith('/')) {
+        const merged = basePath ? `${basePath}${p}` : p;
+        return `${origin}${merged}`;
+    }
+    return `${origin}/${p}`;
+}
+
+function buildSeoSnapshot(req) {
+    const db = readDatabase();
+    const restaurant = getActiveRestaurantForPublicRequest(db, req) || null;
+    const name = (restaurant?.name || db.restaurantName || 'Restaurant').toString().trim();
+    const site = restaurant ? normalizeSiteSettings(restaurant.siteSettings) : getDefaultSiteSettings();
+
+    const seo = (site?.seo && typeof site.seo === 'object') ? site.seo : {};
+
+    const contacts = site?.footer?.contacts || {};
+    const origin = getPublicOrigin(req);
+    const basePath = getPublicBasePath(req);
+    const canonical = origin ? `${origin}${basePath}/` : '';
+
+    const canonicalOverride = (seo?.canonicalUrl || '').toString().trim();
+    const canonicalEffective = canonicalOverride || canonical;
+
+    const aboutLogo = (site?.footer?.aboutLogoUrl || '').toString().trim();
+    const logo = (db.restaurantLogo || '').toString().trim();
+    const imageCandidate = aboutLogo || logo || '';
+    const ogImage = imageCandidate ? toPublicAbsoluteUrl(req, imageCandidate) : '';
+
+    const title = (seo?.title || '').toString().trim() || `${name} | Online Menu`;
+    const description = (seo?.description || '').toString().trim() || `${name} online menu. Order for delivery or pickup.`;
+
+    const jsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'Restaurant',
+        name,
+        url: canonicalEffective || undefined,
+        image: ogImage ? [ogImage] : undefined,
+        telephone: (contacts.phone || '').toString().trim() || undefined,
+        email: (contacts.email || '').toString().trim() || undefined,
+        address: (contacts.address || '').toString().trim()
+            ? {
+                '@type': 'PostalAddress',
+                streetAddress: (contacts.address || '').toString().trim()
+            }
+            : undefined
+    };
+
+    const robotsDefault = 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1';
+    const robotsEffective = (seo?.robots || '').toString().trim() || robotsDefault;
+
+    return {
+        name,
+        canonical: canonicalEffective,
+        title,
+        description,
+        ogTitle: title,
+        ogDescription: description,
+        ogImage: (seo?.ogImageUrl || '').toString().trim() ? toPublicAbsoluteUrl(req, seo.ogImageUrl) : ogImage,
+        robots: robotsEffective,
+        googleSiteVerification: (seo?.googleSiteVerification || '').toString().trim(),
+        jsonLd
+    };
+}
+
 // Serve frontend HTML under BASE_PATH
 const INDEX_PATH = path.join(__dirname, 'public', 'index.html');
 const ADMIN_PATH = path.join(__dirname, 'public', 'admin.html');
@@ -7272,6 +7449,84 @@ const PRIVACY_PATH = path.join(__dirname, 'public', 'privacy.html');
 const TERMS_PATH = path.join(__dirname, 'public', 'terms.html');
 const THANK_YOU_PATH = path.join(__dirname, 'public', 'thank-you.html');
 
+let INDEX_HTML_TEMPLATE = '';
+try {
+    INDEX_HTML_TEMPLATE = fs.readFileSync(INDEX_PATH, 'utf8');
+} catch (e) {
+    console.warn('[SEO] Failed to read index.html for template rendering:', e?.message || e);
+}
+
+function escapeHtmlAttr(s) {
+    return (s ?? '').toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderIndexHtml(req) {
+    const seo = buildSeoSnapshot(req);
+    const jsonLdSafe = JSON.stringify(seo.jsonLd)
+        .replace(/</g, '\\u003c')
+        .replace(/-->/g, '--\\u003e');
+
+    return (INDEX_HTML_TEMPLATE || '')
+        .replace(/__SEO_TITLE__/g, escapeHtmlAttr(seo.title))
+        .replace(/__SEO_DESCRIPTION__/g, escapeHtmlAttr(seo.description))
+        .replace(/__SEO_ROBOTS__/g, escapeHtmlAttr(seo.robots || ''))
+        .replace(/__SEO_GOOGLE_SITE_VERIFICATION__/g, escapeHtmlAttr(seo.googleSiteVerification || ''))
+        .replace(/__SEO_CANONICAL__/g, escapeHtmlAttr(seo.canonical || ''))
+        .replace(/__SEO_SITE_NAME__/g, escapeHtmlAttr(seo.name))
+        .replace(/__SEO_OG_TITLE__/g, escapeHtmlAttr(seo.ogTitle))
+        .replace(/__SEO_OG_DESCRIPTION__/g, escapeHtmlAttr(seo.ogDescription))
+        .replace(/__SEO_OG_IMAGE__/g, escapeHtmlAttr(seo.ogImage || ''))
+        .replace(/__SEO_JSON_LD__/g, jsonLdSafe);
+}
+
+// robots.txt and sitemap.xml should be reachable at the public root.
+app.get(['/robots.txt', BASE_PATH ? `${BASE_PATH}/robots.txt` : '/robots.txt'], (req, res) => {
+    const origin = getPublicOrigin(req);
+    const basePath = getPublicBasePath(req);
+    const sitemap = origin ? `${origin}${basePath}/sitemap.xml` : `${basePath}/sitemap.xml`;
+
+    res.set('Content-Type', 'text/plain; charset=utf-8');
+    res.send([
+        'User-agent: *',
+        'Allow: /',
+        `Sitemap: ${sitemap}`,
+        ''
+    ].join('\n'));
+});
+
+app.get(['/sitemap.xml', BASE_PATH ? `${BASE_PATH}/sitemap.xml` : '/sitemap.xml'], (req, res) => {
+    const origin = getPublicOrigin(req);
+    const basePath = getPublicBasePath(req);
+    const root = origin ? `${origin}${basePath}` : basePath;
+    const lastmod = new Date().toISOString().slice(0, 10);
+
+    const urls = [
+        `${root}/`,
+        `${root}/privacy`,
+        `${root}/terms`
+    ].filter(Boolean);
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n` +
+        `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+        urls.map(u => (
+            `  <url>\n` +
+            `    <loc>${escapeHtmlAttr(u)}</loc>\n` +
+            `    <lastmod>${lastmod}</lastmod>\n` +
+            `    <changefreq>weekly</changefreq>\n` +
+            `    <priority>${u.endsWith('/') ? '1.0' : '0.3'}</priority>\n` +
+            `  </url>`
+        )).join('\n') +
+        `\n</urlset>\n`;
+
+    res.set('Content-Type', 'application/xml; charset=utf-8');
+    res.send(xml);
+});
+
 if (BASE_PATH) {
     // Normalize: allow access without trailing slash
     app.get(BASE_PATH, (req, res) => res.redirect(BASE_PATH + '/'));
@@ -7279,7 +7534,12 @@ if (BASE_PATH) {
 
 app.get(BASE_PATH + '/', (req, res) => {
     res.set('Cache-Control', 'no-store');
-    res.sendFile(INDEX_PATH);
+    try {
+        res.set('Content-Type', 'text/html; charset=utf-8');
+        res.send(renderIndexHtml(req));
+    } catch (e) {
+        res.sendFile(INDEX_PATH);
+    }
 });
 
 app.get(BASE_PATH + '/admin', (req, res) => {

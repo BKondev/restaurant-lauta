@@ -74,6 +74,11 @@
                 <span class="tab-text" data-translate="approvedOrders">Approved Orders</span>
             </button>
 
+            <button class="admin-tab-btn" onclick="switchTab('seo-settings')">
+                <i class="fas fa-search"></i>
+                <span class="tab-text" data-translate="seoOptimisation">SEO optimisation</span>
+            </button>
+
             <button class="admin-tab-btn" onclick="downloadApk()" data-translate-title="downloadApk" title="Download APK">
                 <i class="fas fa-download"></i>
                 <span class="tab-text" data-translate="downloadApk">Download APK</span>
@@ -1503,6 +1508,53 @@
             <div id="orders-history-list"></div>
         </div>
         </div><!-- End Orders History Tab -->
+
+        <!-- SEO Settings Tab -->
+        <div class="admin-tab-content" id="tab-seo-settings">
+        <div class="admin-section">
+            <h2><i class="fas fa-search"></i> <span data-translate="seoOptimisation">SEO optimisation</span></h2>
+
+            <div class="form-group">
+                <label for="seo-title"><span data-translate="seoTitle">Meta title</span>:</label>
+                <input type="text" id="seo-title" placeholder="Restaurant name | Online Menu" data-translate-placeholder="seoTitlePlaceholder">
+                <small data-translate="seoTitleHelp">Shown in browser tabs and search results (if Google chooses it).</small>
+            </div>
+
+            <div class="form-group">
+                <label for="seo-description"><span data-translate="seoDescription">Meta description</span>:</label>
+                <textarea id="seo-description" rows="3" placeholder="Short description..." data-translate-placeholder="seoDescriptionPlaceholder"></textarea>
+                <small data-translate="seoDescriptionHelp">Keep it short and unique for better SEO snippets.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="seo-canonical-url"><span data-translate="seoCanonicalUrl">Canonical URL</span>:</label>
+                <input type="url" id="seo-canonical-url" placeholder="https://your-domain.com/" data-translate-placeholder="seoCanonicalUrlPlaceholder">
+                <small data-translate="seoCanonicalUrlHelp">Optional. Must be absolute (starts with https://). Leave empty to use the current site URL automatically.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="seo-og-image-url"><span data-translate="seoOgImageUrl">OG image URL</span>:</label>
+                <input type="text" id="seo-og-image-url" placeholder="/uploads/og.jpg or https://..." data-translate-placeholder="seoOgImageUrlPlaceholder">
+                <small data-translate="seoOgImageUrlHelp">Used when sharing on Facebook/Instagram/Viber etc. You can use an absolute URL or an uploaded /uploads/... image.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="seo-robots"><span data-translate="seoRobots">Robots meta</span>:</label>
+                <input type="text" id="seo-robots" placeholder="index,follow" data-translate-placeholder="seoRobotsPlaceholder">
+                <small data-translate="seoRobotsHelp">Optional. Example: index,follow or noindex,nofollow.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="seo-google-site-verification"><span data-translate="seoGoogleSiteVerification">Google site verification</span>:</label>
+                <input type="text" id="seo-google-site-verification" placeholder="verification token" data-translate-placeholder="seoGoogleSiteVerificationPlaceholder">
+                <small data-translate="seoGoogleSiteVerificationHelp">Optional. Paste the content value provided by Google Search Console.</small>
+            </div>
+
+            <button onclick="saveSeoSettingsOnly()" class="btn btn-success">
+                <i class="fas fa-save"></i> <span data-translate="saveSeo">Save SEO</span>
+            </button>
+        </div>
+        </div><!-- End SEO Settings Tab -->
 
         </div><!-- End admin-tabs-content -->
     </div>

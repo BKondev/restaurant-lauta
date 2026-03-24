@@ -491,9 +491,55 @@ const translations = {
     bg: {
         adminPanel: 'Админ Панел',
         downloadApk: 'Свали APK',
+        seoOptimisation: 'SEO optimisation',
+        seoTitle: 'Meta title',
+        seoTitlePlaceholder: 'Restaurant name | Online Menu',
+        seoTitleHelp: 'Shown in browser tabs and search results (if Google chooses it).',
+        seoDescription: 'Meta description',
+        seoDescriptionPlaceholder: 'Short description...',
+        seoDescriptionHelp: 'Keep it short and unique for better SEO snippets.',
+        seoCanonicalUrl: 'Canonical URL',
+        seoCanonicalUrlPlaceholder: 'https://your-domain.com/',
+        seoCanonicalUrlHelp: 'Optional. Must be absolute (starts with https://). Leave empty to use the current site URL automatically.',
+        seoOgImageUrl: 'OG image URL',
+        seoOgImageUrlPlaceholder: '/uploads/og.jpg or https://...',
+        seoOgImageUrlHelp: 'Used when sharing on Facebook/Instagram/Viber etc. You can use an absolute URL or an uploaded /uploads/... image.',
+        seoRobots: 'Robots meta',
+        seoRobotsPlaceholder: 'index,follow',
+        seoRobotsHelp: 'Optional. Example: index,follow or noindex,nofollow.',
+        seoGoogleSiteVerification: 'Google site verification',
+        seoGoogleSiteVerificationPlaceholder: 'verification token',
+        seoGoogleSiteVerificationHelp: 'Optional. Paste the content value provided by Google Search Console.',
+        saveSeo: 'Save SEO',
+        seoSaved: 'SEO settings saved successfully!',
+        seoSaveFailed: 'Failed to save SEO settings',
+        seoSaveError: 'Error saving SEO settings',
         logout: 'Изход',
         pendingOrders: 'Чакащи Поръчки',
         allOrders: 'Всички Поръчки',
+        seoOptimisation: 'SEO оптимизация',
+        seoTitle: 'Meta заглавие',
+        seoTitlePlaceholder: 'Име на ресторанта | Онлайн меню',
+        seoTitleHelp: 'Показва се в таба на браузъра и в резултатите (ако Google го избере).',
+        seoDescription: 'Meta описание',
+        seoDescriptionPlaceholder: 'Кратко описание...',
+        seoDescriptionHelp: 'Дръжте го кратко и уникално за по-добри SEO откъси.',
+        seoCanonicalUrl: 'Каноничен URL',
+        seoCanonicalUrlPlaceholder: 'https://your-domain.com/',
+        seoCanonicalUrlHelp: 'По избор. Трябва да е абсолютен (започва с https://). Ако е празно, използваме текущия сайт автоматично.',
+        seoOgImageUrl: 'OG изображение (URL)',
+        seoOgImageUrlPlaceholder: '/uploads/og.jpg или https://...',
+        seoOgImageUrlHelp: 'Използва се при споделяне във Facebook/Instagram/Viber и др. Може да е абсолютен URL или /uploads/... изображение.',
+        seoRobots: 'Robots meta',
+        seoRobotsPlaceholder: 'index,follow',
+        seoRobotsHelp: 'По избор. Пример: index,follow или noindex,nofollow.',
+        seoGoogleSiteVerification: 'Google site verification',
+        seoGoogleSiteVerificationPlaceholder: 'verification token',
+        seoGoogleSiteVerificationHelp: 'По избор. Поставете стойността content от Google Search Console.',
+        saveSeo: 'Запази SEO',
+        seoSaved: 'SEO настройките са запазени!',
+        seoSaveFailed: 'Неуспешно запазване на SEO настройките',
+        seoSaveError: 'Грешка при запазване на SEO настройките',
         manageProducts: 'Управление на Продукти',
         restaurantSettings: 'Настройки на Ресторант',
         deliverySettings: 'Настройки за Доставка',
@@ -2354,6 +2400,19 @@ async function loadSiteSettings() {
         const termsEl = document.getElementById('site-terms-html');
         if (privacyEl) privacyEl.value = data?.legal?.privacyHtml || '';
         if (termsEl) termsEl.value = data?.legal?.termsHtml || '';
+        const seo = (data?.seo && typeof data.seo === 'object') ? data.seo : {};
+        const seoTitleEl = document.getElementById('seo-title');
+        const seoDescEl = document.getElementById('seo-description');
+        const seoCanonicalEl = document.getElementById('seo-canonical-url');
+        const seoOgImageEl = document.getElementById('seo-og-image-url');
+        const seoRobotsEl = document.getElementById('seo-robots');
+        const seoGsvEl = document.getElementById('seo-google-site-verification');
+        if (seoTitleEl) seoTitleEl.value = (seo.title || '').toString();
+        if (seoDescEl) seoDescEl.value = (seo.description || '').toString();
+        if (seoCanonicalEl) seoCanonicalEl.value = (seo.canonicalUrl || '').toString();
+        if (seoOgImageEl) seoOgImageEl.value = (seo.ogImageUrl || '').toString();
+        if (seoRobotsEl) seoRobotsEl.value = (seo.robots || '').toString();
+        if (seoGsvEl) seoGsvEl.value = (seo.googleSiteVerification || '').toString();
 
         try { renderCategoriesManager(); } catch (e) {}
     } catch (e) {
@@ -2531,6 +2590,7 @@ async function updateSiteSettings() {
             theme: theme === 'modern' ? 'modern' : 'classic',
             faviconUrl: (siteSettingsDraft?.faviconUrl || '').toString(),
             search: { mode: mode === 'names_only' ? 'names_only' : 'names_and_descriptions' },
+            seo: (siteSettingsDraft?.seo && typeof siteSettingsDraft.seo === 'object') ? siteSettingsDraft.seo : {},
             map: {
                 enabled: mapEnabled,
                 label: mapLabel,
@@ -2601,6 +2661,7 @@ async function saveCategoriesOnly() {
             theme: (baseline?.theme === 'modern') ? 'modern' : 'classic',
             faviconUrl: (baseline?.faviconUrl || '').toString(),
             search: (baseline?.search && typeof baseline.search === 'object') ? baseline.search : { mode: 'names_and_descriptions' },
+            seo: (baseline?.seo && typeof baseline.seo === 'object') ? baseline.seo : {},
             map: (baseline?.map && typeof baseline.map === 'object') ? baseline.map : { enabled: false },
             email: (baseline?.email && typeof baseline.email === 'object') ? baseline.email : {},
             categories: categoriesDraft,
@@ -2638,6 +2699,78 @@ async function saveCategoriesOnly() {
     } catch (e) {
         console.error('Error saving categories:', e);
         alert(t('categoriesSaveError', 'Error saving categories'));
+    }
+}
+
+async function saveSeoSettingsOnly() {
+    try {
+        const token = getAdminToken();
+        if (!token) {
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        const title = (document.getElementById('seo-title')?.value || '').toString();
+        const description = (document.getElementById('seo-description')?.value || '').toString();
+        const canonicalUrl = (document.getElementById('seo-canonical-url')?.value || '').toString();
+        const ogImageUrl = (document.getElementById('seo-og-image-url')?.value || '').toString();
+        const robots = (document.getElementById('seo-robots')?.value || '').toString();
+        const googleSiteVerification = (document.getElementById('seo-google-site-verification')?.value || '').toString();
+
+        // Merge with latest server-side settings so we don't overwrite other site content.
+        const baselineRes = await fetch(`${API_URL}/settings/site`, { cache: 'no-store' });
+        const baseline = baselineRes.ok ? await baselineRes.json().catch(() => ({})) : {};
+
+        const payload = {
+            theme: (baseline?.theme === 'modern') ? 'modern' : 'classic',
+            faviconUrl: (baseline?.faviconUrl || '').toString(),
+            search: (baseline?.search && typeof baseline.search === 'object') ? baseline.search : { mode: 'names_and_descriptions' },
+            map: (baseline?.map && typeof baseline.map === 'object') ? baseline.map : { enabled: false },
+            email: (baseline?.email && typeof baseline.email === 'object') ? baseline.email : {},
+            categories: Array.isArray(baseline?.categories) || (baseline?.categories && typeof baseline.categories === 'object') ? baseline.categories : { order: [], labels: {} },
+            footer: (baseline?.footer && typeof baseline.footer === 'object') ? baseline.footer : {},
+            legal: (baseline?.legal && typeof baseline.legal === 'object') ? baseline.legal : {},
+            seo: {
+                title,
+                description,
+                canonicalUrl,
+                ogImageUrl,
+                robots,
+                googleSiteVerification
+            }
+        };
+
+        const res = await fetch(`${API_URL}/settings/site`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.status === 401) {
+            alert(t('sessionExpired', 'Session expired. Please login again.'));
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || t('seoSaveFailed', 'Failed to save SEO settings'));
+            return;
+        }
+
+        const saved = await res.json().catch(() => null);
+        if (saved && typeof saved === 'object') {
+            siteSettingsDraft = saved;
+            siteCategoriesDraft = normalizeCategoriesDraft(saved?.categories);
+        }
+
+        alert(t('seoSaved', 'SEO settings saved successfully!'));
+    } catch (e) {
+        console.error('Error saving SEO settings:', e);
+        alert(t('seoSaveError', 'Error saving SEO settings'));
     }
 }
 
