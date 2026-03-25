@@ -4042,7 +4042,9 @@ app.get(API_PREFIX + '/settings/customization', (req, res) => {
         backgroundColor: '#f5f5f5',
         backgroundImage: '',
         highlightColor: '#e74c3c',
-        priceColor: '#e74c3c'
+        priceColor: '#e74c3c',
+        headerLogoSize: 50,
+        footerLogoMaxWidth: 180
     });
 });
 
@@ -4193,7 +4195,25 @@ app.post(API_PREFIX + '/settings/site/footer-about-logo', requireAuth, (req, res
 // Update customization settings
 app.put(API_PREFIX + '/settings/customization', requireAuth, (req, res) => {
     const db = readDatabase();
-    db.customization = req.body;
+
+    const clampInt = (value, min, max, fallback) => {
+        const n = Number.parseInt(value, 10);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+    };
+
+    const prev = (db.customization && typeof db.customization === 'object') ? db.customization : {};
+    const body = (req.body && typeof req.body === 'object') ? req.body : {};
+
+    const next = {
+        ...prev,
+        ...body
+    };
+
+    next.headerLogoSize = clampInt(next.headerLogoSize, 24, 96, 50);
+    next.footerLogoMaxWidth = clampInt(next.footerLogoMaxWidth, 80, 360, 180);
+
+    db.customization = next;
     
     if (writeDatabase(db)) {
         res.json(db.customization);

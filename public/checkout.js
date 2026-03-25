@@ -1057,6 +1057,11 @@ async function loadRestaurantInfo() {
             document.documentElement.style.setProperty('--background-color', customization.backgroundColor);
             document.documentElement.style.setProperty('--highlight-color', customization.highlightColor);
             document.documentElement.style.setProperty('--price-color', customization.priceColor);
+
+            const headerLogoSize = Number.isFinite(Number(customization.headerLogoSize)) ? Number(customization.headerLogoSize) : 50;
+            const footerLogoMaxWidth = Number.isFinite(Number(customization.footerLogoMaxWidth)) ? Number(customization.footerLogoMaxWidth) : 180;
+            document.documentElement.style.setProperty('--header-logo-size', `${headerLogoSize}px`);
+            document.documentElement.style.setProperty('--footer-logo-max-width', `${footerLogoMaxWidth}px`);
         }
     } catch (error) {
         console.error('Error loading restaurant info:', error);

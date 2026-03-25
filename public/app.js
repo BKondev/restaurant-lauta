@@ -2184,12 +2184,24 @@ document.addEventListener('DOMContentLoaded', function() {
 // Apply customization
 function applyCustomization(custom) {
     const root = document.documentElement;
+
+    const clampInt = (value, min, max, fallback) => {
+        const n = Number.parseInt(value, 10);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+    };
     
     // Apply colors
     root.style.setProperty('--top-bar-color', custom.topBarColor || '#2c3e50');
     root.style.setProperty('--background-color', custom.backgroundColor || '#f5f5f5');
     root.style.setProperty('--highlight-color', custom.highlightColor || '#e74c3c');
     root.style.setProperty('--price-color', custom.priceColor || '#e74c3c');
+
+    // Apply logo sizes
+    const headerLogoSize = clampInt(custom?.headerLogoSize, 24, 96, 50);
+    const footerLogoMaxWidth = clampInt(custom?.footerLogoMaxWidth, 80, 360, 180);
+    root.style.setProperty('--header-logo-size', `${headerLogoSize}px`);
+    root.style.setProperty('--footer-logo-max-width', `${footerLogoMaxWidth}px`);
     
     // Apply background
     if (custom.backgroundImage) {

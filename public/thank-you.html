@@ -294,6 +294,22 @@
         return `${round2(amount).toFixed(2)} €`;
       }
 
+      async function loadCustomization() {
+        try {
+          const base = getBasePath();
+          const customization = await fetchJson(`${base}/api/settings/customization`);
+          const headerLogoSize = Number.isFinite(Number(customization?.headerLogoSize)) ? Number(customization.headerLogoSize) : 50;
+
+          const logoEl = document.getElementById('restaurant-logo');
+          if (logoEl) {
+            logoEl.style.height = `${headerLogoSize}px`;
+            logoEl.style.width = 'auto';
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
       function resolvePublicAssetUrl(url) {
         const s = (url || '').toString().trim();
         if (!s) return '';
@@ -570,6 +586,7 @@
       }
 
       loadRestaurantInfo();
+      loadCustomization();
       loadContacts();
 
       const codeRow = document.getElementById('ty-code-row');

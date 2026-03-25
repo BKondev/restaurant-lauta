@@ -170,6 +170,8 @@ const translations = {
         backgroundImageUrl: 'Background Image URL',
         backgroundImagePlaceholder: 'https://example.com/background.jpg',
         backgroundImageHint: 'Leave empty to use background color instead',
+        headerLogoSize: 'Header logo size',
+        footerLogoSize: 'Footer logo size',
         saveCustomization: 'Save Customization',
 
         orderSettings: 'Order Settings',
@@ -693,6 +695,8 @@ const translations = {
         backgroundImageUrl: 'URL на фонова снимка',
         backgroundImagePlaceholder: 'https://example.com/background.jpg',
         backgroundImageHint: 'Оставете празно, за да се използва фоновият цвят',
+        headerLogoSize: 'Размер на логото (хедър)',
+        footerLogoSize: 'Размер на логото (футър)',
         saveCustomization: 'Запази Персонализацията',
 
         orderSettings: 'Настройки на Поръчки',
@@ -1615,6 +1619,7 @@ document.addEventListener('DOMContentLoaded', function() {
         loadCustomization();
         setupForm();
         setupColorInputs();
+        setupLogoSizeSliders();
         loadPromoCodes();
         initPromoFlyersUI();
         initManageControls();
@@ -4445,6 +4450,27 @@ function setupColorInputs() {
     });
 }
 
+function setupLogoSizeSliders() {
+    const headerEl = document.getElementById('header-logo-size');
+    const headerValEl = document.getElementById('header-logo-size-value');
+    const footerEl = document.getElementById('footer-logo-max-width');
+    const footerValEl = document.getElementById('footer-logo-max-width-value');
+
+    if (headerEl && headerValEl) {
+        const sync = () => { headerValEl.textContent = String(headerEl.value || ''); };
+        headerEl.addEventListener('input', sync);
+        headerEl.addEventListener('change', sync);
+        sync();
+    }
+
+    if (footerEl && footerValEl) {
+        const sync = () => { footerValEl.textContent = String(footerEl.value || ''); };
+        footerEl.addEventListener('input', sync);
+        footerEl.addEventListener('change', sync);
+        sync();
+    }
+}
+
 // Load customization settings
 async function loadCustomization() {
     try {
@@ -4466,6 +4492,18 @@ async function loadCustomization() {
             document.getElementById('price-color').value = data.priceColor || '#e74c3c';
             document.getElementById('price-color-text').value = data.priceColor || '#e74c3c';
             document.getElementById('background-image').value = data.backgroundImage || '';
+
+            const headerSizeEl = document.getElementById('header-logo-size');
+            const headerSizeValEl = document.getElementById('header-logo-size-value');
+            const headerSize = Number.isFinite(Number(data.headerLogoSize)) ? Number(data.headerLogoSize) : 50;
+            if (headerSizeEl) headerSizeEl.value = String(headerSize);
+            if (headerSizeValEl) headerSizeValEl.textContent = String(headerSize);
+
+            const footerSizeEl = document.getElementById('footer-logo-max-width');
+            const footerSizeValEl = document.getElementById('footer-logo-max-width-value');
+            const footerSize = Number.isFinite(Number(data.footerLogoMaxWidth)) ? Number(data.footerLogoMaxWidth) : 180;
+            if (footerSizeEl) footerSizeEl.value = String(footerSize);
+            if (footerSizeValEl) footerSizeValEl.textContent = String(footerSize);
         }
     } catch (error) {
         console.error('Error loading customization:', error);
@@ -4479,7 +4517,9 @@ async function updateCustomization() {
         backgroundColor: document.getElementById('background-color').value,
         backgroundImage: document.getElementById('background-image').value,
         highlightColor: document.getElementById('highlight-color').value,
-        priceColor: document.getElementById('price-color').value
+        priceColor: document.getElementById('price-color').value,
+        headerLogoSize: parseInt(document.getElementById('header-logo-size')?.value || '50', 10),
+        footerLogoMaxWidth: parseInt(document.getElementById('footer-logo-max-width')?.value || '180', 10)
     };
     
     try {
