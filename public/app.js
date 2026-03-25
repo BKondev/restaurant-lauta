@@ -32,6 +32,8 @@ let siteSearchMode = 'names_and_descriptions';
 let siteWorkingHours = null;
 let siteOrderSettings = null;
 
+let restaurantLogoUrl = '';
+
 let modalProductId = null;
 let modalQuantity = 1;
 
@@ -985,15 +987,21 @@ async function loadData() {
         // Load restaurant settings (name and logo)
         const settingsResponse = await fetch(`${API_URL}/settings`);
         const settingsData = await settingsResponse.json();
-        document.getElementById('restaurant-name').textContent = settingsData.name;
+        const nameEl = document.getElementById('restaurant-name');
+        if (nameEl) nameEl.textContent = settingsData.name;
+        restaurantLogoUrl = (settingsData?.logo || '').toString().trim();
         
         // Display logo if available
         const logoElement = document.getElementById('restaurant-logo');
-        if (settingsData.logo) {
-            logoElement.src = settingsData.logo;
-            logoElement.classList.add('visible');
+        if (restaurantLogoUrl) {
+            if (logoElement) {
+                logoElement.src = resolvePublicAssetUrl(restaurantLogoUrl);
+                logoElement.classList.add('visible');
+            }
+            if (nameEl) nameEl.style.display = 'none';
         } else {
-            logoElement.classList.remove('visible');
+            if (logoElement) logoElement.classList.remove('visible');
+            if (nameEl) nameEl.style.display = '';
         }
         
         // Load customization
@@ -1078,9 +1086,9 @@ function renderSiteFooter() {
     const mapCfg = siteSettings?.map || {};
     const aboutText = (siteSettings?.footer?.aboutText || '').toString().trim();
     const aboutLogoRaw = (siteSettings?.footer?.aboutLogoUrl || '').toString().trim();
-    const aboutLogoUrl = aboutLogoRaw
-        ? (aboutLogoRaw.startsWith('/') ? `${BASE_PATH}${aboutLogoRaw}` : aboutLogoRaw)
-        : '';
+    const restaurantLogoRaw = (restaurantLogoUrl || '').toString().trim();
+    const footerLogoRaw = aboutLogoRaw || restaurantLogoRaw;
+    const aboutLogoUrl = footerLogoRaw ? resolvePublicAssetUrl(footerLogoRaw) : '';
     const socials = Array.isArray(siteSettings?.footer?.socials) ? siteSettings.footer.socials : [];
 
     const labels = currentLanguage === 'bg'

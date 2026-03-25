@@ -6788,9 +6788,16 @@ function renderOrdersHistory() {
 
         const promoCode = (order.promoCode || '').toString().trim();
         const discountPct = Math.max(0, Math.min(100, Number(order.discount) || 0));
-        const discountAmount = Number(order.discountAmount) || 0;
+        const itemSubtotal = Array.isArray(order.items)
+            ? order.items.reduce((sum, it) => sum + ((Number(it?.price) || 0) * (Number(it?.quantity) || 0)), 0)
+            : 0;
+
+        const subtotalAmount = (Number(order.subtotal) || 0) || itemSubtotal;
+        const discountAmount = (Number(order.discountAmount) || 0) || (subtotalAmount * (discountPct / 100));
+        const intermediateSubtotalAmount = (Number(order.intermediateSubtotal) || 0) || Math.max(0, subtotalAmount - discountAmount);
+        const deliveryFeeAmount = Number(order.deliveryFee) || 0;
+
         const promoLine = promoCode ? `Промо код: ${promoCode}${discountPct ? ` (-${discountPct}%)` : ''}` : '';
-        const discountLine = (discountAmount > 0) ? `Отстъпка: -${safeToFixed(discountAmount)} €` : '';
 
         const productsChipsHtml = (order.items || []).map(item => {
             const qty = Number(item?.quantity) || 0;
@@ -6843,9 +6850,12 @@ function renderOrdersHistory() {
                             </span>
                             <span class="order-status ${statusClass}">${statusLabel}</span>
                         </div>
-                        <div class="oh-total">${t('total', 'Total')}: <strong>${safeToFixed(totalShown)} €</strong></div>
+                        <div class="oh-total">Сума: <strong>${safeToFixed(subtotalAmount)} €</strong></div>
+                        <div class="oh-total">Отстъпка: <strong>-${safeToFixed(discountAmount)} €</strong></div>
+                        <div class="oh-total">Междинна сума: <strong>${safeToFixed(intermediateSubtotalAmount)} €</strong></div>
+                        <div class="oh-total">Доставка: <strong>${safeToFixed(deliveryFeeAmount)} €</strong></div>
+                        <div class="oh-total">Общо: <strong>${safeToFixed(totalShown)} €</strong></div>
                         ${promoLine ? `<div class="oh-total">${promoLine}</div>` : ''}
-                        ${discountLine ? `<div class="oh-total">${discountLine}</div>` : ''}
                         </div>
 
                         <div class="oh-col oh-customer">
@@ -6926,12 +6936,12 @@ function renderOrdersHistory() {
                         </div>
 
                         <div class="order-section">
-                            <div class="order-total" style="margin-top: 0;">
-                                <span class="order-total-label">${t('total', 'Total')}:</span>
-                                <span class="order-total-value">${safeToFixed(totalShown)} €</span>
-                            </div>
+                            <div class="order-total" style="margin-top: 0;"><span class="order-total-label">Сума:</span><span class="order-total-value">${safeToFixed(subtotalAmount)} €</span></div>
+                            <div class="order-total" style="margin-top: 2px;"><span class="order-total-label">Отстъпка:</span><span class="order-total-value">-${safeToFixed(discountAmount)} €</span></div>
+                            <div class="order-total" style="margin-top: 2px;"><span class="order-total-label">Междинна сума:</span><span class="order-total-value">${safeToFixed(intermediateSubtotalAmount)} €</span></div>
+                            <div class="order-total" style="margin-top: 2px;"><span class="order-total-label">Доставка:</span><span class="order-total-value">${safeToFixed(deliveryFeeAmount)} €</span></div>
+                            <div class="order-total" style="margin-top: 2px;"><span class="order-total-label">Общо:</span><span class="order-total-value">${safeToFixed(totalShown)} €</span></div>
                             ${promoLine ? `<div class="order-total" style="margin-top: 6px;"><span class="order-total-label">Промо:</span><span class="order-total-value">${promoLine}</span></div>` : ''}
-                            ${discountLine ? `<div class="order-total" style="margin-top: 2px;"><span class="order-total-label">Отстъпка:</span><span class="order-total-value">${discountLine.replace('Отстъпка: ', '')}</span></div>` : ''}
                         </div>
                     </div>
 

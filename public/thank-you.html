@@ -63,7 +63,10 @@
 <body>
   <div class="top-bar">
     <div class="container" style="display:flex; align-items:center; justify-content:space-between;">
-      <div class="logo"><h1 style="margin:0;">Restaurant Lauta</h1></div>
+      <div class="logo" style="display:flex; align-items:center; gap:10px;">
+        <img id="restaurant-logo" src="" alt="" style="height:40px; width:auto; display:none;" />
+        <h1 id="restaurant-name" style="margin:0;">Restaurant Lauta</h1>
+      </div>
       <div class="top-actions">
         <a id="ty-track-top" class="btn-secondary" href="#" style="display:none;">Track order</a>
       </div>
@@ -149,6 +152,7 @@
           promo: 'Promo',
           subtotal: 'Subtotal',
           discount: 'Discount',
+          intermediateSubtotal: 'Intermediate subtotal',
           deliveryFee: 'Delivery fee',
            savings: 'You saved',
           orderNote: 'Order note'
@@ -183,6 +187,7 @@
           promo: 'Промо',
           subtotal: 'Сума',
           discount: 'Отстъпка',
+          intermediateSubtotal: 'Междинна сума',
           deliveryFee: 'Доставка',
            savings: 'Спестявате',
           orderNote: 'Бележка към поръчката'
@@ -289,6 +294,18 @@
         return `${round2(amount).toFixed(2)} €`;
       }
 
+      function resolvePublicAssetUrl(url) {
+        const s = (url || '').toString().trim();
+        if (!s) return '';
+        const base = getBasePath();
+        if (s.startsWith('/resturant-website/')) {
+          const stripped = s.replace(/^\/resturant-website/, '');
+          return base ? `${base}${stripped}` : stripped;
+        }
+        if (s.startsWith('/')) return `${base}${s}`;
+        return s;
+      }
+
       async function fetchJson(url) {
         const res = await fetch(url);
         if (!res.ok) throw new Error('Request failed');
@@ -333,6 +350,34 @@
           }
 
           renderHero();
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      async function loadRestaurantInfo() {
+        try {
+          const base = getBasePath();
+          const settings = await fetchJson(`${base}/api/settings`);
+          const name = (settings?.name || '').toString().trim();
+          const logoUrl = (settings?.logo || '').toString().trim();
+
+          const nameEl = document.getElementById('restaurant-name');
+          const logoEl = document.getElementById('restaurant-logo');
+
+          if (nameEl && name) nameEl.textContent = name;
+
+          if (logoEl) {
+            if (logoUrl) {
+              logoEl.src = resolvePublicAssetUrl(logoUrl);
+              logoEl.alt = name || '';
+              logoEl.style.display = '';
+            } else {
+              logoEl.style.display = 'none';
+            }
+          }
+
+          if (nameEl) nameEl.style.display = logoUrl ? 'none' : '';
         } catch (e) {
           // ignore
         }
@@ -390,6 +435,7 @@
           const discountAmount = toNumber(o?.discountAmount);
           const deliveryFee = toNumber(o?.deliveryFee);
           const total = toNumber(o?.total);
+          const intermediateSubtotal = toNumber(o?.intermediateSubtotal) || Math.max(0, subtotal - discountAmount);
           const promoCode = (o?.promoCode || '').toString().trim();
           const discountPct = Math.max(0, Math.min(100, toNumber(o?.discount)));
           const orderNote = (o?.orderNote || '').toString().replace(/\r/g, '').trim();
@@ -416,6 +462,12 @@
               <div class="items-row">
                 <div class="items-name">${t('discount')}</div>
                 <div class="items-price">-${formatMoney(discountAmount, currency)}</div>
+              </div>
+            ` : ''}
+            ${(subtotal > 0 && discountAmount > 0) ? `
+              <div class="items-row">
+                <div class="items-name">${t('intermediateSubtotal')}</div>
+                <div class="items-price">${formatMoney(intermediateSubtotal, currency)}</div>
               </div>
             ` : ''}
             ${(deliveryFee > 0) ? `
@@ -517,6 +569,7 @@
         document.getElementById('ty-track-top').style.display = 'none';
       }
 
+      loadRestaurantInfo();
       loadContacts();
 
       const codeRow = document.getElementById('ty-code-row');

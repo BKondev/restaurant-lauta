@@ -989,12 +989,6 @@
                             <span class="order-value">${promoCode ? `${escapeHtml(promoCode)}${discountPct ? ` (-${escapeHtml(discountPct)}%)` : ''}` : (discountPct ? `-${escapeHtml(discountPct)}%` : '—')}</span>
                         </div>
                     ` : ''}
-                    ${contactsPhone ? `
-                        <div class="order-row">
-                            <span class="order-label">${t('phone')}</span>
-                            <span class="order-value"><a href="tel:${encodeURIComponent(contactsPhone)}" style="color: var(--highlight-color); font-weight: 800; text-decoration: none;">${contactsPhone}</a></span>
-                        </div>
-                    ` : ''}
                 </div>
 
                 ${order.deliveryMethod === 'delivery' && order.customerInfo ? `

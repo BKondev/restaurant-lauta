@@ -1025,13 +1025,27 @@ async function loadRestaurantInfo() {
         // Load settings (name and logo)
         const settingsResponse = await fetch(`${API_URL}/settings`);
         const settings = await settingsResponse.json();
-        
-        document.getElementById('restaurant-name').textContent = settings.name;
-        
-        if (settings.logo) {
-            const logo = document.getElementById('header-logo');
-            logo.src = `${BASE_PATH}${settings.logo}`;
-            logo.classList.add('visible');
+
+        const nameEl = document.getElementById('restaurant-name');
+        if (nameEl) nameEl.textContent = settings.name;
+
+        const rawLogo = (settings?.logo || '').toString().trim();
+        const logoEl = document.getElementById('header-logo');
+        if (rawLogo && logoEl) {
+            let logoUrl = rawLogo;
+            if (rawLogo.startsWith('/resturant-website/')) {
+                const stripped = rawLogo.replace(/^\/resturant-website/, '');
+                logoUrl = BASE_PATH ? `${BASE_PATH}${stripped}` : stripped;
+            } else if (rawLogo.startsWith('/')) {
+                logoUrl = `${BASE_PATH}${rawLogo}`;
+            }
+
+            logoEl.src = logoUrl;
+            logoEl.classList.add('visible');
+            if (nameEl) nameEl.style.display = 'none';
+        } else {
+            if (logoEl) logoEl.classList.remove('visible');
+            if (nameEl) nameEl.style.display = '';
         }
 
         // Load customization
