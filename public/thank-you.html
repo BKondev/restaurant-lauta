@@ -64,7 +64,7 @@
   <div class="top-bar">
     <div class="container" style="display:flex; align-items:center; justify-content:space-between;">
       <div class="logo" style="display:flex; align-items:center; gap:10px;">
-        <img id="restaurant-logo" src="" alt="" style="height:40px; width:auto; display:none;" />
+        <img id="restaurant-logo" src="" alt="" style="height:50px; width:80px; object-fit:contain; display:none;" />
         <h1 id="restaurant-name" style="margin:0;">Restaurant Lauta</h1>
       </div>
       <div class="top-actions">
@@ -298,12 +298,14 @@
         try {
           const base = getBasePath();
           const customization = await fetchJson(`${base}/api/settings/customization`);
-          const headerLogoSize = Number.isFinite(Number(customization?.headerLogoSize)) ? Number(customization.headerLogoSize) : 50;
+          const headerLogoHeight = Number.isFinite(Number(customization?.headerLogoSize)) ? Number(customization.headerLogoSize) : 50;
+          const headerLogoWidth = Math.round(headerLogoHeight * 1.6);
 
           const logoEl = document.getElementById('restaurant-logo');
           if (logoEl) {
-            logoEl.style.height = `${headerLogoSize}px`;
-            logoEl.style.width = 'auto';
+            logoEl.style.height = `${headerLogoHeight}px`;
+            logoEl.style.width = `${headerLogoWidth}px`;
+            logoEl.style.objectFit = 'contain';
           }
         } catch (e) {
           // ignore

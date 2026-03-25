@@ -364,8 +364,8 @@ body {
 }
 
 .restaurant-logo {
-    width: var(--header-logo-size, 50px);
-    height: var(--header-logo-size, 50px);
+    width: var(--header-logo-width, 80px);
+    height: var(--header-logo-height, 50px);
     object-fit: contain;
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.1);

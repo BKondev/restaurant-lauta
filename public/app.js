@@ -2198,9 +2198,12 @@ function applyCustomization(custom) {
     root.style.setProperty('--price-color', custom.priceColor || '#e74c3c');
 
     // Apply logo sizes
-    const headerLogoSize = clampInt(custom?.headerLogoSize, 24, 96, 50);
+    // Slider value is treated as header logo height; width follows the 80x50 default ratio.
+    const headerLogoHeight = clampInt(custom?.headerLogoSize, 24, 96, 50);
+    const headerLogoWidth = Math.round(headerLogoHeight * 1.6);
     const footerLogoMaxWidth = clampInt(custom?.footerLogoMaxWidth, 80, 360, 180);
-    root.style.setProperty('--header-logo-size', `${headerLogoSize}px`);
+    root.style.setProperty('--header-logo-height', `${headerLogoHeight}px`);
+    root.style.setProperty('--header-logo-width', `${headerLogoWidth}px`);
     root.style.setProperty('--footer-logo-max-width', `${footerLogoMaxWidth}px`);
     
     // Apply background
