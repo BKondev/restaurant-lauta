@@ -425,6 +425,7 @@ app.use((req, res, next) => {
 // Static files & uploads served under BASE_PATH if defined
 if (BASE_PATH) {
     app.use(BASE_PATH, express.static(path.join(__dirname, 'public'), {
+        index: false,
         setHeaders: (res, servedPath) => {
             if (typeof servedPath === 'string' && servedPath.toLowerCase().endsWith('.html')) {
                 res.setHeader('Cache-Control', 'no-store');
@@ -439,6 +440,7 @@ if (BASE_PATH) {
     app.use(BASE_PATH + '/vendor', express.static(path.join(__dirname, 'node_modules', 'jszip', 'dist')));
 } else {
     app.use(express.static(path.join(__dirname, 'public'), {
+        index: false,
         setHeaders: (res, servedPath) => {
             if (typeof servedPath === 'string' && servedPath.toLowerCase().endsWith('.html')) {
                 res.setHeader('Cache-Control', 'no-store');
@@ -7549,7 +7551,13 @@ app.get(['/sitemap.xml', BASE_PATH ? `${BASE_PATH}/sitemap.xml` : '/sitemap.xml'
 
 if (BASE_PATH) {
     // Normalize: allow access without trailing slash
-    app.get(BASE_PATH, (req, res) => res.redirect(BASE_PATH + '/'));
+    app.get(BASE_PATH, (req, res, next) => {
+        const originalPath = (req.originalUrl || '').split('?')[0];
+        if (originalPath === BASE_PATH) {
+            return res.redirect(301, BASE_PATH + '/');
+        }
+        return next();
+    });
 }
 
 app.get(BASE_PATH + '/', (req, res) => {

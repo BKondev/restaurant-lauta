@@ -367,9 +367,9 @@ body {
     width: var(--header-logo-width, 80px);
     height: var(--header-logo-height, 50px);
     object-fit: contain;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.1);
-    padding: 5px;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
     display: none; /* Hidden by default, shown when logo is uploaded */
 }
 
