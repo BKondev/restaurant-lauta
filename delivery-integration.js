@@ -5,9 +5,11 @@ const fs = require('fs');
 const DELIVERY_API_URL = 'https://karakashkov.com/delivery/api.php?path=/orders';
 
 // Defaults (fallbacks) if we can't resolve a match.
-const RESTAURANT_ID = '45';
-const RESTAURANT_ZONE = '5';
-const RESTAURANT_NAME_DEFAULT = 'Божоле';
+// LAUTA delivery system directory:
+// id=51, name=Р-т Лаута, zone=1, price_default=8.02, lat=42.137007, lon=24.770407
+const RESTAURANT_ID = '51';
+const RESTAURANT_ZONE = '1';
+const RESTAURANT_NAME_DEFAULT = 'Р-т Лаута';
 
 // Delivery service restaurants directory (auto-loaded from file if present).
 // Expected schema: [{ id, name, zone, price_default, ... }]
@@ -67,7 +69,10 @@ function resolveDeliveryRestaurantConfig(order) {
     }
 
     // Known aliases / latin spellings.
-    if (name.includes('bojole') || name.includes('bojo')) {
+    // NOTE: Our system often stores latin restaurantName (e.g. "Restaurant Lauta").
+    if (name.includes('lauta')) {
+        name = 'р-т лаута';
+    } else if (name.includes('bojole') || name.includes('bojo')) {
         name = 'божоле';
     }
 
@@ -140,7 +145,7 @@ async function sendToDeliveryService(order, options = {}) {
             1.9558;
 
         // Delivery service expects delivery price in BGN.
-        // Bojole directory price_default is 8.02 BGN, so we must send 8.02 (not ~4.10 EUR).
+        // The delivery restaurants directory price_default is in BGN, so we must send it as-is.
         const priceBgn = convertToBgn(
             restaurantCfg.priceDefault,
             restaurantCfg.priceDefaultCurrency,
@@ -238,5 +243,6 @@ async function checkDeliveryStatus(deliveryId) {
 module.exports = {
     sendToDeliveryService,
     checkDeliveryStatus,
-    generateClientId
+    generateClientId,
+    resolveDeliveryRestaurantConfig
 };
