@@ -1045,7 +1045,7 @@ async function loadRestaurantInfo() {
             if (nameEl) nameEl.style.display = 'none';
         } else {
             if (logoEl) logoEl.classList.remove('visible');
-            if (nameEl) nameEl.style.display = '';
+            if (nameEl) nameEl.style.display = 'block';
         }
 
         // Load customization

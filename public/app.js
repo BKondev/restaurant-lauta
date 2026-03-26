@@ -123,6 +123,14 @@ function handleBrokenProductImage(imgEl) {
     } catch (e) {}
 }
 
+function handleProductImageLoaded(imgEl) {
+    try {
+        if (!imgEl || !imgEl.closest) return;
+        const wrap = imgEl.closest('.product-image-wrap');
+        if (wrap) wrap.classList.add('is-loaded');
+    } catch (e) {}
+}
+
 loadBrokenImageCooldown();
 
 function ensureMetaTag(selector, createAttrs) {
@@ -1001,7 +1009,7 @@ async function loadData() {
             if (nameEl) nameEl.style.display = 'none';
         } else {
             if (logoElement) logoElement.classList.remove('visible');
-            if (nameEl) nameEl.style.display = '';
+            if (nameEl) nameEl.style.display = 'block';
         }
         
         // Load customization
@@ -1773,11 +1781,15 @@ function createProductCard(product) {
     card.innerHTML = `
         ${badgeHTML}
         <div class="product-image-wrap">
+            <div class="product-image-loader" aria-hidden="true"><div class="product-image-spinner"></div></div>
             <img src="${imageUrl}" 
                  alt="${name}" 
                  class="product-image"
+                 loading="lazy"
+                 decoding="async"
                  data-orig-src="${originalImageUrl}"
                  data-fallback-src="${fallbackImageUrl}"
+                 onload="handleProductImageLoaded(this)"
                  onerror="handleBrokenProductImage(this)">
             ${product.weight ? `<span class="product-weight-overlay">${product.weight}</span>` : ''}
         </div>
