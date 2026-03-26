@@ -923,10 +923,10 @@ body.admin-drawer-open {
     .admin-tabs-nav .admin-tab-btn {
         flex: 1 1 calc(50% - 2px);
         min-width: calc(50% - 2px);
-        padding: 14px 8px;
+        padding: 10px 6px;
         font-size: 13px;
         flex-direction: column;
-        gap: 6px;
+        gap: 4px;
         border-radius: 0;
         border-bottom: none;
         border-right: 1px solid rgba(255,255,255,0.14);
@@ -951,7 +951,7 @@ body.admin-drawer-open {
     }
 
     .admin-tabs-nav .admin-tab-btn i {
-        font-size: 20px;
+        font-size: 18px;
         margin: 0;
     }
 
@@ -966,7 +966,7 @@ body.admin-drawer-open {
     }
 
     .admin-tabs-nav .admin-tab-btn .tab-text {
-        font-size: 11px;
+        font-size: 10px;
         display: block;
         font-weight: 800;
     }
