@@ -1656,6 +1656,26 @@ body.admin-drawer-open {
     }
 
     /* Pending orders (mobile): keep compact stacked layout */
+    .order-header {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .order-header > div:first-child {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .order-header > div:last-child {
+        flex: 1 1 100%;
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-start !important;
+        row-gap: 6px;
+    }
+
     .order-body {
         grid-template-columns: 1fr;
     }
