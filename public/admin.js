@@ -1547,55 +1547,13 @@ async function downloadApk() {
     const ok = await ensureAuthOrRedirect();
     if (!ok) return;
 
-    const token = getAdminToken();
-    if (!token) {
-        alert(t('sessionExpired', 'Session expired. Please login again.'));
-        window.location.href = `${BASE_PATH}/login`;
-        return;
-    }
-
-    try {
-        const res = await fetch(`${API_URL}/admin/apk`, {
-            method: 'GET',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (!res.ok) {
-            // Some deployments serve the APK as a static file only.
-            // Fallback keeps the UX working even if the API endpoint isn't available.
-            if (res.status === 404) {
-                const fallbackName = 'konkar-2.0.33-vc35-lauta.apk';
-                const a = document.createElement('a');
-                a.href = `${BASE_PATH}/apk/${fallbackName}`;
-                a.download = fallbackName;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                return;
-            }
-
-            const msg = currentLanguage === 'bg' ? 'Грешка при изтегляне на APK.' : 'Failed to download APK.';
-            alert(msg);
-            return;
-        }
-
-        const blob = await res.blob();
-        const cd = (res.headers.get('content-disposition') || '').toString();
-        const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
-        const filename = decodeURIComponent((m && (m[1] || m[2])) ? (m[1] || m[2]) : 'restaurant.apk');
-
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-    } catch (e) {
-        console.error('downloadApk failed', e);
-        alert(currentLanguage === 'bg' ? 'Грешка при изтегляне на APK.' : 'Failed to download APK.');
-    }
+    const filename = 'konkar-2.0.33-vc35-lauta.apk';
+    const a = document.createElement('a');
+    a.href = `${BASE_PATH}/apk/${filename}`;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
 }
 
 // Load data on page load
