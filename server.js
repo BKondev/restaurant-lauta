@@ -1537,12 +1537,15 @@ app.get(API_PREFIX + '/health', (req, res) => {
 });
 
 // Login endpoint - multi-tenant support
-app.post(API_PREFIX + '/login', (req, res) => {
-    let body = (req.body && typeof req.body === 'object') ? req.body : {};
-    if (typeof req.body === 'string') {
-        // Some clients/proxies send JSON as text/plain or with leading BOM.
+// IMPORTANT: We parse the body ourselves as text to avoid express.json() 400 parse failures
+// that can happen with certain clients/proxies (BOM/encoding quirks).
+app.post(API_PREFIX + '/login', express.text({ type: '*/*', limit: '1mb' }), (req, res) => {
+    let body = {};
+    if (req.body && typeof req.body === 'object') {
+        body = req.body;
+    } else if (typeof req.body === 'string') {
         const raw = req.body.replace(/^\uFEFF/, '').trim();
-        if (raw.startsWith('{') && raw.endsWith('}')) {
+        if (raw) {
             try {
                 body = JSON.parse(raw);
             } catch {
@@ -1551,8 +1554,8 @@ app.post(API_PREFIX + '/login', (req, res) => {
         }
     }
 
-    const username = (body.username ?? '').toString();
-    const password = (body.password ?? '').toString();
+    const username = (body?.username ?? '').toString();
+    const password = (body?.password ?? '').toString();
 
     if (!username || !password) {
         return res.status(400).json({
