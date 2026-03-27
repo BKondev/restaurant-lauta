@@ -374,57 +374,6 @@ function getRestaurantFromToken(token) {
 // Middleware
 app.use(cors());
 
-// Some clients/proxies can send JSON bodies with a leading UTF-8 BOM, which causes
-// express.json() to throw and return a generic 400 before routes execute.
-// Strip BOM early so normal JSON parsing succeeds.
-app.use(express.json({
-    limit: '50mb',
-    verify: (req, res, buf) => {
-        if (!buf || buf.length < 3) return;
-        // UTF-8 BOM: EF BB BF
-        if (buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
-            // Replace rawBody buffer with BOM-stripped version.
-            req.body = buf.slice(3).toString('utf8');
-        }
-    }
-}));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// React Native / some HTTP clients may send JSON as text/plain unless Content-Type is set.
-// Accept text bodies and (when possible) parse them into JSON so API endpoints remain robust.
-app.use(express.text({ type: ['text/plain', 'text/*'], limit: '50mb' }));
-app.use((req, res, next) => {
-    if (typeof req.body !== 'string') return next();
-    const trimmed = req.body.trim();
-    if (!trimmed) return next();
-    // Only attempt JSON parse when it looks like JSON.
-    const looksLikeJson = (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
-    if (!looksLikeJson) return next();
-
-    try {
-        req.body = JSON.parse(trimmed);
-    } catch (e) {
-        // Leave req.body as-is; downstream handlers can return a 400 if needed.
-    }
-
-    next();
-});
-
-// Body parser error handler (e.g. invalid JSON). Without this, Express returns a generic HTML 400
-// before our API routes run, which breaks login for some clients.
-app.use((err, req, res, next) => {
-    if (!err) return next();
-    const isBodyParseError = err instanceof SyntaxError || err?.type === 'entity.parse.failed';
-    if (!isBodyParseError) return next(err);
-
-    // If verify() already placed a string body on req.body, allow route handlers to attempt parsing.
-    if (typeof req.body === 'string' && req.body.trim()) return next();
-
-    return res.status(400).json({
-        success: false,
-        message: 'Invalid request body (invalid JSON)'
-    });
-});
 
 // Compatibility: some clients mistakenly call `${baseUrl}/api/...` while baseUrl already ends with `/api`.
 // Example: `/resturant-website/api/api/login` -> `/resturant-website/api/login`
@@ -1599,6 +1548,37 @@ app.post(API_PREFIX + '/login', express.text({ type: '*/*', limit: '1mb' }), (re
             message: 'Invalid username or password'
         });
     }
+});
+
+// Body parsers for the rest of the API (mounted AFTER /api/login so login isn't blocked by JSON parse errors)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// React Native / some HTTP clients may send JSON as text/plain unless Content-Type is set.
+// Accept text bodies and (when possible) parse them into JSON so API endpoints remain robust.
+app.use(express.text({ type: ['text/plain', 'text/*'], limit: '50mb' }));
+app.use((req, res, next) => {
+    if (typeof req.body !== 'string') return next();
+    const trimmed = req.body.trim();
+    if (!trimmed) return next();
+    const looksLikeJson = (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
+    if (!looksLikeJson) return next();
+
+    try {
+        req.body = JSON.parse(trimmed);
+    } catch {
+        // Leave req.body as-is; downstream handlers can return a 400 if needed.
+    }
+
+    next();
+});
+
+// Body parser error handler (e.g. invalid JSON). Without this, Express returns a generic HTML 400.
+app.use((err, req, res, next) => {
+    if (!err) return next();
+    const isBodyParseError = err instanceof SyntaxError || err?.type === 'entity.parse.failed';
+    if (!isBodyParseError) return next(err);
+    return res.status(400).json({ success: false, message: 'Invalid request body (invalid JSON)' });
 });
 
 // Logout endpoint
