@@ -1493,7 +1493,13 @@ app.post(API_PREFIX + '/login', express.text({ type: '*/*', limit: '1mb' }), (re
     try {
         const t = typeof req.body;
         const len = typeof req.body === 'string' ? req.body.length : 0;
-        console.log(`[LOGIN] bodyType=${t} bodyLen=${len}`);
+        let preview = '';
+        if (typeof req.body === 'string') {
+            preview = req.body.slice(0, 140);
+            preview = preview.replace(/("password"\s*:\s*")([^"]*)"/i, '$1***"');
+            preview = preview.replace(/(password=)([^&\s]*)/i, '$1***');
+        }
+        console.log(`[LOGIN] bodyType=${t} bodyLen=${len} preview=${JSON.stringify(preview)}`);
     } catch {}
 
     let body = {};
@@ -1510,6 +1516,17 @@ app.post(API_PREFIX + '/login', express.text({ type: '*/*', limit: '1mb' }), (re
                     // Last-resort: tolerate slightly malformed JSON/escaping by extracting fields.
                     const u = raw.match(/"username"\s*:\s*"([^"]*)"/i)?.[1];
                     const p = raw.match(/"password"\s*:\s*"([^"]*)"/i)?.[1];
+                    if (u !== undefined || p !== undefined) body = { username: u, password: p };
+                    else body = {};
+                }
+            } else if ((raw.startsWith('"{') && raw.endsWith('}"')) || (raw.startsWith("'{") && raw.endsWith("}'"))) {
+                // Some clients send a JSON string that itself contains JSON (double-encoded).
+                const unquoted = raw.replace(/^['"]/, '').replace(/['"]$/, '').replace(/\\"/g, '"');
+                try {
+                    body = JSON.parse(unquoted);
+                } catch {
+                    const u = unquoted.match(/"username"\s*:\s*"([^"]*)"/i)?.[1];
+                    const p = unquoted.match(/"password"\s*:\s*"([^"]*)"/i)?.[1];
                     if (u !== undefined || p !== undefined) body = { username: u, password: p };
                     else body = {};
                 }
