@@ -373,7 +373,21 @@ function getRestaurantFromToken(token) {
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+
+// Some clients/proxies can send JSON bodies with a leading UTF-8 BOM, which causes
+// express.json() to throw and return a generic 400 before routes execute.
+// Strip BOM early so normal JSON parsing succeeds.
+app.use(express.json({
+    limit: '50mb',
+    verify: (req, res, buf) => {
+        if (!buf || buf.length < 3) return;
+        // UTF-8 BOM: EF BB BF
+        if (buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
+            // Replace rawBody buffer with BOM-stripped version.
+            req.body = buf.slice(3).toString('utf8');
+        }
+    }
+}));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // React Native / some HTTP clients may send JSON as text/plain unless Content-Type is set.
@@ -402,6 +416,9 @@ app.use((err, req, res, next) => {
     if (!err) return next();
     const isBodyParseError = err instanceof SyntaxError || err?.type === 'entity.parse.failed';
     if (!isBodyParseError) return next(err);
+
+    // If verify() already placed a string body on req.body, allow route handlers to attempt parsing.
+    if (typeof req.body === 'string' && req.body.trim()) return next();
 
     return res.status(400).json({
         success: false,
