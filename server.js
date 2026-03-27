@@ -1540,6 +1540,27 @@ app.post(API_PREFIX + '/login', express.text({ type: '*/*', limit: '1mb' }), (re
                 } catch {
                     body = {};
                 }
+
+                // Fallback: handle mangled JSON-like bodies seen from some clients, e.g.
+                // {\" username\:\lauta_admin\,\password\:\lauta123\}
+                if ((!body || (!body.username && !body.password)) && raw.includes('username') && raw.includes('password')) {
+                    try {
+                        let s = raw;
+                        // Remove surrounding escaped braces/quotes artifacts and normalize separators.
+                        s = s.replace(/\\/g, ''); // drop backslashes
+                        s = s.replace(/[{}]/g, ' ');
+                        // normalize separators to spaces
+                        s = s.replace(/[:,]/g, ' ');
+                        s = s.replace(/\s+/g, ' ').trim();
+                        // Tokenize and grab values after keys
+                        const parts = s.split(' ');
+                        const idxU = parts.findIndex(x => x.toLowerCase() === 'username');
+                        const idxP = parts.findIndex(x => x.toLowerCase() === 'password');
+                        const u = idxU >= 0 ? parts[idxU + 1] : undefined;
+                        const p = idxP >= 0 ? parts[idxP + 1] : undefined;
+                        if (u !== undefined || p !== undefined) body = { username: u, password: p };
+                    } catch {}
+                }
             }
         }
     }
