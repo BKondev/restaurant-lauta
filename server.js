@@ -1489,16 +1489,32 @@ app.get(API_PREFIX + '/health', (req, res) => {
 // IMPORTANT: We parse the body ourselves as text to avoid express.json() 400 parse failures
 // that can happen with certain clients/proxies (BOM/encoding quirks).
 app.post(API_PREFIX + '/login', express.text({ type: '*/*', limit: '1mb' }), (req, res) => {
+    // Safe debug (no credentials printed)
+    try {
+        const t = typeof req.body;
+        const len = typeof req.body === 'string' ? req.body.length : 0;
+        console.log(`[LOGIN] bodyType=${t} bodyLen=${len}`);
+    } catch {}
+
     let body = {};
     if (req.body && typeof req.body === 'object') {
         body = req.body;
     } else if (typeof req.body === 'string') {
         const raw = req.body.replace(/^\uFEFF/, '').trim();
         if (raw) {
-            try {
-                body = JSON.parse(raw);
-            } catch {
-                body = {};
+            // Try JSON first
+            if (raw.startsWith('{') && raw.endsWith('}')) {
+                try { body = JSON.parse(raw); } catch { body = {}; }
+            } else {
+                // Also support form-encoded payloads: username=...&password=...
+                try {
+                    const params = new URLSearchParams(raw);
+                    const u = params.get('username');
+                    const p = params.get('password');
+                    if (u || p) body = { username: u, password: p };
+                } catch {
+                    body = {};
+                }
             }
         }
     }
