@@ -1521,7 +1521,19 @@ app.get(API_PREFIX + '/health', (req, res) => {
 
 // Login endpoint - multi-tenant support
 app.post(API_PREFIX + '/login', (req, res) => {
-    const body = (req.body && typeof req.body === 'object') ? req.body : {};
+    let body = (req.body && typeof req.body === 'object') ? req.body : {};
+    if (typeof req.body === 'string') {
+        // Some clients/proxies send JSON as text/plain or with leading BOM.
+        const raw = req.body.replace(/^\uFEFF/, '').trim();
+        if (raw.startsWith('{') && raw.endsWith('}')) {
+            try {
+                body = JSON.parse(raw);
+            } catch {
+                body = {};
+            }
+        }
+    }
+
     const username = (body.username ?? '').toString();
     const password = (body.password ?? '').toString();
 
