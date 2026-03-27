@@ -1504,7 +1504,15 @@ app.post(API_PREFIX + '/login', express.text({ type: '*/*', limit: '1mb' }), (re
         if (raw) {
             // Try JSON first
             if (raw.startsWith('{') && raw.endsWith('}')) {
-                try { body = JSON.parse(raw); } catch { body = {}; }
+                try {
+                    body = JSON.parse(raw);
+                } catch {
+                    // Last-resort: tolerate slightly malformed JSON/escaping by extracting fields.
+                    const u = raw.match(/"username"\s*:\s*"([^"]*)"/i)?.[1];
+                    const p = raw.match(/"password"\s*:\s*"([^"]*)"/i)?.[1];
+                    if (u !== undefined || p !== undefined) body = { username: u, password: p };
+                    else body = {};
+                }
             } else {
                 // Also support form-encoded payloads: username=...&password=...
                 try {
