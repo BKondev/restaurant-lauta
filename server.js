@@ -396,6 +396,19 @@ app.use((req, res, next) => {
     next();
 });
 
+// Body parser error handler (e.g. invalid JSON). Without this, Express returns a generic HTML 400
+// before our API routes run, which breaks login for some clients.
+app.use((err, req, res, next) => {
+    if (!err) return next();
+    const isBodyParseError = err instanceof SyntaxError || err?.type === 'entity.parse.failed';
+    if (!isBodyParseError) return next(err);
+
+    return res.status(400).json({
+        success: false,
+        message: 'Invalid request body (invalid JSON)'
+    });
+});
+
 // Compatibility: some clients mistakenly call `${baseUrl}/api/...` while baseUrl already ends with `/api`.
 // Example: `/resturant-website/api/api/login` -> `/resturant-website/api/login`
 app.use((req, res, next) => {
