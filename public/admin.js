@@ -1547,7 +1547,7 @@ async function downloadApk() {
     const ok = await ensureAuthOrRedirect();
     if (!ok) return;
 
-    const filename = 'konkar-2.0.33-vc35-lauta.apk';
+    const filename = 'restaurant-app-20260327-1729.apk';
     const a = document.createElement('a');
     a.href = `${BASE_PATH}/apk/${filename}`;
     a.download = filename;

@@ -1708,7 +1708,7 @@ app.get(API_PREFIX + '/restaurants/me', requireAuthOrApiKey, (req, res) => {
 // Admin: download the restaurant APK (Bearer token required)
 app.get(API_PREFIX + '/admin/apk', requireAuth, (req, res) => {
     try {
-        const filename = 'konkar-2.0.33-vc35-lauta.apk';
+        const filename = 'restaurant-app-20260327-1729.apk';
         const apkPath = path.join(__dirname, 'public', 'apk', filename);
         if (!fs.existsSync(apkPath)) {
             return res.status(404).json({ error: 'APK not configured' });
