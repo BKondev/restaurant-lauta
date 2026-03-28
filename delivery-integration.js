@@ -57,10 +57,7 @@ function normalizeRestaurantName(name) {
         .replace(/\s+/g, ' ');
 }
 
-function resolveDeliveryRestaurantConfig(order) {
-    const rawName = (order?.restaurantName || '').toString();
-    let name = normalizeRestaurantName(rawName);
-
+function resolveDeliveryRestaurantConfig(order, options = {}) {
     // If the order already contains an explicit delivery directory id, honor it.
     const explicitId = order?.deliveryRestaurantId ?? order?.delivery_service_restaurant_id;
     if (explicitId !== undefined && explicitId !== null && String(explicitId).trim()) {
@@ -68,40 +65,54 @@ function resolveDeliveryRestaurantConfig(order) {
         if (byId) return byId;
     }
 
-    // Known aliases / latin spellings.
-    // NOTE: Our system often stores latin restaurantName (e.g. "Restaurant Lauta").
-    if (name.includes('lauta')) {
-        name = 'р-т лаута';
-    } else if (name.includes('bojole') || name.includes('bojo')) {
-        name = 'божоле';
-    }
+    // Prefer explicit per-restaurant overrides when provided.
+    // This avoids brittle restaurantName matching and keeps multi-restaurant installs safe.
+    const restaurant = options?.restaurant;
+    const overrideId =
+        restaurant?.deliveryRestaurantId ??
+        restaurant?.delivery_restaurant_id ??
+        restaurant?.delivery_service_restaurant_id ??
+        restaurant?.deliveryServiceRestaurantId ??
+        restaurant?.delivery_service?.restaurant_id;
 
-    // Prefer exact normalized match.
-    const exact = DELIVERY_RESTAURANT_BY_NAME.get(name);
-    if (exact) return exact;
+    const overrideZone =
+        restaurant?.deliveryRestaurantZone ??
+        restaurant?.delivery_restaurant_zone ??
+        restaurant?.deliveryServiceRestaurantZone ??
+        restaurant?.delivery_service?.restaurant_zone;
 
-    // Fuzzy match (longest contained match) to handle minor formatting differences.
-    if (name) {
-        let best = null;
-        for (const [dirName, entry] of DELIVERY_RESTAURANT_BY_NAME.entries()) {
-            if (!dirName) continue;
-            if (name.includes(dirName) || dirName.includes(name)) {
-                if (!best || dirName.length > best.dirName.length) {
-                    best = { dirName, entry };
-                }
-            }
+    const overrideName =
+        restaurant?.deliveryRestaurantName ??
+        restaurant?.delivery_restaurant_name ??
+        restaurant?.deliveryServiceRestaurantName ??
+        restaurant?.delivery_service?.restaurant_name;
+
+    if (overrideId !== undefined && overrideId !== null && String(overrideId).trim()) {
+        const byId = DELIVERY_RESTAURANT_BY_ID.get(String(overrideId).trim());
+        if (byId) {
+            return {
+                ...byId,
+                ...(overrideZone ? { zone: String(overrideZone) } : null),
+                ...(overrideName ? { name: String(overrideName) } : null)
+            };
         }
-        if (best?.entry) return best.entry;
+
+        return {
+            id: String(overrideId).trim(),
+            name: String(overrideName || restaurant?.name || RESTAURANT_NAME_DEFAULT || '').trim(),
+            zone: String(overrideZone || RESTAURANT_ZONE || '').trim(),
+            priceDefault: 0,
+            priceDefaultCurrency: 'BGN'
+        };
     }
 
-    // Fallback: use configured defaults (and use our own delivery fee in EUR).
+    // Default for this deployment.
     return {
         id: RESTAURANT_ID,
-        name: RESTAURANT_NAME_DEFAULT,
-        zone: RESTAURANT_ZONE,
-        // Our system's deliveryFee is expected to already be in EUR
-        priceDefault: Number(order?.deliveryFee || 0) || 0,
-        priceDefaultCurrency: 'EUR'
+        name: String(restaurant?.name || overrideName || RESTAURANT_NAME_DEFAULT || '').trim(),
+        zone: String(overrideZone || RESTAURANT_ZONE || '').trim(),
+        priceDefault: 0,
+        priceDefaultCurrency: 'BGN'
     };
 }
 
@@ -136,7 +147,7 @@ async function sendToDeliveryService(order, options = {}) {
         // Генериране на уникален client_id (10 символа)
         const clientId = generateClientId();
 
-        const restaurantCfg = resolveDeliveryRestaurantConfig(order);
+        const restaurantCfg = resolveDeliveryRestaurantConfig(order, options);
 
         const eurToBgnRate =
             options?.eurToBgnRate ??
@@ -145,12 +156,11 @@ async function sendToDeliveryService(order, options = {}) {
             1.9558;
 
         // Delivery service expects delivery price in BGN.
-        // The delivery restaurants directory price_default is in BGN, so we must send it as-is.
-        const priceBgn = convertToBgn(
-            restaurantCfg.priceDefault,
-            restaurantCfg.priceDefaultCurrency,
-            eurToBgnRate
-        );
+        // Use our server-computed order.deliveryFee (configured from the admin panel), converted to BGN.
+        const orderDeliveryFeeEur = toNumber(order?.deliveryFee, 0);
+        const priceBgn = orderDeliveryFeeEur > 0
+            ? convertToBgn(orderDeliveryFeeEur, 'EUR', eurToBgnRate)
+            : convertToBgn(restaurantCfg.priceDefault, restaurantCfg.priceDefaultCurrency, eurToBgnRate);
 
         // Подготовка на данните за delivery API
         const deliveryData = {

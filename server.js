@@ -2195,7 +2195,7 @@ function handleBoricaReturn(req, res) {
                 setImmediate(() => {
                     (async () => {
                         try {
-                            const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate });
+                            const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate, restaurant });
 
                             if (!deliveryResult.success) {
                                 console.error('Failed to send card auto-approved order to delivery service:', deliveryResult.error);
@@ -6024,7 +6024,7 @@ app.put(API_PREFIX + '/orders/mobile/:id', requireApiKey, async (req, res) => {
 
             if (method === 'delivery') {
                 try {
-                    const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate: data?.currencySettings?.eurToBgnRate });
+                    const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate: data?.currencySettings?.eurToBgnRate, restaurant: (data.restaurants || []).find(r => r && r.id === req.restaurantId) || null });
                     if (deliveryResult.success) {
                         order.deliveryServiceId = deliveryResult.deliveryId;
                         console.log('Order sent to delivery service:', deliveryResult.deliveryId);
@@ -6718,7 +6718,7 @@ app.post(API_PREFIX + '/orders', (req, res) => {
                 setImmediate(() => {
                     (async () => {
                         try {
-                            const deliveryResult = await sendToDeliveryService(newOrder, { eurToBgnRate: data?.currencySettings?.eurToBgnRate });
+                            const deliveryResult = await sendToDeliveryService(newOrder, { eurToBgnRate: data?.currencySettings?.eurToBgnRate, restaurant });
 
                             if (!deliveryResult.success) {
                                 console.error('Failed to send auto-approved order to delivery service:', deliveryResult.error);
@@ -6965,7 +6965,7 @@ app.put(API_PREFIX + '/orders/:id', requireAuthOrApiKey, async (req, res) => {
 
             if (method === 'delivery') {
                 try {
-                    const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate: data?.currencySettings?.eurToBgnRate });
+                    const deliveryResult = await sendToDeliveryService(order, { eurToBgnRate: data?.currencySettings?.eurToBgnRate, restaurant });
 
                     if (deliveryResult.success) {
                         console.log('Order sent to delivery service:', deliveryResult.deliveryId);
