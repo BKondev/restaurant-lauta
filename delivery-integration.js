@@ -4,6 +4,10 @@ const fs = require('fs');
 
 const DELIVERY_API_URL = 'https://karakashkov.com/delivery/api.php?path=/orders';
 
+// Delivery platform expects delivery price in BGN.
+// Business requirement: always submit a fixed delivery price to the platform.
+const DELIVERY_PLATFORM_PRICE_BGN = 8.02;
+
 // Defaults (fallbacks) if we can't resolve a match.
 // LAUTA delivery system directory:
 // id=51, name=Р-т Лаута, zone=1, price_default=8.02, lat=42.137007, lon=24.770407
@@ -99,7 +103,7 @@ function resolveDeliveryRestaurantConfig(order, options = {}) {
 
         return {
             id: String(overrideId).trim(),
-            name: String(overrideName || restaurant?.name || RESTAURANT_NAME_DEFAULT || '').trim(),
+            name: String(overrideName || RESTAURANT_NAME_DEFAULT || restaurant?.name || '').trim(),
             zone: String(overrideZone || RESTAURANT_ZONE || '').trim(),
             priceDefault: 0,
             priceDefaultCurrency: 'BGN'
@@ -109,7 +113,7 @@ function resolveDeliveryRestaurantConfig(order, options = {}) {
     // Default for this deployment.
     return {
         id: RESTAURANT_ID,
-        name: String(restaurant?.name || overrideName || RESTAURANT_NAME_DEFAULT || '').trim(),
+        name: String(overrideName || RESTAURANT_NAME_DEFAULT || restaurant?.name || '').trim(),
         zone: String(overrideZone || RESTAURANT_ZONE || '').trim(),
         priceDefault: 0,
         priceDefaultCurrency: 'BGN'
@@ -149,24 +153,15 @@ async function sendToDeliveryService(order, options = {}) {
 
         const restaurantCfg = resolveDeliveryRestaurantConfig(order, options);
 
-        const eurToBgnRate =
-            options?.eurToBgnRate ??
-            options?.currencySettings?.eurToBgnRate ??
-            options?.restaurantCurrencySettings?.eurToBgnRate ??
-            1.9558;
-
-        // Delivery service expects delivery price in BGN.
-        // Use the delivery fee configured in the admin panel (order.deliveryFee) as the submitted BGN price.
-        const orderDeliveryPriceBgn = toNumber(order?.deliveryFee, 0);
-        const priceBgn = orderDeliveryPriceBgn > 0
-            ? orderDeliveryPriceBgn
-            : convertToBgn(restaurantCfg.priceDefault, restaurantCfg.priceDefaultCurrency, eurToBgnRate);
+        // Delivery platform expects delivery price in BGN.
+        // We intentionally do NOT use admin-panel city delivery fees here (those are displayed to customers in EUR).
+        const priceBgn = DELIVERY_PLATFORM_PRICE_BGN;
 
         // Подготовка на данните за delivery API
         const deliveryData = {
             client_id: clientId,
             restaurant_id: restaurantCfg.id,
-            restaurant_name: restaurantCfg.name || order.restaurantName || RESTAURANT_NAME_DEFAULT,
+            restaurant_name: restaurantCfg.name || RESTAURANT_NAME_DEFAULT,
             restaurant_zone: restaurantCfg.zone,
             address: `${order.customerInfo?.address || ''}, ${order.customerInfo?.city || ''}`.trim(),
             phone: order.customerInfo?.phone || null,
