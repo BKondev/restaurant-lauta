@@ -156,10 +156,10 @@ async function sendToDeliveryService(order, options = {}) {
             1.9558;
 
         // Delivery service expects delivery price in BGN.
-        // Use our server-computed order.deliveryFee (configured from the admin panel), converted to BGN.
-        const orderDeliveryFeeEur = toNumber(order?.deliveryFee, 0);
-        const priceBgn = orderDeliveryFeeEur > 0
-            ? convertToBgn(orderDeliveryFeeEur, 'EUR', eurToBgnRate)
+        // Use the delivery fee configured in the admin panel (order.deliveryFee) as the submitted BGN price.
+        const orderDeliveryPriceBgn = toNumber(order?.deliveryFee, 0);
+        const priceBgn = orderDeliveryPriceBgn > 0
+            ? orderDeliveryPriceBgn
             : convertToBgn(restaurantCfg.priceDefault, restaurantCfg.priceDefaultCurrency, eurToBgnRate);
 
         // Подготовка на данните за delivery API
