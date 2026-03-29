@@ -265,34 +265,43 @@ function generateToken() {
 
 function migrateRestaurantAuthDefaults() {
     try {
+        // IMPORTANT:
+        // This migration is meant ONLY for one-time bootstrap in controlled environments.
+        // It MUST NOT overwrite restaurant IDs/credentials automatically in production,
+        // otherwise it can corrupt multi-tenant setups (e.g. Bojole being forced to LAUTA).
+        const enabled = coerceBoolean(process.env.MIGRATE_AUTH_DEFAULTS, false);
+        if (!enabled) return;
+
         const db = readDatabase();
         if (!db || typeof db !== 'object') return;
         if (!Array.isArray(db.restaurants) || db.restaurants.length === 0) return;
 
-        // LAUTA defaults requested by user
-        const desiredId = 'rest_lauta_002';
-        const primaryUsername = 'lauta_admin';
-        const primaryPassword = 'lauta123';
-        const secondaryUsername = 'crystal';
-        const secondaryPassword = 'crystal123';
+        const desiredId = (process.env.MIGRATE_AUTH_RESTAURANT_ID || '').toString().trim();
+        if (!desiredId) return;
 
-        const restaurant = db.restaurants.find(r => r && r.id === desiredId) || db.restaurants[0];
+        const primaryUsername = (process.env.MIGRATE_AUTH_PRIMARY_USERNAME || '').toString().trim();
+        const primaryPassword = (process.env.MIGRATE_AUTH_PRIMARY_PASSWORD || '').toString();
+        const secondaryUsername = (process.env.MIGRATE_AUTH_SECONDARY_USERNAME || '').toString().trim();
+        const secondaryPassword = (process.env.MIGRATE_AUTH_SECONDARY_PASSWORD || '').toString();
+        const overwrite = coerceBoolean(process.env.MIGRATE_AUTH_OVERWRITE, false);
+
+        const restaurant = db.restaurants.find(r => r && r.id === desiredId);
         if (!restaurant || typeof restaurant !== 'object') return;
 
         let changed = false;
 
-        if (restaurant.id !== desiredId) {
-            restaurant.id = desiredId;
-            changed = true;
+        if (primaryUsername && (overwrite || !restaurant.username)) {
+            if (restaurant.username !== primaryUsername) {
+                restaurant.username = primaryUsername;
+                changed = true;
+            }
         }
 
-        if (restaurant.username !== primaryUsername) {
-            restaurant.username = primaryUsername;
-            changed = true;
-        }
-        if (restaurant.password !== primaryPassword) {
-            restaurant.password = primaryPassword;
-            changed = true;
+        if (primaryPassword && (overwrite || !restaurant.password)) {
+            if (restaurant.password !== primaryPassword) {
+                restaurant.password = primaryPassword;
+                changed = true;
+            }
         }
 
         if (!Array.isArray(restaurant.adminUsers)) {
@@ -300,10 +309,12 @@ function migrateRestaurantAuthDefaults() {
             changed = true;
         }
 
-        const hasSecondary = restaurant.adminUsers.some(u => u && u.username === secondaryUsername);
-        if (!hasSecondary) {
-            restaurant.adminUsers.push({ username: secondaryUsername, password: secondaryPassword });
-            changed = true;
+        if (secondaryUsername && secondaryPassword) {
+            const hasSecondary = restaurant.adminUsers.some(u => u && u.username === secondaryUsername);
+            if (!hasSecondary) {
+                restaurant.adminUsers.push({ username: secondaryUsername, password: secondaryPassword });
+                changed = true;
+            }
         }
 
         if (changed) {
@@ -1708,12 +1719,33 @@ app.get(API_PREFIX + '/restaurants/me', requireAuthOrApiKey, (req, res) => {
 // Admin: download the restaurant APK (Bearer token required)
 app.get(API_PREFIX + '/admin/apk', requireAuth, (req, res) => {
     try {
-        const filename = 'restaurant-app-20260327-1729.apk';
-        const apkPath = path.join(__dirname, 'public', 'apk', filename);
-        if (!fs.existsSync(apkPath)) {
-            return res.status(404).json({ error: 'APK not configured' });
+        const apkDir = path.join(__dirname, 'public', 'apk');
+        if (!fs.existsSync(apkDir)) {
+            return res.status(404).json({ error: 'APK folder missing' });
         }
-        return res.download(apkPath, filename);
+
+        const entries = fs.readdirSync(apkDir);
+        const apkFiles = entries
+            .filter(name => name && name.toLowerCase().endsWith('.apk'))
+            .map(name => {
+                const fullPath = path.join(apkDir, name);
+                try {
+                    const stat = fs.statSync(fullPath);
+                    if (!stat.isFile()) return null;
+                    return { name, fullPath, mtimeMs: stat.mtimeMs };
+                } catch (e) {
+                    return null;
+                }
+            })
+            .filter(Boolean);
+
+        if (apkFiles.length === 0) {
+            return res.status(404).json({ error: 'No APK found' });
+        }
+
+        apkFiles.sort((a, b) => (b.mtimeMs - a.mtimeMs) || a.name.localeCompare(b.name));
+        const latest = apkFiles[0];
+        return res.download(latest.fullPath, latest.name);
     } catch (e) {
         console.error('Error downloading APK:', e);
         return res.status(500).json({ error: 'Failed to download APK' });
@@ -5632,6 +5664,15 @@ function computeTodayYmdForOffset(tzOffsetMinutes) {
     return `${year}-${month}-${day}`;
 }
 
+function parseOrderStatusesQuery(raw) {
+    const statusQuery = (raw || '').toString().trim();
+    if (!statusQuery) return null;
+    const parts = statusQuery.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length === 0) return null;
+    const set = new Set(parts.map(normalizeOrderStatus).filter(Boolean));
+    return set.size > 0 ? set : null;
+}
+
 // Get all orders (admin only - filtered by restaurant)
 app.get(API_PREFIX + '/orders', requireAuthOrApiKey, (req, res) => {
     try {
@@ -5641,10 +5682,9 @@ app.get(API_PREFIX + '/orders', requireAuthOrApiKey, (req, res) => {
         // Filter orders by restaurant
         let restaurantOrders = orders.filter(order => isOrderForRestaurant(order, req.restaurantId, data));
 
-        const statusQuery = (req.query.status || '').toString().trim();
-        if (statusQuery) {
-            const normalized = normalizeOrderStatus(statusQuery);
-            restaurantOrders = restaurantOrders.filter(o => normalizeOrderStatus(o.status) === normalized);
+        const statuses = parseOrderStatusesQuery(req.query.status);
+        if (statuses) {
+            restaurantOrders = restaurantOrders.filter(o => statuses.has(normalizeOrderStatus(o.status)));
         }
 
         const tzOffsetMinutes = Number.isFinite(Number(req.query.tzOffsetMinutes))
@@ -5697,10 +5737,9 @@ app.get(API_PREFIX + '/orders/today', requireAuthOrApiKey, (req, res) => {
         const orders = data.orders || [];
         let restaurantOrders = orders.filter(order => isOrderForRestaurant(order, req.restaurantId, data));
 
-        const statusQuery = (req.query.status || '').toString().trim();
-        if (statusQuery) {
-            const normalized = normalizeOrderStatus(statusQuery);
-            restaurantOrders = restaurantOrders.filter(o => normalizeOrderStatus(o.status) === normalized);
+        const statuses = parseOrderStatusesQuery(req.query.status);
+        if (statuses) {
+            restaurantOrders = restaurantOrders.filter(o => statuses.has(normalizeOrderStatus(o.status)));
         }
 
         restaurantOrders = restaurantOrders
@@ -5819,13 +5858,16 @@ app.post(API_PREFIX + '/orders/:id/reprint', requireAuthOrApiKey, (req, res) => 
             return res.status(403).json({ success: false, message: 'Access denied', expired: false });
         }
 
-        // Professional reprint flow:
-        // - Reset the printed markers ONLY.
-        // - Do not change updatedAt, do not set timestamps, do not rely on time comparisons.
-        // The printer agent will see printerPrintedAt=null and will print exactly once,
-        // then it will call /orders/:id/printed which stores a new printerPrintedAt.
+        // Manual reprint flow (works even when auto-print is disabled):
+        // - Set an explicit forceReprint flag that the printer agent will honor.
+        // - Also reset printed markers for backwards compatibility with older agents.
+        const nowIso = new Date().toISOString();
+        order.forceReprint = true;
+        order.forceReprintRequestedAt = nowIso;
+        order.forceReprintRequestedBy = (req.username || req.restaurantName || 'api').toString();
         order.printerPrintedAt = null;
         order.printerPrintedBy = null;
+        order.updatedAt = nowIso;
 
         data.orders[idx] = order;
         writeDatabase(data);

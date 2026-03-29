@@ -1,0 +1,20 @@
+{
+  "apiBaseUrl": "https://bojole.bg/api",
+  "apiKey": "bojole_api_key_12345_CHANGE_THIS",
+  "pollIntervalMs": 5000,
+  "orderStatusesCsv": "approved",
+  "allowReprintsWhenAutoPrintDisabled": true,
+  "stateFile": "./printer-agent-state.json",
+  "logFile": "./printer-agent.log",
+  "printerIp": "192.168.0.6",
+  "printerName": "",
+  "printerPort": 9100,
+  "enableNoteReprints": true,
+  "noteStateFile": "./printer-agent-note-state.json",
+  "subnet": "192.168.0",
+  "subnetMask": "255.255.255.0",
+  "gateway": "192.168.0.1",
+  "dhcpEnabled": true,
+  "dryRun": false,
+  "nodePath": "C:/Program Files/nodejs/node.exe"
+}

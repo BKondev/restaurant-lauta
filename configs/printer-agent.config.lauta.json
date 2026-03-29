@@ -1,0 +1,20 @@
+{
+  "apiBaseUrl": "https://lautarestaurant.com/resturant-website/api",
+  "apiKey": "PUT_LAUTA_RESTAURANT_API_KEY_HERE",
+  "pollIntervalMs": 5000,
+  "orderStatusesCsv": "approved",
+  "allowReprintsWhenAutoPrintDisabled": true,
+  "stateFile": "./printer-agent-state.json",
+  "logFile": "./printer-agent.log",
+  "printerIp": "192.168.0.6",
+  "printerName": "",
+  "printerPort": 9100,
+  "enableNoteReprints": true,
+  "noteStateFile": "./printer-agent-note-state.json",
+  "subnet": "192.168.0",
+  "subnetMask": "255.255.255.0",
+  "gateway": "192.168.0.1",
+  "dhcpEnabled": true,
+  "dryRun": false,
+  "nodePath": "C:/Program Files/nodejs/node.exe"
+}

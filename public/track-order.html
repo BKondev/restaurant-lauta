@@ -419,17 +419,36 @@
         .top-bar a.logo {
             color: inherit;
             text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .top-bar .logo h1 {
             color: white;
+            margin: 0;
+        }
+
+        .top-bar .logo img {
+            height: 34px;
+            width: auto;
+            max-width: 180px;
+            object-fit: contain;
+            display: none;
+        }
+
+        .top-bar .logo img.visible {
+            display: block;
         }
     </style>
 </head>
 <body>
     <div class="top-bar">
         <div class="container" style="display:flex; align-items:center; justify-content:space-between;">
-            <a id="top-logo-link" class="logo" href="#"><h1 style="margin:0;">Restaurant Lauta</h1></a>
+            <a id="top-logo-link" class="logo" href="#">
+                <img id="top-logo-img" alt="Logo" />
+                <h1 id="top-logo-text">Restaurant Lauta</h1>
+            </a>
             <div></div>
         </div>
     </div>
@@ -687,6 +706,48 @@
             } catch (e) {
                 return null;
             }
+        }
+
+        async function fetchRestaurantSettings() {
+            try {
+                const response = await fetch(`${API_URL}/settings`);
+                if (!response.ok) return null;
+                return await response.json();
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function resolvePublicAssetUrl(url) {
+            const s = (url || '').toString().trim();
+            if (!s) return '';
+            if (s.startsWith('/resturant-website/')) {
+                const stripped = s.replace(/^\/resturant-website/, '');
+                return PUBLIC_BASE_PATH ? `${PUBLIC_BASE_PATH}${stripped}` : stripped;
+            }
+            if (s.startsWith('/')) return `${PUBLIC_BASE_PATH}${s}`;
+            return s;
+        }
+
+        function applyTopBarBranding(settings) {
+            try {
+                const name = (settings?.name || '').toString().trim();
+                const rawLogo = (settings?.logo || '').toString().trim();
+
+                const nameEl = document.getElementById('top-logo-text');
+                const logoEl = document.getElementById('top-logo-img');
+
+                if (nameEl && name) nameEl.textContent = name;
+
+                if (logoEl && rawLogo) {
+                    logoEl.src = resolvePublicAssetUrl(rawLogo);
+                    logoEl.classList.add('visible');
+                    if (nameEl) nameEl.style.display = 'none';
+                } else {
+                    if (logoEl) logoEl.classList.remove('visible');
+                    if (nameEl) nameEl.style.display = '';
+                }
+            } catch (e) {}
         }
 
         async function fetchCurrencySettings() {
@@ -1136,9 +1197,10 @@
             }
 
             // Fetch public settings (best-effort)
-            const [s, c] = await Promise.all([fetchSiteSettings(), fetchCurrencySettings()]);
+            const [s, c, rs] = await Promise.all([fetchSiteSettings(), fetchCurrencySettings(), fetchRestaurantSettings()]);
             siteSettings = s;
             eurToBgnRate = c && (c.eurToBgnRate != null ? c.eurToBgnRate : null);
+            applyTopBarBranding(rs);
 
             const result = await fetchOrderDetails(orderId);
 

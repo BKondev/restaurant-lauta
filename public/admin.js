@@ -1547,13 +1547,52 @@ async function downloadApk() {
     const ok = await ensureAuthOrRedirect();
     if (!ok) return;
 
-    const filename = 'restaurant-app-20260327-1729.apk';
-    const a = document.createElement('a');
-    a.href = `${BASE_PATH}/apk/${filename}`;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    const token = getAdminToken();
+    if (!token) return;
+
+    try {
+        const res = await fetch(`${API_URL}/admin/apk`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+            let msg = t('apkDownloadFailed', 'Failed to download APK.');
+            try {
+                const data = await res.json();
+                if (data && data.error) msg = data.error;
+            } catch (e) {}
+            alert(msg);
+            return;
+        }
+
+        const cd = (res.headers.get('content-disposition') || '').toString();
+        let filename = 'restaurant-app.apk';
+
+        // Best-effort Content-Disposition parsing
+        const utf8Match = cd.match(/filename\*=UTF-8''([^;]+)/i);
+        const asciiMatch = cd.match(/filename="?([^";]+)"?/i);
+        if (utf8Match && utf8Match[1]) {
+            try { filename = decodeURIComponent(utf8Match[1]); } catch (e) { filename = utf8Match[1]; }
+        } else if (asciiMatch && asciiMatch[1]) {
+            filename = asciiMatch[1];
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        setTimeout(() => {
+            try { URL.revokeObjectURL(url); } catch (e) {}
+        }, 1000);
+    } catch (e) {
+        console.error('APK download failed:', e);
+        alert(t('apkDownloadFailed', 'Failed to download APK.'));
+    }
 }
 
 // Load data on page load
@@ -7985,6 +8024,15 @@ function renderPendingOrders() {
             order.discount ?? order.discountPercent ?? order.discount_percent ?? 0
         ) || 0));
 
+        const itemSubtotal = Array.isArray(order.items)
+            ? order.items.reduce((sum, it) => sum + ((Number(it?.price) || 0) * (Number(it?.quantity) || 0)), 0)
+            : 0;
+        const subtotalAmount = (Number(order.subtotal) || 0) || itemSubtotal;
+        const discountAmount = (Number(order.discountAmount) || 0) || (subtotalAmount * (discountPctAny / 100));
+        const intermediateSubtotalAmount = (Number(order.intermediateSubtotal) || 0) || Math.max(0, subtotalAmount - discountAmount);
+        const deliveryFeeAmount = Number(order.deliveryFee) || 0;
+        const totalAmount = (Number(order.total) || 0) || Math.max(0, intermediateSubtotalAmount + deliveryFeeAmount);
+
         const summaryLine = `${formattedDate} ${formattedTime} • ${order.customerInfo?.name || ''} • ${(order.total || 0).toFixed(2)} €`;
 
         return `
@@ -8018,11 +8066,10 @@ function renderPendingOrders() {
                             <h4><i class="fas fa-shopping-cart"></i> Поръчани Продукти</h4>
                             <div class="order-items">${itemsList}</div>
                             ${promoCodeAny ? `<div class="order-info-row" style="margin-top: 10px; color: #27ae60;"><span class="order-info-label">Промо код:</span><span class="order-info-value">${promoCodeAny}${discountPctAny ? ` (-${discountPctAny}%)` : ''}</span></div>` : ''}
-                            ${(order.deliveryFee && order.deliveryFee > 0) ? `<div class="order-info-row" style="margin-top: 10px;"><span class="order-info-label">Такса доставка:</span><span class="order-info-value">${Number(order.deliveryFee || 0).toFixed(2)} €</span></div>` : ''}
-                            ${method === 'delivery' && (!order.deliveryFee || order.deliveryFee === 0) ? `<div class="order-info-row" style="margin-top: 10px; color: #27ae60;"><span class="order-info-label">Безплатна доставка!</span><span class="order-info-value">0.00 €</span></div>` : ''}
-                            ${order.ownerDiscount && order.ownerDiscount > 0 ? `<div class="order-info-row" style="margin-top: 10px; color: #e67e22;"><span class="order-info-label">Отстъпка от собственик:</span><span class="order-info-value">-${Number(order.ownerDiscountAmount || 0).toFixed(2)} € (${order.ownerDiscount}%)</span></div>` : ''}
-                            <div class="order-total"><span class="order-total-label">Обща Сума:</span><span class="order-total-value">${Number(order.total || 0).toFixed(2)} €</span></div>
-                            ${order.ownerDiscount && order.ownerDiscount > 0 ? `<div class="order-total" style="margin-top: 5px; color: #27ae60;"><span class="order-total-label">Финална Сума:</span><span class="order-total-value">${Number(order.finalTotal || 0).toFixed(2)} €</span></div>` : ''}
+                            <div class="order-info-row" style="margin-top: 10px;"><span class="order-info-label">Отстъпка:</span><span class="order-info-value">-${Number(discountAmount || 0).toFixed(2)} €</span></div>
+                            <div class="order-info-row"><span class="order-info-label">Междинна сума:</span><span class="order-info-value">${Number(intermediateSubtotalAmount || 0).toFixed(2)} €</span></div>
+                            <div class="order-info-row"><span class="order-info-label">Доставка:</span><span class="order-info-value">${Number(deliveryFeeAmount || 0).toFixed(2)} €</span></div>
+                            <div class="order-total"><span class="order-total-label">Общо:</span><span class="order-total-value">${Number(totalAmount || 0).toFixed(2)} €</span></div>
                         </div>
                     </div>
 

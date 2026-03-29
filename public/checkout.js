@@ -164,6 +164,17 @@ let workingHours = {
 
 let isPlacingOrder = false;
 
+function setCheckoutPageLoading(isLoading) {
+    try {
+        const loader = document.getElementById('checkout-loader');
+        const content = document.getElementById('checkout-page-content');
+        if (loader) loader.style.display = isLoading ? 'flex' : 'none';
+        if (content) content.style.display = isLoading ? 'none' : '';
+    } catch (e) {
+        // ignore
+    }
+}
+
 function setPlaceOrderLoading(isLoading) {
     isPlacingOrder = !!isLoading;
     const buttons = document.querySelectorAll('.checkout-btn');
@@ -569,6 +580,7 @@ const translations = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
+    setCheckoutPageLoading(true);
     // Fix navigation links
     try {
         document.querySelectorAll('a[href="../"]').forEach(link => {
@@ -619,6 +631,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try { renderSiteMap(); } catch (e) {}
         try { renderSiteFooter(); } catch (e) {}
         try { window.addEventListener('beforeunload', saveCheckoutState); } catch (e) {}
+        setCheckoutPageLoading(false);
     }
 });
 

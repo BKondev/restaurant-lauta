@@ -29,10 +29,34 @@ This agent runs inside the restaurant network, where the printer is reachable.
 - `AGENT_STATE_FILE` – default `./printer-agent-state.json`
 - `AGENT_PRINTER_IP` – override saved printer IP (if you want to force it)
 - `AGENT_PRINTER_PORT` – override port (default 9100)
+- `AGENT_PRINTER_NAME` – Windows printer name override (prints via Windows spooler; requires driver installed)
 - `AGENT_SUBNET` – used for auto-discovery when the saved IP is empty, example: `192.168.88`
 - `AGENT_DRY_RUN` – set to `true` to test without printing
 
+## Windows printer name mode (fallback)
+
+If your printer is installed on the PC (driver added in Windows), you can print by **printer name** instead of raw TCP/9100.
+
+This is useful when:
+- The printer is USB, shared, or otherwise not reachable by IP/port from the agent
+- The printer is not ESC/POS-compatible (office printers)
+
+In this mode the agent prints **plain text** through the Windows spooler.
+
+### How to find the printer name
+
+Run in PowerShell:
+
+```powershell
+Get-Printer | Select-Object Name
+```
+
+Then set `AGENT_PRINTER_NAME` (or `printerName` in `printer-agent.config.json`) to match exactly.
+
 ## Run
+
+If you manage multiple restaurants from the same agent folder, see:
+- [PRINTER_AGENT_NEW_RESTAURANT.md](PRINTER_AGENT_NEW_RESTAURANT.md)
 
 PowerShell example:
 
@@ -41,6 +65,14 @@ $env:AGENT_API_BASE_URL = 'https://bojole.bg/resturant-website/api'
 $env:AGENT_API_KEY = 'YOUR_RESTAURANT_API_KEY'
 $env:AGENT_POLL_INTERVAL_MS = '5000'
 node .\printer-agent.js
+```
+
+### Run using a specific config file
+
+This repo also supports running with a selected config JSON:
+
+```powershell
+PowerShell -NoProfile -ExecutionPolicy Bypass -File .\printer-agent-run.ps1 -ConfigPath .\configs\printer-agent.config.bojole.json
 ```
 
 ## Auto-start on boot (Windows)
@@ -69,7 +101,7 @@ On the restaurant PC you can install it with a **double-click installer** (no ma
 2. Double-click `INSTALL_PRINTER_AGENT.cmd`.
 3. Approve the Windows admin (UAC) prompt.
 4. Fill in:
-  - API Base URL: `https://bojole.bg/resturant-website/api`
+  - API Base URL: `https://bojole.bg/api` (or `https://bojole.bg/resturant-website/api`)
   - Restaurant API Key
   - Subnet (optional)
 5. Click **Install & Start**.
@@ -131,3 +163,17 @@ For this to work reliably:
   - Leave `ip` empty
   - (Optional) set `AGENT_SUBNET` (or `subnet` in `printer-agent.config.json`) like `192.168.88`
 - If the printer IP changes due to DHCP, the agent will try auto-discovery again when the saved IP is unreachable.
+
+## Troubleshooting: timeouts / "cannot connect" to printer IP
+
+If the agent logs `Printer connection timeout` / `Cannot connect to <ip>:<port>`, it means the PC running the agent cannot reach that LAN IP.
+
+Typical causes:
+- The PC and printer are on different subnets (example: PC `192.168.0.x` but printer `192.168.192.x`)
+- The printer IP changed (DHCP) and the config still points to the old IP
+- The printer is an office printer (not ESC/POS) and needs Windows driver printing (printer-name mode)
+
+Fix options:
+- Put the agent PC on the same network as the printer (same subnet)
+- Change the printer IP to match the PC LAN
+- Install the printer in Windows and set `AGENT_PRINTER_NAME` / `printerName` (Windows spooler printing)

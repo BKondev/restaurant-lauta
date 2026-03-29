@@ -201,16 +201,76 @@ function saveState(stateFile, state) {
     }
 }
 
+function getLocalSubnet24() {
+    const ip = getLocalIP && typeof getLocalIP === 'function' ? getLocalIP() : '';
+    const parts = (ip || '').split('.');
+    if (parts.length !== 4) return '';
+    return `${parts[0]}.${parts[1]}.${parts[2]}`;
+}
+
+function getSubnet24FromIp(ip) {
+    const parts = (String(ip || '').trim()).split('.');
+    if (parts.length !== 4) return '';
+    return `${parts[0]}.${parts[1]}.${parts[2]}`;
+}
+
+function shouldSkipDueToFailureCooldown(state, key) {
+    const failures = (state && state.failures && typeof state.failures === 'object') ? state.failures : null;
+    if (!failures) return false;
+    const entry = failures[key];
+    if (!entry || typeof entry !== 'object') return false;
+    const nextTryAt = Number(entry.nextTryAt);
+    return Number.isFinite(nextTryAt) && nextTryAt > Date.now();
+}
+
+function recordFailure(state, key, errorMessage, printerTarget) {
+    if (!state || typeof state !== 'object') return;
+    if (!state.failures || typeof state.failures !== 'object') state.failures = {};
+
+    const now = Date.now();
+    const prev = (state.failures[key] && typeof state.failures[key] === 'object') ? state.failures[key] : {};
+    const count = Math.max(0, parseInt(prev.count || 0, 10) || 0) + 1;
+
+    // Backoff: 30s, 60s, 120s, 240s, 300s (cap)
+    const delayMs = Math.min(5 * 60 * 1000, 30000 * Math.pow(2, Math.min(4, count - 1)));
+
+    state.failures[key] = {
+        count,
+        lastAt: now,
+        nextTryAt: now + delayMs,
+        lastError: (errorMessage || '').toString().slice(0, 500),
+        printerIp: (printerTarget && printerTarget.ip) ? String(printerTarget.ip) : '',
+        printerPort: (printerTarget && printerTarget.port) ? Number(printerTarget.port) : 0,
+        printerName: (printerTarget && printerTarget.printerName) ? String(printerTarget.printerName) : ''
+    };
+
+    const printerIp = (printerTarget && printerTarget.ip) ? String(printerTarget.ip) : '';
+    if (printerIp && count === 1) {
+        const localSubnet = getLocalSubnet24();
+        const printerSubnet = getSubnet24FromIp(printerIp);
+        if (localSubnet && printerSubnet && localSubnet !== printerSubnet) {
+            console.warn(`[AGENT] Printer subnet mismatch: PC is on ${localSubnet}.x but printer is on ${printerSubnet}.x. Printing will time out until they are on the same network, or use printerName mode.`);
+        }
+    }
+}
+
+function clearFailure(state, key) {
+    if (!state || typeof state !== 'object') return;
+    if (!state.failures || typeof state.failures !== 'object') return;
+    if (state.failures[key]) delete state.failures[key];
+}
+
 function normalizePrinterConfig(input) {
     const src = (input && typeof input === 'object') ? input : {};
     const enabled = src.enabled !== undefined ? !!src.enabled : false;
     const ip = (src.ip || src.host || src.printerIp || '').toString().trim();
+    const printerName = (src.printerName || src.name || src.windowsPrinterName || '').toString().trim();
     const port = Math.max(1, Math.min(65535, parseInt(src.port || 9100, 10) || 9100));
     const autoPrintOnApproved = src.autoPrintOnApproved !== undefined ? !!src.autoPrintOnApproved : true;
     const printPickup = src.printPickup !== undefined ? !!src.printPickup : true;
     const allowAutoDiscovery = src.allowAutoDiscovery !== undefined ? !!src.allowAutoDiscovery : false;
 
-    return { enabled, ip, port, autoPrintOnApproved, printPickup, allowAutoDiscovery };
+    return { enabled, ip, printerName, port, autoPrintOnApproved, printPickup, allowAutoDiscovery };
 }
 
 function getSubnetHint() {
@@ -269,8 +329,10 @@ async function fetchRestaurantProfile(apiBaseUrl, apiKey) {
     return r.json || {};
 }
 
-async function fetchApprovedOrders(apiBaseUrl, apiKey) {
-    const url = `${apiBaseUrl}/orders?status=approved`;
+async function fetchOrders(apiBaseUrl, apiKey, statusesCsv) {
+    const raw = (statusesCsv || '').toString().trim();
+    const statusParam = raw || 'approved';
+    const url = `${apiBaseUrl}/orders?status=${encodeURIComponent(statusParam)}`;
     const r = await requestJson('GET', url, { 'x-api-key': apiKey });
     if (r.status !== 200) {
         throw new Error(`Failed to load orders (${r.status})`);
@@ -367,6 +429,7 @@ async function markOrderPrinted(apiBaseUrl, apiKey, orderId, printerTarget) {
         printedAt: new Date().toISOString(),
         printerIp: printerTarget?.ip || '',
         printerPort: printerTarget?.port || 9100,
+        printerName: printerTarget?.printerName || '',
         source: 'printer-agent'
     };
     const r = await requestJson('POST', url, { 'x-api-key': apiKey }, body);
@@ -398,6 +461,11 @@ async function clearOrderReprintNote(apiBaseUrl, apiKey, orderId) {
 }
 
 async function resolvePrinterTarget(printerCfg, envOverride, state) {
+    const overrideName = (envOverride?.printerName || '').toString().trim();
+    if (overrideName) {
+        return { printerName: overrideName, resolvedBy: 'env' };
+    }
+
     const overrideIp = (envOverride.ip || '').toString().trim();
     const overridePort = envOverride.port;
     if (overrideIp) {
@@ -452,6 +520,12 @@ async function run() {
         process.exit(1);
     }
 
+    const orderStatusesCsv = env('AGENT_ORDER_STATUSES', 'approved').trim();
+    const allowReprintsWhenAutoPrintDisabled = parseBool(
+        env('AGENT_ALLOW_REPRINTS_WHEN_AUTO_PRINT_DISABLED', ''),
+        true
+    );
+
     const pollIntervalMs = Math.max(1500, parseInt(env('AGENT_POLL_INTERVAL_MS', '5000'), 10) || 5000);
     const stateFile = env('AGENT_STATE_FILE', path.join(__dirname, 'printer-agent-state.json'));
     const enableNoteReprints = parseBool(env('AGENT_ENABLE_NOTE_REPRINTS', ''), true);
@@ -460,12 +534,14 @@ async function run() {
 
     const envPrinterIp = env('AGENT_PRINTER_IP', '').trim();
     const envPrinterPort = parseInt(env('AGENT_PRINTER_PORT', ''), 10) || 0;
+    const envPrinterName = env('AGENT_PRINTER_NAME', '').trim();
     const envSubnet = env('AGENT_SUBNET', '').trim();
 
     const state = loadState(stateFile);
     state.printed = (state.printed && typeof state.printed === 'object') ? state.printed : {};
     state.lastPrinter = (state.lastPrinter && typeof state.lastPrinter === 'object') ? state.lastPrinter : null;
     state.notePrinted = (state.notePrinted && typeof state.notePrinted === 'object') ? state.notePrinted : {};
+    state.failures = (state.failures && typeof state.failures === 'object') ? state.failures : {};
 
     const noteStatePath = noteStateFile
         ? (path.isAbsolute(noteStateFile) ? noteStateFile : path.join(process.cwd(), noteStateFile))
@@ -479,9 +555,11 @@ async function run() {
     console.log('[AGENT] API:', apiBaseUrl);
     console.log('[AGENT] Poll:', pollIntervalMs, 'ms');
     console.log('[AGENT] State file:', stateFile);
+    console.log('[AGENT] Order statuses:', orderStatusesCsv || 'approved');
     console.log('[AGENT] Note reprints:', enableNoteReprints ? 'ENABLED' : 'DISABLED');
     if (noteStatePath) console.log('[AGENT] Note state file:', noteStatePath);
     console.log('[AGENT] Dry run:', dryRun ? 'YES' : 'NO');
+    console.log('[AGENT] Allow reprints when auto-print disabled:', allowReprintsWhenAutoPrintDisabled ? 'YES' : 'NO');
 
     while (true) {
         try {
@@ -490,22 +568,14 @@ async function run() {
             const profile = await fetchRestaurantProfile(apiBaseUrl, apiKey);
             const printerCfg = normalizePrinterConfig(profile.printer);
 
-            if (!printerCfg.enabled || !printerCfg.autoPrintOnApproved) {
+            if (!printerCfg.enabled) {
                 await sleep(pollIntervalMs);
                 continue;
             }
 
-            const printerTarget = await resolvePrinterTarget(printerCfg, { ip: envPrinterIp, port: envPrinterPort || printerCfg.port || 9100, subnet: envSubnet }, state);
-            if (!printerTarget) {
-                console.warn('[AGENT] No printer target configured/discovered.');
-                await sleep(pollIntervalMs);
-                continue;
-            }
-
-            // Persist updated discovery cache if it changed
-            saveState(stateFile, state);
-
-            const orders = await fetchApprovedOrders(apiBaseUrl, apiKey);
+            // Fetch orders first so we avoid expensive printer discovery
+            // when there is nothing to print.
+            const orders = await fetchOrders(apiBaseUrl, apiKey, orderStatusesCsv);
             const candidates = orders
                 .filter(o => {
                     if (!o) return false;
@@ -515,14 +585,18 @@ async function run() {
                     const noteInfo = getNoteReprintInfo(o, enableNoteReprints, orderId);
                     if (noteInfo.requested) {
                         const noteKey = noteInfo.key;
-
-                        // Use separate note-state file if configured, otherwise reuse main state
                         const store = noteState ? noteState.notePrinted : state.notePrinted;
                         if (store[noteKey]) return false;
                         return true;
                     }
 
-                    if (getReprintRequested(o)) return true;
+                    if (getReprintRequested(o)) {
+                        // If auto-print is disabled, we still allow explicit reprints
+                        // (configurable) so the admin/mobile "Print" button works.
+                        return printerCfg.autoPrintOnApproved || allowReprintsWhenAutoPrintDisabled;
+                    }
+
+                    if (!printerCfg.autoPrintOnApproved) return false;
 
                     // Backend is the source of truth for whether an order should be printed.
                     // If printerPrintedAt is null/empty (including after a manual reprint reset),
@@ -537,23 +611,67 @@ async function run() {
                 })
                 .sort((a, b) => new Date(a.timestamp || a.createdAt || 0) - new Date(b.timestamp || b.createdAt || 0));
 
+            if (!candidates || candidates.length === 0) {
+                await sleep(pollIntervalMs);
+                continue;
+            }
+
+            const printerTarget = await resolvePrinterTarget(
+                printerCfg,
+                {
+                    printerName: envPrinterName,
+                    ip: envPrinterIp,
+                    port: envPrinterPort || printerCfg.port || 9100,
+                    subnet: envSubnet
+                },
+                state
+            );
+            if (!printerTarget) {
+                console.warn('[AGENT] No printer target configured/discovered.');
+                await sleep(pollIntervalMs);
+                continue;
+            }
+
+            // Persist updated discovery cache if it changed
+            saveState(stateFile, state);
+
             for (const order of candidates) {
                 const orderId = String(order.id || '');
                 if (!orderId) continue;
+
+                if (shouldSkipDueToFailureCooldown(state, `order:${orderId}`)) {
+                    continue;
+                }
 
                 const noteInfo = getNoteReprintInfo(order, enableNoteReprints, orderId);
                 if (noteInfo.requested) {
                     const noteKey = noteInfo.key;
 
-                    console.log(`[AGENT] Printing NOTE for order ${orderId} -> ${printerTarget.ip}:${printerTarget.port} (${printerTarget.resolvedBy})`);
+                    if (shouldSkipDueToFailureCooldown(state, `note:${noteKey}`)) {
+                        continue;
+                    }
+
+                    {
+                        const targetLabel = printerTarget?.printerName
+                            ? `name:${printerTarget.printerName}`
+                            : `${printerTarget.ip}:${printerTarget.port}`;
+                        console.log(`[AGENT] Printing NOTE for order ${orderId} -> ${targetLabel} (${printerTarget.resolvedBy})`);
+                    }
 
                     if (!dryRun) {
-                        const r = await printOrderNote(order, { ip: printerTarget.ip, port: printerTarget.port });
+                        const r = await printOrderNote(order, printerTarget?.printerName
+                            ? { name: printerTarget.printerName }
+                            : { ip: printerTarget.ip, port: printerTarget.port }
+                        );
                         if (!r || !r.success) {
                             console.error('[AGENT] Note print failed:', r?.error || 'unknown');
+                            recordFailure(state, `note:${noteKey}`, r?.error || 'Note print failed', printerTarget);
+                            saveState(stateFile, state);
                             continue;
                         }
                     }
+
+                    clearFailure(state, `note:${noteKey}`);
 
                     const store = noteState ? noteState.notePrinted : state.notePrinted;
                     store[noteKey] = new Date().toISOString();
@@ -567,12 +685,23 @@ async function run() {
                     continue;
                 }
 
-                console.log(`[AGENT] Printing order ${orderId} -> ${printerTarget.ip}:${printerTarget.port} (${printerTarget.resolvedBy})`);
+                {
+                    const targetLabel = printerTarget?.printerName
+                        ? `name:${printerTarget.printerName}`
+                        : `${printerTarget.ip}:${printerTarget.port}`;
+                    console.log(`[AGENT] Printing order ${orderId} -> ${targetLabel} (${printerTarget.resolvedBy})`);
+                }
 
                 if (!dryRun) {
-                    let r = await printOrder(order, { ip: printerTarget.ip, port: printerTarget.port });
+                    let r = await printOrder(order, printerTarget?.printerName
+                        ? { name: printerTarget.printerName }
+                        : { ip: printerTarget.ip, port: printerTarget.port }
+                    );
                     if (!r || !r.success) {
                         console.error('[AGENT] Print failed:', r?.error || 'unknown');
+
+                        recordFailure(state, `order:${orderId}`, r?.error || 'Print failed', printerTarget);
+                        saveState(stateFile, state);
 
                         // If we used a saved IP and it failed, try one discovery refresh and retry once.
                         if ((printerTarget.resolvedBy === 'profile' || printerTarget.resolvedBy === 'cache') && printerCfg.allowAutoDiscovery) {
@@ -587,6 +716,8 @@ async function run() {
                                 r = await printOrder(order, { ip: refreshed.ip, port: refreshed.port });
                                 if (!r || !r.success) {
                                     console.error('[AGENT] Retry print failed:', r?.error || 'unknown');
+                                    recordFailure(state, `order:${orderId}`, r?.error || 'Retry print failed', refreshed);
+                                    saveState(stateFile, state);
                                     continue;
                                 }
                             } else {
@@ -597,6 +728,8 @@ async function run() {
                         }
                     }
                 }
+
+                clearFailure(state, `order:${orderId}`);
 
                 const marked = await markOrderPrinted(apiBaseUrl, apiKey, orderId, printerTarget);
                 if (marked) {

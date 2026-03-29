@@ -1,5 +1,231 @@
 const net = require('net');
 const os = require('os');
+const fs = require('fs');
+const path = require('path');
+const { execFile } = require('child_process');
+const iconv = require('iconv-lite');
+
+const RECEIPT_WIDTH = 48;
+
+function escposBigSize() {
+    return Buffer.from([0x1B, 0x21, 0x30]);
+}
+
+function escposNormalSize() {
+    return Buffer.from([0x1B, 0x21, 0x00]);
+}
+
+function round2(n) {
+    return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
+
+function line(text = '') {
+    return String(text) + '\n';
+}
+
+function separator() {
+    return '-'.repeat(RECEIPT_WIDTH) + '\n';
+}
+
+function productSeparator() {
+    return '.'.repeat(RECEIPT_WIDTH) + '\n';
+}
+
+function center(text) {
+    const s = String(text ?? '');
+    const pad = Math.max(0, Math.floor((RECEIPT_WIDTH - s.length) / 2));
+    return ' '.repeat(pad) + s + '\n';
+}
+
+function centerBig(text) {
+    const s = String(text ?? '').trim();
+    const bigWidth = Math.floor(RECEIPT_WIDTH / 2);
+    if (s.length >= bigWidth) return s + '\n';
+    const padLeft = Math.floor((bigWidth - s.length) / 2);
+    return ' '.repeat(padLeft) + s + '\n';
+}
+
+function formatRight(name, price) {
+    const priceStr = String(price ?? '');
+    const maxNameWidth = RECEIPT_WIDTH - priceStr.length - 1;
+    let itemName = String(name ?? '');
+    if (itemName.length > maxNameWidth) {
+        itemName = itemName.slice(0, Math.max(0, maxNameWidth - 3)) + '...';
+    }
+    const space = Math.max(1, RECEIPT_WIDTH - itemName.length - priceStr.length);
+    return itemName + ' '.repeat(space) + priceStr + '\n';
+}
+
+function wrapText(text) {
+    const words = String(text ?? '').split(' ');
+    const lines = [];
+    let current = '';
+    for (const word of words) {
+        if ((current + word).length > RECEIPT_WIDTH - 6) {
+            if (current.trim()) lines.push(current.trim());
+            current = word + ' ';
+        } else {
+            current += word + ' ';
+        }
+    }
+    if (current.trim()) lines.push(current.trim());
+    return lines;
+}
+
+function isCardPayment(order) {
+    return (order?.paymentMethod || order?.payment?.method) === 'card';
+}
+
+function isCardPaid(order) {
+    const status = order?.paymentStatus || order?.payment?.status || '';
+    return String(status).toLowerCase() === 'paid';
+}
+
+function isDeliveryOrder(order) {
+    return order?.deliveryMethod === 'delivery' || order?.deliveryType === 'delivery';
+}
+
+function calculateEstimatedTime(order) {
+    if (!order?.estimatedTime) return null;
+    const baseTime = new Date(order.createdAt);
+    const minutes = Number(order.estimatedTime);
+    if (Number.isNaN(minutes)) return null;
+    baseTime.setMinutes(baseTime.getMinutes() + minutes);
+    return baseTime.toLocaleTimeString('bg-BG', { hour: '2-digit', minute: '2-digit' });
+}
+
+function getReceiptHeader(order) {
+    const header = (order?.restaurantName || order?.restaurant?.name || 'BOJOLE').toString().trim();
+    return header || 'BOJOLE';
+}
+
+function execFileAsync(file, args, options) {
+    return new Promise((resolve, reject) => {
+        execFile(file, args, options || {}, (error, stdout, stderr) => {
+            if (error) {
+                error.stdout = stdout;
+                error.stderr = stderr;
+                reject(error);
+                return;
+            }
+            resolve({ stdout, stderr });
+        });
+    });
+}
+
+function escapePsSingleQuotes(value) {
+    return String(value || '').replace(/'/g, "''");
+}
+
+function stripEscPos(receiptText) {
+    let t = String(receiptText || '');
+
+    // Remove our template markers (used for big text)
+    t = t.replace(/\[\[BIG_START\]\]/g, '');
+    t = t.replace(/\[\[BIG_END\]\]/g, '');
+
+    // Common ESC/POS sequences used in our receipts
+    t = t.replace(/\x1B@/g, '');
+    t = t.replace(/\x1B[!a][\x00-\xFF]/g, '');
+    t = t.replace(/\x1D[Vv][\x00-\xFF]/g, '');
+    t = t.replace(/[\x1B\x1D]/g, '');
+
+    // Strip remaining control chars except newlines and tabs
+    t = t.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    return t;
+}
+
+async function sendToWindowsPrinter(printerName, text) {
+    const name = String(printerName || '').trim();
+    if (!name) return { ok: false, error: 'Missing printer name' };
+
+    if (process.platform !== 'win32') {
+        return { ok: false, error: 'Printer-name printing is only supported on Windows' };
+    }
+
+    const tmpFile = path.join(
+        os.tmpdir(),
+        `restaurant-receipt-${Date.now()}-${Math.random().toString(16).slice(2)}.txt`
+    );
+
+    try {
+        fs.writeFileSync(tmpFile, String(text || ''), { encoding: 'utf8' });
+
+        const p = escapePsSingleQuotes(tmpFile);
+        const n = escapePsSingleQuotes(name);
+
+        const ps = [
+            `$p='${p}';`,
+            `$n='${n}';`,
+            `Get-Content -LiteralPath $p -Raw -Encoding UTF8 | Out-Printer -Name $n;`
+        ].join(' ');
+
+        await execFileAsync('powershell', [
+            '-NoProfile',
+            '-NonInteractive',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            ps
+        ], {
+            windowsHide: true,
+            timeout: 20000,
+            maxBuffer: 1024 * 1024
+        });
+
+        return { ok: true };
+    } catch (e) {
+        const msg = (e?.stderr || e?.message || 'Failed to print via Windows spooler').toString().trim();
+        return { ok: false, error: msg };
+    } finally {
+        try { fs.unlinkSync(tmpFile); } catch (e) { /* ignore */ }
+    }
+}
+
+async function listWindowsPrinters() {
+    if (process.platform !== 'win32') return [];
+
+    // Prefer Get-Printer when available (PrintManagement module)
+    try {
+        const ps = "try { Get-Printer | Select-Object Name,DriverName,PortName,Shared,Default | ConvertTo-Json -Depth 2 } catch { '' }";
+        const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], {
+            windowsHide: true,
+            timeout: 10000,
+            maxBuffer: 1024 * 1024
+        });
+
+        const raw = (stdout || '').toString().trim();
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            const arr = Array.isArray(parsed) ? parsed : [parsed];
+            return arr
+                .filter(p => p && p.Name)
+                .map(p => ({
+                    name: String(p.Name),
+                    driverName: (p.DriverName || '').toString(),
+                    portName: (p.PortName || '').toString(),
+                    shared: !!p.Shared,
+                    isDefault: !!p.Default
+                }));
+        }
+    } catch (e) {
+        // ignore; fallback below
+    }
+
+    // Fallback: WMIC (legacy)
+    try {
+        const { stdout } = await execFileAsync('wmic', ['printer', 'get', 'name'], {
+            windowsHide: true,
+            timeout: 10000,
+            maxBuffer: 1024 * 1024
+        });
+        const lines = (stdout || '').toString().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const names = lines.slice(1); // drop header
+        return names.map(n => ({ name: n }));
+    } catch (e) {
+        return [];
+    }
+}
 
 /**
  * Търсене на ESC/POS принтери в локалната мрежа
@@ -119,6 +345,22 @@ async function printOrder(order, printerTarget = null) {
     try {
         let printer = null;
 
+        // Windows printer by name (uses installed driver/spooler)
+        if (printerTarget && typeof printerTarget === 'object') {
+            const pn = (printerTarget.name || printerTarget.printerName || '').toString().trim();
+            if (pn) {
+                const receiptRaw = generateReceiptText(order);
+                const receiptPlain = stripEscPos(receiptRaw);
+                const r = await sendToWindowsPrinter(pn, receiptPlain);
+                if (r.ok) {
+                    console.log('Order printed successfully (Windows spooler)');
+                    return { success: true, printer: pn, mode: 'windows' };
+                }
+                console.log('Failed to print order (Windows spooler)');
+                return { success: false, error: r.error || 'Failed to print via Windows spooler', mode: 'windows' };
+            }
+        }
+
         if (printerTarget) {
             // Използване на конкретен принтер
             if (typeof printerTarget === 'string') {
@@ -171,6 +413,22 @@ async function printOrderNote(order, printerTarget = null) {
     try {
         let printer = null;
 
+        // Windows printer by name (uses installed driver/spooler)
+        if (printerTarget && typeof printerTarget === 'object') {
+            const pn = (printerTarget.name || printerTarget.printerName || '').toString().trim();
+            if (pn) {
+                const receiptRaw = generateNoteReceiptText(order);
+                const receiptPlain = stripEscPos(receiptRaw);
+                const r = await sendToWindowsPrinter(pn, receiptPlain);
+                if (r.ok) {
+                    console.log('Order note printed successfully (Windows spooler)');
+                    return { success: true, printer: pn, mode: 'windows' };
+                }
+                console.log('Failed to print order note (Windows spooler)');
+                return { success: false, error: r.error || 'Failed to print via Windows spooler', mode: 'windows' };
+            }
+        }
+
         if (printerTarget) {
             if (typeof printerTarget === 'string') {
                 printer = { ip: printerTarget, port: 9100 };
@@ -212,172 +470,168 @@ async function printOrderNote(order, printerTarget = null) {
  * Генериране на текст за касова бележка (ESC/POS команди)
  */
 function generateReceiptText(order) {
-    const ESC = '\x1B';
-    const GS = '\x1D';
-    
-    let receipt = '';
-    
-    // Инициализация
-    receipt += `${ESC}@`; // Initialize printer
-    
-    // Заглавие - голям шрифт, центрирано
-    receipt += `${ESC}a\x01`; // Center align
-    receipt += `${ESC}!\x30`; // Double height + double width
-    receipt += 'Restaurant Lauta\n';
-    receipt += `${ESC}!\x00`; // Normal text
-    receipt += '================================\n';
-    
-    // Информация за поръчката
-    receipt += `${ESC}a\x00`; // Left align
-    receipt += `Поръчка #${order.id}\n`;
-    receipt += `Дата: ${new Date(order.createdAt).toLocaleString('bg-BG')}\n`;
+    let r = '';
 
-    // Плащане
-    const payMethod = (order?.payment?.method || '').toString().trim().toLowerCase();
-    const payStatus = (order?.payment?.status || '').toString().trim().toLowerCase();
-    const isCard = payMethod === 'card';
-    const isCardPaid = isCard && payStatus === 'paid';
+    const header = getReceiptHeader(order);
+    const isCard = isCardPayment(order);
+    const paid = isCardPaid(order);
+    const isDelivery = isDeliveryOrder(order);
 
-    if (isCardPaid) {
-        receipt += `${ESC}!\x08`; // Bold
-        receipt += 'ПЛАЩАНЕ: ПЛАТЕНО (КАРТА)\n';
-        receipt += `${ESC}!\x00`; // Normal
-    } else if (isCard) {
-        const statusBg = payStatus === 'pending'
-            ? 'ЧАКА ПЛАЩАНЕ'
-            : (payStatus === 'failed' || payStatus === 'cancelled' || payStatus === 'canceled')
-                ? 'НЕУСПЕШНО'
-                : 'НЕ Е ПЛАТЕНО';
-        receipt += `${ESC}!\x08`; // Bold
-        receipt += `ПЛАЩАНЕ: НЕ Е ПЛАТЕНО (КАРТА: ${statusBg})\n`;
-        receipt += `${ESC}!\x00`; // Normal
-    } else {
-        // Cash (or unknown) is considered NOT PAID at order time
-        receipt += `${ESC}!\x08`; // Bold
-        receipt += 'ПЛАЩАНЕ: НЕ Е ПЛАТЕНО (В БРОЙ)\n';
-        receipt += `${ESC}!\x00`; // Normal
-    }
+    r += center(header);
+    r += separator();
 
-    receipt += '--------------------------------\n';
-    
-    // Информация за клиента
-    receipt += `${ESC}!\x08`; // Bold
-    receipt += 'КЛИЕНТ:\n';
-    receipt += `${ESC}!\x00`; // Normal
-    receipt += `Име: ${order.customerInfo?.name || 'Няма'}\n`;
-    receipt += `Тел: ${order.customerInfo?.phone || 'Няма'}\n`;
-    
-    if (order.deliveryMethod === 'delivery') {
-        receipt += `${ESC}!\x08`; // Bold
-        receipt += 'ДОСТАВКА:\n';
-        receipt += `${ESC}!\x00`; // Normal
-        receipt += `Адрес: ${order.customerInfo?.address || ''}\n`;
-        receipt += `Град: ${order.customerInfo?.city || ''}\n`;
-    } else {
-        receipt += 'Вземане от място\n';
-    }
-    
-    receipt += '================================\n';
-    
-    // Продукти
-    receipt += `${ESC}!\x08`; // Bold
-    receipt += 'ПРОДУКТИ:\n';
-    receipt += `${ESC}!\x00`; // Normal
-    receipt += '--------------------------------\n';
-    
-    order.items.forEach(item => {
-        const itemName = item.name.substring(0, 20); // Ограничаваме дължината
-        const price = (item.promoPrice || item.price).toFixed(2);
-        const total = (price * item.quantity).toFixed(2);
-        
-        receipt += `${item.quantity}x ${itemName}\n`;
-        receipt += `   ${price} лв x ${item.quantity} = ${total} лв\n`;
+    r += '[[BIG_START]]';
+    r += centerBig(isCard && paid ? 'ПЛАТЕНА' : 'НАЛОЖЕН ПЛАТЕЖ');
+    r += centerBig(isDelivery ? 'ДОСТАВКА' : 'ВЗИМАНЕ ОТ МЯСТО');
+    r += '[[BIG_END]]';
 
-        if (item.note) {
-            const note = String(item.note).trim();
-            if (note) {
-                receipt += `   Бележка: ${note}\n`;
-            }
+    r += separator();
+
+    if (order?.orderTime === 'later' && order?.scheduledTime) {
+        r += '[[BIG_START]]';
+        r += centerBig('ПО-КЪСНО: ' + order.scheduledTime);
+        r += '[[BIG_END]]';
+        r += separator();
+    } else if (order?.estimatedTime) {
+        const estimated = calculateEstimatedTime(order);
+        if (estimated) {
+            r += '[[BIG_START]]';
+            r += centerBig('ЗА: ' + estimated);
+            r += '[[BIG_END]]';
+            r += separator();
         }
-    });
-    
-    receipt += '================================\n';
-    
-    // Обща сума
-    receipt += `${ESC}!\x30`; // Double size
-    receipt += `${ESC}a\x02`; // Right align
-    receipt += `ОБЩО: ${order.total.toFixed(2)} лв\n`;
-    receipt += `${ESC}!\x00`; // Normal
-    receipt += `${ESC}a\x00`; // Left align
-    
-    receipt += '\n\n';
-    
-    // Бележки
-    if (order.customerInfo?.notes) {
-        receipt += 'БЕЛЕЖКИ:\n';
-        receipt += `${order.customerInfo.notes}\n`;
-        receipt += '\n';
     }
-    
-    receipt += `${ESC}a\x01`; // Center
-    receipt += 'Благодарим Ви!\n';
-    receipt += 'www.restaurant-lauta.bg\n';
-    
-    // Изрязване на хартията
-    receipt += '\n\n\n';
-    receipt += `${GS}V\x00`; // Full cut
-    
-    return receipt;
-}
 
-function generateNoteReceiptText(order) {
-    const ESC = '\x1B';
-
-    let receipt = '';
-
-    receipt += `${ESC}@`;
-    receipt += `${ESC}a\x01`;
-    receipt += `${ESC}!\x30`;
-    receipt += 'Restaurant Lauta\n';
-    receipt += `${ESC}!\x00`;
-    receipt += '================================\n';
-
-    receipt += `${ESC}a\x00`;
-    receipt += `БЕЛЕЖКА ЗА ПОРЪЧКА\n`;
-    receipt += `Поръчка #${order?.id || ''}\n`;
+    r += line('Поръчка: ' + (order?.id ?? ''));
 
     try {
         if (order?.createdAt) {
-            receipt += `Дата: ${new Date(order.createdAt).toLocaleString('bg-BG')}\n`;
+            r += line('Час на поръчка: ' + new Date(order.createdAt).toLocaleString('bg-BG'));
         }
-    } catch (e) {
+    } catch {
         // ignore
+    }
+
+    r += separator();
+
+    r += line('КЛИЕНТ:');
+    r += line(order?.customerInfo?.name || '');
+    r += line(order?.customerInfo?.phone || '');
+
+    if (order?.customerInfo?.notes) {
+        r += separator();
+        r += line('ОБЩА БЕЛЕЖКА:');
+        wrapText(order.customerInfo.notes).forEach(l => { r += line('   ' + l); });
+        r += separator();
+    }
+
+    if (isDelivery) {
+        r += separator();
+        r += line('ДОСТАВКА:');
+        r += line(order?.customerInfo?.address || '');
+    }
+
+    r += separator();
+    r += line('ПРОДУКТИ:');
+    r += separator();
+
+    (order?.items || []).forEach(item => {
+        const qty = Number(item?.quantity) || 1;
+        const unitPrice = round2(item?.promoPrice ?? item?.price ?? 0);
+        const lineTotal = round2(unitPrice * qty);
+
+        r += formatRight(`${qty}x ${item?.name || ''}`, lineTotal.toFixed(2) + ' лв');
+
+        const note = (item?.note || '').toString().replace(/\r/g, '').trim();
+        if (note) {
+            r += line('   Бележка:');
+            wrapText(note).forEach(l => { r += line('     ' + l); });
+            r += productSeparator();
+        }
+    });
+
+    const subtotal = round2(order?.subtotal ?? 0);
+    const discount = round2(order?.discountAmount ?? 0);
+    const delivery = round2(order?.deliveryFee ?? 0);
+    const finalTotal = round2(order?.finalTotal ?? order?.total ?? 0);
+
+    r += separator();
+    if (subtotal > 0) r += formatRight('Сума:', subtotal.toFixed(2) + ' лв');
+    if (discount > 0) r += formatRight('Отстъпка:', '- ' + discount.toFixed(2) + ' лв');
+    if (subtotal > 0 || discount > 0) r += formatRight('Междинна сума:', (subtotal - discount).toFixed(2) + ' лв');
+    if (delivery > 0) r += formatRight('Доставка:', delivery.toFixed(2) + ' лв');
+    r += separator();
+    r += formatRight('ОБЩО:', finalTotal.toFixed(2) + ' лв');
+
+    r += separator();
+    r += center('Благодарим Ви!');
+    r += '\n';
+
+    return r;
+}
+
+function generateNoteReceiptText(order) {
+    let r = '';
+    const header = getReceiptHeader(order);
+
+    r += center(header);
+    r += separator();
+
+    r += '[[BIG_START]]';
+    r += centerBig('БЕЛЕЖКА');
+    r += '[[BIG_END]]';
+
+    r += separator();
+
+    const orderId = (order?.id ?? '').toString();
+    if (orderId) r += line('Поръчка: ' + orderId);
+
+    const createdAt = order?.createdAt || order?.timestamp || order?.created_at;
+    if (createdAt) {
+        try {
+            r += line('Час: ' + new Date(createdAt).toLocaleString('bg-BG'));
+        } catch {
+            // ignore
+        }
     }
 
     const name = (order?.customerInfo?.name || '').toString().trim();
     const phone = (order?.customerInfo?.phone || '').toString().trim();
     if (name || phone) {
-        receipt += '--------------------------------\n';
-        if (name) receipt += `Клиент: ${name}\n`;
-        if (phone) receipt += `Тел: ${phone}\n`;
+        r += separator();
+        if (name) r += line('КЛИЕНТ: ' + name);
+        if (phone) r += line('ТЕЛ: ' + phone);
     }
 
-    receipt += '================================\n';
-    receipt += `${ESC}!\x08`;
-    receipt += 'ОБЩА БЕЛЕЖКА:\n';
-    receipt += `${ESC}!\x00`;
-
-    const note = (order?.customerInfo?.notes || '').toString().replace(/\r/g, '').trim();
+    r += separator();
+    r += line('ОБЩА БЕЛЕЖКА:');
+    const note = (order?.customerInfo?.notes || order?.customerInfo?.note || '').toString().replace(/\r/g, '').trim();
     if (!note) {
-        receipt += '(Няма бележка)\n';
+        r += line('   (Няма бележка)');
     } else {
-        receipt += `${note}\n`;
+        wrapText(note).forEach(l => { r += line('   ' + l); });
     }
 
-    receipt += '================================\n';
-    receipt += '\n\n\n';
+    const items = Array.isArray(order?.items) ? order.items : [];
+    const itemsWithNotes = items.filter(i => (i?.note || '').toString().trim());
+    if (itemsWithNotes.length) {
+        r += separator();
+        r += line('БЕЛЕЖКИ ПО ПРОДУКТИ:');
+        itemsWithNotes.forEach(item => {
+            const qty = Number(item?.quantity) || 1;
+            const itemName = (item?.name || '').toString().trim();
+            const itemNote = (item?.note || '').toString().replace(/\r/g, '').trim();
+            r += line(`${qty}x ${itemName}`);
+            wrapText(itemNote).forEach(l => { r += line('   ' + l); });
+            r += productSeparator();
+        });
+    }
 
-    return receipt;
+    r += separator();
+    r += center('Благодарим Ви!');
+    r += '\n';
+
+    return r;
 }
 
 /**
@@ -392,21 +646,53 @@ function sendToPrinter(ip, port, data) {
 
         socket.on('connect', () => {
             console.log(`Connected to printer at ${ip}:${port}`);
-            socket.write(data, 'binary', (err) => {
-                if (err) {
-                    console.error('Error writing to printer:', err);
-                    sent = false;
-                } else {
-                    console.log('Data sent to printer');
-                    sent = true;
+            try {
+                const ESC = 0x1B;
+                const GS = 0x1D;
+
+                const bufferParts = [];
+                bufferParts.push(Buffer.from([ESC, 0x40]));
+
+                // Select code table: 46 (Windows-1251) on most Epson-compatible ESC/POS printers
+                bufferParts.push(Buffer.from([ESC, 0x74, 46]));
+
+                const receiptText = String(data || '');
+                const segments = receiptText.split(/(\[\[BIG_START\]\]|\[\[BIG_END\]\])/);
+
+                for (const seg of segments) {
+                    if (seg === '[[BIG_START]]') {
+                        bufferParts.push(escposBigSize());
+                    } else if (seg === '[[BIG_END]]') {
+                        bufferParts.push(escposNormalSize());
+                    } else if (seg && seg.length > 0) {
+                        bufferParts.push(iconv.encode(seg, 'win1251'));
+                    }
                 }
-                
-                // Изчакваме малко преди да затворим връзката
-                setTimeout(() => {
-                    socket.destroy();
-                    resolve(sent);
-                }, 1000);
-            });
+
+                bufferParts.push(iconv.encode('\n\n\n\n', 'win1251'));
+                bufferParts.push(Buffer.from([GS, 0x56, 0x00]));
+
+                const buffer = Buffer.concat(bufferParts);
+
+                socket.write(buffer, (err) => {
+                    if (err) {
+                        console.error('Error writing to printer:', err);
+                        sent = false;
+                    } else {
+                        console.log('Data sent to printer');
+                        sent = true;
+                    }
+
+                    setTimeout(() => {
+                        socket.destroy();
+                        resolve(sent);
+                    }, 800);
+                });
+            } catch (e) {
+                console.error('Failed to build/send receipt buffer:', e.message);
+                try { socket.destroy(); } catch { /* ignore */ }
+                resolve(false);
+            }
         });
 
         socket.on('error', (err) => {
@@ -457,5 +743,6 @@ module.exports = {
     printOrder,
     printOrderNote,
     testPrinter,
+    listWindowsPrinters,
     getLocalIP
 };

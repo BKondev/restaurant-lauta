@@ -1001,6 +1001,13 @@
     <link rel="stylesheet" href="styles-modern.css?v=20260316a">
 </head>
 <body class="checkout-page">
+    <div id="checkout-loader" class="checkout-page-loader" role="status" aria-live="polite">
+        <div class="checkout-page-loader-inner">
+            <div class="checkout-page-spinner"></div>
+        </div>
+    </div>
+
+    <div id="checkout-page-content" style="display:none;">
     <div class="top-bar">
         <div class="container" style="position: relative;">
             <a href="../" class="logo" style="text-decoration: none; color: inherit; cursor: pointer; position: absolute; left: 50%; transform: translateX(-50%);">
@@ -1043,6 +1050,40 @@
 
     <div id="site-map" class="site-map" style="display:none;"></div>
 		<footer id="site-footer" class="site-footer"></footer>
+
+    </div>
+
+    <style>
+        .checkout-page-loader {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--background-color);
+            z-index: 9999;
+        }
+
+        .checkout-page-loader-inner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .checkout-page-spinner {
+            width: 86px;
+            height: 86px;
+            border-radius: 999px;
+            border: 10px solid rgba(255, 255, 255, 0.25);
+            border-top-color: var(--highlight-color);
+            animation: checkoutSpin 0.9s linear infinite;
+        }
+
+        @keyframes checkoutSpin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="checkout.js?v=20260316a"></script>

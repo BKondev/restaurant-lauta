@@ -6,7 +6,7 @@
 const RESTAURANT_CONFIG = {
     id: 'rest_lauta_002',
     name: 'LAUTA',
-    apiKey: 'beb92b8c839069ac446e0b46fa9cae43412e508cf7808cd4425f183c8b341bd5'
+    apiKey: 'lauta_28761357fa0a5c7dfa7e501e7b360d8f8a249091b935ef43'
 };
 
 // Export for use in other scripts
