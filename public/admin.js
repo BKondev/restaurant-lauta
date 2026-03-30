@@ -6884,6 +6884,7 @@ function renderOrdersHistory() {
                             </span>
                             <span class="order-status ${statusClass}">${statusLabel}</span>
                         </div>
+                        <div class="oh-total">Сума: <strong>${safeToFixed(subtotalAmount)} €</strong></div>
                         <div class="oh-total">Отстъпка: <strong>-${safeToFixed(discountAmount)} €</strong></div>
                         <div class="oh-total">Междинна сума: <strong>${safeToFixed(intermediateSubtotalAmount)} €</strong></div>
                         <div class="oh-total">Доставка: <strong>${safeToFixed(deliveryFeeAmount)} €</strong></div>
