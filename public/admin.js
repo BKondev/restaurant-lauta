@@ -8097,6 +8097,9 @@ function renderPendingOrders() {
 
 // Update order status
 async function updateOrderStatus(orderId, status) {
+    const ok = await ensureAuthOrRedirect();
+    if (!ok) return;
+
     // Get the owner discount if confirming
     let ownerDiscount = 0;
     if (status === 'approved') {
@@ -8118,7 +8121,11 @@ async function updateOrderStatus(orderId, status) {
     }
 
     try {
-        const token = sessionStorage.getItem('adminToken');
+        const token = getAdminToken();
+        if (!token) {
+            alert(t('sessionExpired', 'Session expired. Please login again.'));
+            return;
+        }
         const response = await fetch(`${API_URL}/orders/${orderId}`, {
             method: 'PUT',
             headers: {
@@ -8137,6 +8144,10 @@ async function updateOrderStatus(orderId, status) {
                 : `Поръчката е обновена успешно!`;
             alert(successMessage);
             await loadOrders();
+        } else if (response.status === 401 || response.status === 403) {
+            clearAdminToken();
+            alert(t('sessionExpired', 'Session expired. Please login again.'));
+            window.location.href = `${BASE_PATH}/login`;
         } else {
             alert('Грешка при актуализиране на поръчката');
         }
