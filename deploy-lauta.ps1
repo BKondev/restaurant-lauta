@@ -25,9 +25,9 @@ Write-Host "========================================`n" -ForegroundColor Cyan
 Write-Host "Step 1: Configuring for LAUTA restaurant..." -ForegroundColor Green
 if (Test-Path "public\restaurant-config-lauta.js") {
     Copy-Item -Path "public\restaurant-config-lauta.js" -Destination "public\restaurant-config.js" -Force
-    Write-Host "  ✓ LAUTA configuration applied" -ForegroundColor DarkGray
+    Write-Host "  OK: LAUTA configuration applied" -ForegroundColor DarkGray
 } else {
-    Write-Host "  ⊘ public\restaurant-config-lauta.js not found; using existing public\restaurant-config.js" -ForegroundColor DarkGray
+    Write-Host "  NOTE: public\restaurant-config-lauta.js not found; using existing public\restaurant-config.js" -ForegroundColor DarkGray
 }
 
 # Step 2: Commit and push
@@ -55,7 +55,7 @@ set -e
 DEPLOY_DIR="/opt/resturant-website-lauta"
 PRESERVE_DIR="$DEPLOY_DIR/.preserve"
 
-echo "→ Deploying to LAUTA: $DEPLOY_DIR"
+echo "Deploying to LAUTA: $DEPLOY_DIR"
 
 if [ ! -d "$DEPLOY_DIR" ]; then
   echo "ERROR: LAUTA directory does not exist: $DEPLOY_DIR"
@@ -101,7 +101,7 @@ echo "  Restarting PM2 process: $PM2_PROCESS"
 sudo pm2 restart "$PM2_PROCESS" || sudo pm2 start server.js --name "$PM2_PROCESS"
 sudo pm2 save
 
-echo "✓ LAUTA deployment complete!"
+echo "LAUTA deployment complete!"
 '@
 
 $tmpRemoteScriptPath = Join-Path $env:TEMP ("deploy-lauta-remote-{0}.sh" -f ([Guid]::NewGuid().ToString("N")))
@@ -137,7 +137,7 @@ if ($LASTEXITCODE -eq 0) {
 # Step 4: Restore BOJOLE config locally
 Write-Host "`nStep 4: Restoring BOJOLE configuration locally..." -ForegroundColor Green
 git checkout public/restaurant-config.js
-Write-Host "  ✓ Local repository restored to BOJOLE config" -ForegroundColor DarkGray
+Write-Host "  OK: Local repository restored to BOJOLE config" -ForegroundColor DarkGray
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "Done! 🎉" -ForegroundColor Cyan
