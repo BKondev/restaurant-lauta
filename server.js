@@ -2860,6 +2860,14 @@ async function sendEmail({ to, subject, text, html, replyTo }) {
         return { skipped: true };
     }
 
+    // Hard safety: never send the deprecated customer "approved" email.
+    // Some instances had historical paths emitting this message; block by subject.
+    const normalizedSubject = (subject || '').toString().trim();
+    if (/^Поръчката е одобрена\b/i.test(normalizedSubject)) {
+        console.log('[EMAIL] Blocked deprecated approval email; skipping send:', { to, subject: normalizedSubject });
+        return { skipped: true, blocked: 'deprecated_approved_email' };
+    }
+
     if (provider === 'resend') {
         const resend = getResendClient();
         if (!resend) {

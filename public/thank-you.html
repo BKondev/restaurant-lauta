@@ -63,10 +63,10 @@
 <body>
   <div class="top-bar">
     <div class="container" style="display:flex; align-items:center; justify-content:space-between;">
-      <div class="logo" style="display:flex; align-items:center; gap:10px;">
+      <a id="ty-home" class="logo" href="/" style="display:flex; align-items:center; gap:10px; text-decoration:none; color:inherit;">
         <img id="restaurant-logo" src="" alt="" style="height:50px; width:80px; object-fit:contain; display:none;" />
         <h1 id="restaurant-name" style="margin:0;">Restaurant Lauta</h1>
-      </div>
+      </a>
       <div class="top-actions">
         <a id="ty-track-top" class="btn-secondary" href="#" style="display:none;">Track order</a>
       </div>
@@ -103,6 +103,13 @@
       function getBasePath() {
         return window.location.pathname.includes('/resturant-website') ? '/resturant-website' : '';
       }
+
+      // Make header logo navigate to home within BASE_PATH.
+      try {
+        const home = getBasePath() + '/';
+        const homeLink = document.getElementById('ty-home');
+        if (homeLink) homeLink.setAttribute('href', home);
+      } catch (e) {}
 
       function getInitialLanguage() {
         try {
