@@ -3493,6 +3493,10 @@ async function sendOrderPlacedEmails(order, restaurant, req) {
 }
 
 async function sendOrderApprovedEmail(order) {
+    // Disabled: customers should not receive a separate approval email.
+    // The single customer email is sent on order placement.
+    return;
+
     const customerTo = (order.customerInfo?.email || '').toString().trim();
     const trackUrl = getPublicOrderTrackUrl(order.id);
     const subject = `Поръчката е одобрена: ${order.id}`;
