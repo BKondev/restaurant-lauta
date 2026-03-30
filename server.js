@@ -2374,7 +2374,7 @@ function handleBoricaReturn(req, res) {
 
                 setImmediate(() => {
                     try {
-                        sendOrderPlacedEmails(order, restaurant)
+                        sendOrderPlacedEmails(order, restaurant, req)
                             .then(() => console.log('[EMAIL] order placed emails attempted (post-payment):', order.id))
                             .catch(err => console.error('[EMAIL] order placed emails failed (post-payment):', err));
                     } catch (e) {
@@ -2473,7 +2473,7 @@ function handleBoricaReturn(req, res) {
             // Send emails now that payment is confirmed
             setImmediate(() => {
                 try {
-                    sendOrderPlacedEmails(order, restaurant)
+                    sendOrderPlacedEmails(order, restaurant, req)
                         .then(() => console.log('[EMAIL] order placed emails attempted (post-payment):', order.id))
                         .catch(err => console.error('[EMAIL] order placed emails failed (post-payment):', err));
                 } catch (e) {
@@ -3373,17 +3373,31 @@ function buildOrderPlacedCustomerEmailHtml(order, restaurant, trackUrl, contactP
         </div>`;
 }
 
-function getPublicOrderTrackUrl(orderId) {
-    const base = (process.env.PUBLIC_BASE_URL || '').toString().trim().replace(/\/$/, '');
+function getPublicOrderTrackUrl(orderId, req) {
+    const envBase = (process.env.PUBLIC_BASE_URL || '').toString().trim().replace(/\/$/, '');
+
+    const inferBaseFromReq = () => {
+        if (!req) return '';
+        const xfProto = (req.headers['x-forwarded-proto'] || '').toString().split(',')[0].trim();
+        const proto = xfProto || (req.protocol || 'https');
+        const xfHost = (req.headers['x-forwarded-host'] || '').toString().split(',')[0].trim();
+        const host = xfHost || (req.get('host') || '').toString().split(',')[0].trim();
+        if (!host) return '';
+        return `${proto}://${host}`;
+    };
+
+    const base = envBase || inferBaseFromReq();
     if (!base) return '';
 
     // PUBLIC_BASE_PATH controls how links are rendered to the outside world.
-    // This allows nginx to expose the app at '/' (e.g. https://restaurant-lauta.bg/checkout)
+    // Default to root ('') because nginx often exposes the app at '/'
     // while the internal Express mount path stays at /resturant-website.
-    const rawPublicBasePath = (process.env.PUBLIC_BASE_PATH ?? BASE_PATH ?? '').toString().trim();
+    const rawPublicBasePath = (process.env.PUBLIC_BASE_PATH ?? '').toString().trim();
     let publicBasePath = rawPublicBasePath;
     if (publicBasePath === '/') publicBasePath = '';
+    if (publicBasePath && !publicBasePath.startsWith('/')) publicBasePath = `/${publicBasePath}`;
     if (publicBasePath.endsWith('/') && publicBasePath.length > 1) publicBasePath = publicBasePath.slice(0, -1);
+
     if (!publicBasePath) {
         return `${base}/track-order.html?id=${encodeURIComponent(orderId)}`;
     }
@@ -3391,10 +3405,10 @@ function getPublicOrderTrackUrl(orderId) {
     return `${base}${publicBasePath}/track-order.html?id=${encodeURIComponent(orderId)}`;
 }
 
-async function sendOrderPlacedEmails(order, restaurant) {
+async function sendOrderPlacedEmails(order, restaurant, req) {
     const db = readDatabase();
     const contactPhone = (db?.siteSettings?.footer?.contacts?.phone || '').toString().trim();
-    const trackUrl = getPublicOrderTrackUrl(order.id);
+    const trackUrl = getPublicOrderTrackUrl(order.id, req);
     const customerTo = (order.customerInfo?.email || '').toString().trim();
 
     const itemsText = formatOrderItemsText(order);
@@ -3449,8 +3463,13 @@ async function sendOrderPlacedEmails(order, restaurant) {
     const subjectCustomer = (tpl.subject || '').toString().trim() || `Поръчка - ${order.id} - успешно направена.`;
     const bodyCustomer = (tpl.body || '').toString().trim() || getDefaultOrderPlacedTemplate().body;
 
-    const customerText = renderTemplateText(bodyCustomer, templateVars);
+    let customerText = renderTemplateText(bodyCustomer, templateVars);
     const finalSubjectCustomer = renderTemplateText(subjectCustomer, templateVars);
+
+    // Ensure the Track Order link is present even if a custom template omits {{trackUrlLine}}.
+    if (trackUrl && !String(customerText || '').includes(trackUrl)) {
+        customerText = `${String(customerText || '').trim()}\n\nПроследяване: ${trackUrl}`.trim();
+    }
 
     let customerHtml = '';
     try {
@@ -3515,7 +3534,9 @@ async function sendOrderStatusEmail(order, status) {
         subject = `Поръчката е отказана: ${order.id}`;
         firstLine = `Поръчката Ви ${order.id} е отказана.`;
     } else if (normalized === 'approved') {
-        return sendOrderApprovedEmail(order);
+        // Do NOT email the customer on approval.
+        // The customer already receives the full order confirmation email when placing the order.
+        return;
     }
 
     const text = [
@@ -6786,7 +6807,7 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         // Fire-and-forget emails (don't block checkout)
         setImmediate(() => {
             try {
-                sendOrderPlacedEmails(newOrder, restaurant)
+                sendOrderPlacedEmails(newOrder, restaurant, req)
                     .then(() => console.log('[EMAIL] order placed emails attempted:', newOrder.id))
                     .catch(err => console.error('[EMAIL] order placed emails failed:', err));
             } catch (e) {
