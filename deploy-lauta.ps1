@@ -108,7 +108,10 @@ $tmpRemoteScriptPath = Join-Path $env:TEMP ("deploy-lauta-remote-{0}.sh" -f ([Gu
 try {
     # Write as UTF-8 without BOM to avoid remote bash parsing issues.
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($tmpRemoteScriptPath, ($remoteScript + "`n"), $utf8NoBom)
+
+    # Normalize CRLF -> LF. Remote `bash` will choke on stray `\r` characters.
+    $remoteScriptNormalized = ($remoteScript -replace "`r`n", "`n" -replace "`r", "`n")
+    [System.IO.File]::WriteAllText($tmpRemoteScriptPath, ($remoteScriptNormalized + "`n"), $utf8NoBom)
 
     # Windows PowerShell 5.1 does not support `< file` redirection; use cmd.exe for that.
     $sshTarget = "$ServerUser@$ServerIp"
