@@ -1829,7 +1829,8 @@ function openProductModal(product) {
     const name = (currentLanguage === 'bg' && product.translations?.bg?.name) ? product.translations.bg.name : product.name;
     const description = (currentLanguage === 'bg' && product.translations?.bg?.description) ? product.translations.bg.description : product.description;
     
-    const modalFallbackImageUrl = 'https://via.placeholder.com/300x300?text=No+Image';
+    const logoFallbackUrl = restaurantLogoUrl ? resolvePublicAssetUrl(restaurantLogoUrl) : '';
+    const modalFallbackImageUrl = logoFallbackUrl || 'https://via.placeholder.com/300x300?text=No+Image';
     const imageRaw = (product.image || '').toString().trim();
     let originalImageUrl = imageRaw;
     if (originalImageUrl && originalImageUrl.startsWith('/uploads/')) {
@@ -1862,9 +1863,28 @@ function openProductModal(product) {
     if (modalImage) {
         modalImage.setAttribute('data-orig-src', originalImageUrl);
         modalImage.setAttribute('data-fallback-src', modalFallbackImageUrl);
-        modalImage.onerror = () => handleBrokenProductImage(modalImage);
+        const syncModalImageFallbackClass = () => {
+            try {
+                const attrSrc = (modalImage.getAttribute('src') || '').toString().trim();
+                const propSrc = (modalImage.currentSrc || modalImage.src || '').toString().trim();
+                const isLogo = !!logoFallbackUrl && (
+                    attrSrc === logoFallbackUrl ||
+                    propSrc === logoFallbackUrl ||
+                    (propSrc && propSrc.includes(logoFallbackUrl))
+                );
+                modalImage.classList.toggle('is-logo-fallback', isLogo);
+            } catch (e) {}
+        };
+
+        modalImage.onerror = () => {
+            handleBrokenProductImage(modalImage);
+            syncModalImageFallbackClass();
+        };
         modalImage.src = imageUrl;
         modalImage.alt = name;
+        try {
+            modalImage.classList.toggle('is-logo-fallback', !!logoFallbackUrl && imageUrl === logoFallbackUrl);
+        } catch (e) {}
     }
 
     document.getElementById('modal-name').textContent = name;

@@ -1633,6 +1633,12 @@ body {
     background: #f0f0f0;
 }
 
+/* Product modal image fallback: show restaurant logo softer */
+.product-modal-image.is-logo-fallback {
+    object-fit: contain;
+    opacity: 0.65;
+}
+
 .product-modal-footer {
     display: flex;
     flex-direction: column;
@@ -2232,12 +2238,24 @@ body {
         font-size: 22px;
     }
 
+    .product-modal-description {
+        font-size: 16px;
+        line-height: 1.45;
+        margin-bottom: 12px;
+    }
+
     .product-modal-bigprice {
         font-size: 26px;
     }
 
+    /* Slightly shrink the image area on mobile so content fits */
+    .product-modal-image-wrap {
+        max-width: 92%;
+        margin: 0 auto;
+    }
+
     .product-modal-image {
-        height: 340px;
+        height: 270px;
     }
 
     .product-modal-footer {
