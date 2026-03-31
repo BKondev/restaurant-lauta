@@ -108,6 +108,45 @@ function getSafeImageSrc(originalUrl, fallbackUrl) {
     return original;
 }
 
+function getResolvedRestaurantLogoFallbackUrl() {
+    const raw = (restaurantLogoUrl || '').toString().trim();
+    if (!raw) return '';
+    try {
+        return resolvePublicAssetUrl(raw);
+    } catch (e) {
+        return raw;
+    }
+}
+
+function syncLogoFallbackPresentation(imgEl) {
+    try {
+        if (!imgEl || !imgEl.classList) return;
+
+        const logoFallbackUrl = getResolvedRestaurantLogoFallbackUrl();
+        const fallback = (imgEl.getAttribute('data-fallback-src') || '').toString().trim();
+        const attrSrc = (imgEl.getAttribute('src') || '').toString().trim();
+        const propSrc = (imgEl.currentSrc || imgEl.src || '').toString().trim();
+
+        const current = propSrc || attrSrc;
+        const isLogo = !!logoFallbackUrl && fallback === logoFallbackUrl && (
+            current === logoFallbackUrl ||
+            (current && current.includes(logoFallbackUrl))
+        );
+
+        imgEl.classList.toggle('is-logo-fallback', isLogo);
+
+        const wrap = imgEl.closest?.('.product-image-wrap, .product-modal-image-wrap');
+        if (wrap && wrap.classList) {
+            wrap.classList.toggle('is-logo-fallback', isLogo);
+            if (isLogo) {
+                wrap.style.setProperty('--logo-fallback-bg', `url(${JSON.stringify(logoFallbackUrl)})`);
+            } else {
+                wrap.style.removeProperty('--logo-fallback-bg');
+            }
+        }
+    } catch (e) {}
+}
+
 function handleBrokenProductImage(imgEl) {
     try {
         if (!imgEl) return;
@@ -120,6 +159,7 @@ function handleBrokenProductImage(imgEl) {
 
         imgEl.onerror = null;
         if (fallback) imgEl.src = fallback;
+        syncLogoFallbackPresentation(imgEl);
     } catch (e) {}
 }
 
@@ -1663,7 +1703,8 @@ function createProductCard(product) {
     // Name wrapping is handled in CSS (2-line clamp), avoid JS truncation.
     
     // Handle image URL (check if it's a server upload or external URL)
-    const fallbackImageUrl = 'https://via.placeholder.com/280x200?text=No+Image';
+    const logoFallbackUrl = getResolvedRestaurantLogoFallbackUrl();
+    const fallbackImageUrl = logoFallbackUrl || 'https://via.placeholder.com/280x200?text=No+Image';
     const imageRaw = (product.image || '').toString().trim();
     let originalImageUrl = imageRaw;
     if (originalImageUrl && originalImageUrl.startsWith('/uploads/')) {
@@ -1814,6 +1855,11 @@ function createProductCard(product) {
             </div>
         </div>
     `;
+
+    try {
+        const img = card.querySelector('.product-image');
+        if (img) syncLogoFallbackPresentation(img);
+    } catch (e) {}
     
     return card;
 }
@@ -1829,7 +1875,7 @@ function openProductModal(product) {
     const name = (currentLanguage === 'bg' && product.translations?.bg?.name) ? product.translations.bg.name : product.name;
     const description = (currentLanguage === 'bg' && product.translations?.bg?.description) ? product.translations.bg.description : product.description;
     
-    const logoFallbackUrl = restaurantLogoUrl ? resolvePublicAssetUrl(restaurantLogoUrl) : '';
+    const logoFallbackUrl = getResolvedRestaurantLogoFallbackUrl();
     const modalFallbackImageUrl = logoFallbackUrl || 'https://via.placeholder.com/300x300?text=No+Image';
     const imageRaw = (product.image || '').toString().trim();
     let originalImageUrl = imageRaw;
@@ -1863,28 +1909,13 @@ function openProductModal(product) {
     if (modalImage) {
         modalImage.setAttribute('data-orig-src', originalImageUrl);
         modalImage.setAttribute('data-fallback-src', modalFallbackImageUrl);
-        const syncModalImageFallbackClass = () => {
-            try {
-                const attrSrc = (modalImage.getAttribute('src') || '').toString().trim();
-                const propSrc = (modalImage.currentSrc || modalImage.src || '').toString().trim();
-                const isLogo = !!logoFallbackUrl && (
-                    attrSrc === logoFallbackUrl ||
-                    propSrc === logoFallbackUrl ||
-                    (propSrc && propSrc.includes(logoFallbackUrl))
-                );
-                modalImage.classList.toggle('is-logo-fallback', isLogo);
-            } catch (e) {}
-        };
-
         modalImage.onerror = () => {
             handleBrokenProductImage(modalImage);
-            syncModalImageFallbackClass();
+            syncLogoFallbackPresentation(modalImage);
         };
         modalImage.src = imageUrl;
         modalImage.alt = name;
-        try {
-            modalImage.classList.toggle('is-logo-fallback', !!logoFallbackUrl && imageUrl === logoFallbackUrl);
-        } catch (e) {}
+        syncLogoFallbackPresentation(modalImage);
     }
 
     document.getElementById('modal-name').textContent = name;
