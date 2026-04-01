@@ -114,6 +114,7 @@ let paymentMethod = ''; // '' = not selected yet; 'cash' or 'card'
 let cardPaymentsEnabled = false;
 let currentStep = 1; // Track current checkout step
 let siteSettings = null;
+let restaurantLogoUrl = '';
 let customerInfo = {
     name: '',
     phone: '',
@@ -1053,10 +1054,13 @@ async function loadRestaurantInfo() {
                 logoUrl = `${BASE_PATH}${rawLogo}`;
             }
 
+            restaurantLogoUrl = (logoUrl || '').toString().trim();
+
             logoEl.src = logoUrl;
             logoEl.classList.add('visible');
             if (nameEl) nameEl.style.display = 'none';
         } else {
+            restaurantLogoUrl = '';
             if (logoEl) logoEl.classList.remove('visible');
             if (nameEl) nameEl.style.display = 'block';
         }
@@ -1087,6 +1091,51 @@ async function loadRestaurantInfo() {
     } catch (error) {
         console.error('Error loading restaurant info:', error);
     }
+}
+
+function getResolvedRestaurantLogoFallbackUrl() {
+    try {
+        return (restaurantLogoUrl || '').toString().trim();
+    } catch (e) {
+        return '';
+    }
+}
+
+function syncCartLogoFallbackPresentation(imgEl) {
+    try {
+        if (!imgEl) return;
+        const wrap = imgEl.closest?.('.cart-item-image-wrap');
+        const logoFallbackUrl = getResolvedRestaurantLogoFallbackUrl();
+
+        const attrSrc = (imgEl.getAttribute('src') || '').toString().trim();
+        const propSrc = (imgEl.currentSrc || imgEl.src || '').toString().trim();
+
+        const isLogo = !!logoFallbackUrl && (
+            attrSrc === logoFallbackUrl ||
+            propSrc === logoFallbackUrl ||
+            (propSrc && propSrc.includes(logoFallbackUrl))
+        );
+
+        imgEl.classList.toggle('is-logo-fallback', isLogo);
+        if (wrap) {
+            wrap.classList.toggle('is-logo-fallback', isLogo);
+            if (isLogo) {
+                wrap.style.setProperty('--logo-fallback-bg', `url("${logoFallbackUrl}")`);
+            } else {
+                wrap.style.removeProperty('--logo-fallback-bg');
+            }
+        }
+    } catch (e) {}
+}
+
+function handleBrokenCartItemImage(imgEl) {
+    try {
+        if (!imgEl) return;
+        const fallback = (imgEl.getAttribute('data-fallback-src') || '').toString().trim();
+        imgEl.onerror = null;
+        if (fallback) imgEl.src = fallback;
+        syncCartLogoFallbackPresentation(imgEl);
+    } catch (e) {}
 }
 
 // Load delivery settings
@@ -2237,10 +2286,19 @@ function renderCartItems() {
 
         const itemTotal = item.price * item.quantity;
 
+        const logoFallbackUrl = getResolvedRestaurantLogoFallbackUrl();
+        const fallbackImageUrl = logoFallbackUrl || 'https://via.placeholder.com/80x80?text=No+Image';
+
+        const imageRaw = (item?.image || '').toString().trim();
+        const originalImageUrl = imageRaw
+            ? (imageRaw.startsWith('http') ? imageRaw : `${BASE_PATH}${imageRaw}`)
+            : '';
+        const safeImageUrl = originalImageUrl || fallbackImageUrl;
+
         itemElement.innerHTML = `
             <div class="cart-item-row">
                 <div class="cart-item-image-wrap">
-                    <img src="${item.image.startsWith('http') ? item.image : BASE_PATH + item.image}" alt="${displayName}" class="cart-item-image" onerror="this.style.display='none'">
+                    <img src="${safeImageUrl}" alt="${displayName}" class="cart-item-image" data-orig-src="${originalImageUrl}" data-fallback-src="${fallbackImageUrl}" onerror="handleBrokenCartItemImage(this)">
                     ${item.weight ? `<span class="cart-item-weight cart-item-weight-overlay">${item.weight}</span>` : ''}
                 </div>
                 <div class="cart-item-name" title="${escapeHtmlAttribute(displayName)}">${displayNameForUi}</div>
@@ -2267,6 +2325,11 @@ function renderCartItems() {
         `;
 
         cartItemsContainer.appendChild(itemElement);
+
+        try {
+            const img = itemElement.querySelector('.cart-item-image');
+            if (img) syncCartLogoFallbackPresentation(img);
+        } catch (e) {}
     });
 }
 

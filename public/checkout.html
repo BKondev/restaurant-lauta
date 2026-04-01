@@ -130,6 +130,34 @@
             display: block;
         }
 
+        .cart-item-image-wrap.is-logo-fallback {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .cart-item-image-wrap.is-logo-fallback::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image: var(--logo-fallback-bg);
+            background-size: cover;
+            background-position: center;
+            filter: blur(14px);
+            transform: scale(1.15);
+            opacity: 0.55;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .cart-item-image.is-logo-fallback {
+            object-fit: contain;
+            width: 62%;
+            height: 62%;
+            position: relative;
+            z-index: 1;
+        }
+
         .cart-item-name {
             flex: 1;
             font-size: 16px;
