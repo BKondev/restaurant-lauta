@@ -1577,6 +1577,12 @@ body {
     right: 18px;
 }
 
+@media (max-width: 768px) {
+    .modal-nav-btn {
+        display: none;
+    }
+}
+
 .modal-nav-btn:hover {
     background: #c0392b;
 }
