@@ -1614,6 +1614,34 @@ body {
     max-height: calc(100vh - 88px);
 }
 
+.product-modal-content.is-switching {
+    pointer-events: none;
+}
+
+.product-modal-inner.modal-switch-animating {
+    animation: modalProductSwitch 280ms ease-in-out;
+    will-change: transform, opacity;
+}
+
+@keyframes modalProductSwitch {
+    0% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    45% {
+        opacity: 0;
+        transform: translateX(calc(var(--modal-switch-dir, 1) * -24px));
+    }
+    55% {
+        opacity: 0;
+        transform: translateX(calc(var(--modal-switch-dir, 1) * 24px));
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
 .product-modal-inner {
     padding: 22px;
     overflow-y: auto;

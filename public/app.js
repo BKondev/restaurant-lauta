@@ -40,6 +40,8 @@ let modalQuantity = 1;
 let modalNavList = [];
 let modalNavIndex = -1;
 
+let modalSwitchTimers = [];
+
 // Promotional slideshow state
 let slideshowSettings = null;
 let slideshowCurrentIndex = 0;
@@ -1868,8 +1870,19 @@ function createProductCard(product) {
 }
 
 // Open product modal
-function openProductModal(product) {
+function openProductModal(product, options = {}) {
     const modal = document.getElementById('product-modal');
+
+    const content = document.querySelector('#product-modal .product-modal-content');
+    const inner = document.querySelector('#product-modal .product-modal-inner');
+    const shouldAnimateSwitch = !!(options && typeof options === 'object' && options.switchDir && modal && modal.style.display === 'block' && modalProductId != null);
+    const switchDir = options?.switchDir > 0 ? 1 : -1;
+
+    // Clear any previous queued switches.
+    try {
+        for (const t of modalSwitchTimers) clearTimeout(t);
+    } catch (e) {}
+    modalSwitchTimers = [];
 
     // Build navigation list: within the currently selected category filter,
     // or (when browsing "all") within the product's own category.
@@ -1900,107 +1913,127 @@ function openProductModal(product) {
     modalProductId = product.id;
     modalQuantity = 1;
     
-    // Get translated content
-    const name = (currentLanguage === 'bg' && product.translations?.bg?.name) ? product.translations.bg.name : product.name;
-    const description = (currentLanguage === 'bg' && product.translations?.bg?.description) ? product.translations.bg.description : product.description;
-    
-    const logoFallbackUrl = getResolvedRestaurantLogoFallbackUrl();
-    const modalFallbackImageUrl = logoFallbackUrl || 'https://via.placeholder.com/300x300?text=No+Image';
-    const imageRaw = (product.image || '').toString().trim();
-    let originalImageUrl = imageRaw;
-    if (originalImageUrl && originalImageUrl.startsWith('/uploads/')) {
-        originalImageUrl = `${BASE_PATH}${originalImageUrl}`;
-    }
-    const imageUrl = getSafeImageSrc(originalImageUrl, modalFallbackImageUrl);
-    
-    const hasPromo = isPromoActive(product.promo);
-    const effectivePrice = getEffectivePrice(product);
-    
-    // Calculate discount percentage for modal
-    let discountPercent = 0;
-    let bundleOriginalPrice = 0;
-    if (hasPromo && product.price > 0) {
-        discountPercent = Math.round(((product.price - effectivePrice) / product.price) * 100);
-    } else if (product.isCombo && product.comboProducts && product.comboProducts.length > 0) {
-        const comboItems = normalizeComboProductsList(product.comboProducts);
-        const originalTotal = comboItems.reduce((sum, item) => {
-            const bundleProduct = products.find(p => p.id === item.productId);
-            const unitPrice = bundleProduct ? (Number(bundleProduct.price) || 0) : 0;
-            return sum + (unitPrice * (Number(item.qty) || 1));
-        }, 0);
-        bundleOriginalPrice = originalTotal;
-        if (originalTotal > 0 && product.price < originalTotal) {
-            discountPercent = Math.round(((originalTotal - product.price) / originalTotal) * 100);
+    const renderModalForProduct = () => {
+        // Get translated content
+        const name = (currentLanguage === 'bg' && product.translations?.bg?.name) ? product.translations.bg.name : product.name;
+        const description = (currentLanguage === 'bg' && product.translations?.bg?.description) ? product.translations.bg.description : product.description;
+
+        const logoFallbackUrl = getResolvedRestaurantLogoFallbackUrl();
+        const modalFallbackImageUrl = logoFallbackUrl || 'https://via.placeholder.com/300x300?text=No+Image';
+        const imageRaw = (product.image || '').toString().trim();
+        let originalImageUrl = imageRaw;
+        if (originalImageUrl && originalImageUrl.startsWith('/uploads/')) {
+            originalImageUrl = `${BASE_PATH}${originalImageUrl}`;
         }
-    }
-    
-    const modalImage = document.getElementById('modal-image');
-    if (modalImage) {
-        modalImage.setAttribute('data-orig-src', originalImageUrl);
-        modalImage.setAttribute('data-fallback-src', modalFallbackImageUrl);
-        modalImage.onerror = () => {
-            handleBrokenProductImage(modalImage);
+        const imageUrl = getSafeImageSrc(originalImageUrl, modalFallbackImageUrl);
+
+        const hasPromo = isPromoActive(product.promo);
+        const effectivePrice = getEffectivePrice(product);
+
+        // Calculate discount percentage for modal
+        let discountPercent = 0;
+        let bundleOriginalPrice = 0;
+        if (hasPromo && product.price > 0) {
+            discountPercent = Math.round(((product.price - effectivePrice) / product.price) * 100);
+        } else if (product.isCombo && product.comboProducts && product.comboProducts.length > 0) {
+            const comboItems = normalizeComboProductsList(product.comboProducts);
+            const originalTotal = comboItems.reduce((sum, item) => {
+                const bundleProduct = products.find(p => p.id === item.productId);
+                const unitPrice = bundleProduct ? (Number(bundleProduct.price) || 0) : 0;
+                return sum + (unitPrice * (Number(item.qty) || 1));
+            }, 0);
+            bundleOriginalPrice = originalTotal;
+            if (originalTotal > 0 && product.price < originalTotal) {
+                discountPercent = Math.round(((originalTotal - product.price) / originalTotal) * 100);
+            }
+        }
+
+        const modalImage = document.getElementById('modal-image');
+        if (modalImage) {
+            modalImage.setAttribute('data-orig-src', originalImageUrl);
+            modalImage.setAttribute('data-fallback-src', modalFallbackImageUrl);
+            modalImage.onerror = () => {
+                handleBrokenProductImage(modalImage);
+                syncLogoFallbackPresentation(modalImage);
+            };
+            modalImage.src = imageUrl;
+            modalImage.alt = name;
             syncLogoFallbackPresentation(modalImage);
+        }
+
+        document.getElementById('modal-name').textContent = name;
+        document.getElementById('modal-description').textContent = description;
+
+        const weightEl = document.getElementById('modal-weight');
+        if (product.weight) {
+            weightEl.style.display = 'block';
+            weightEl.innerHTML = `<i class="fas fa-weight"></i> ${product.weight}`;
+        } else {
+            weightEl.style.display = 'none';
+            weightEl.textContent = '';
+        }
+
+        const unitPrice = hasPromo ? effectivePrice : getEffectivePrice(product);
+        const qtyDisplay = document.getElementById('modal-qty-display');
+        const bigPrice = document.getElementById('modal-big-price');
+
+        function updateModalPricing() {
+            qtyDisplay.textContent = String(modalQuantity);
+            bigPrice.innerHTML = `${formatPrice(unitPrice * modalQuantity)}`;
+        }
+
+        document.getElementById('modal-qty-minus').onclick = () => {
+            modalQuantity = Math.max(1, modalQuantity - 1);
+            updateModalPricing();
         };
-        modalImage.src = imageUrl;
-        modalImage.alt = name;
-        syncLogoFallbackPresentation(modalImage);
-    }
+        document.getElementById('modal-qty-plus').onclick = () => {
+            modalQuantity = modalQuantity + 1;
+            updateModalPricing();
+        };
+        updateModalPricing();
 
-    document.getElementById('modal-name').textContent = name;
-    document.getElementById('modal-description').textContent = description;
+        const addToCartBtn = document.getElementById('modal-add-to-cart');
+        const orderable = isProductOrderable(product);
+        addToCartBtn.disabled = !orderable;
+        addToCartBtn.style.opacity = orderable ? '' : '0.6';
+        addToCartBtn.style.cursor = orderable ? '' : 'not-allowed';
+        addToCartBtn.dataset.productId = String(product.id);
+        const inCartQty = getCartQuantity(product.id);
+        const inCartQtyLabel = inCartQty > 99 ? '99+' : String(inCartQty);
+        addToCartBtn.innerHTML = `
+            <span class="add-to-cart-icon" aria-hidden="true">
+                <i class="fas fa-shopping-cart"></i>
+                <span class="add-to-cart-count-badge" style="${inCartQty > 0 ? 'display:inline-flex;' : 'display:none;'}">${inCartQtyLabel}</span>
+            </span>
+            <span class="add-to-cart-label">${orderable ? translations[currentLanguage].addToCart : (currentLanguage === 'bg' ? 'Изчерпан' : 'Out of stock')}</span>
+        `;
+        addToCartBtn.onclick = () => {
+            if (!modalProductId) return;
+            if (!orderable) return;
+            addToCartWithQuantity(modalProductId, modalQuantity);
+            closeModal();
+        };
+    };
 
-    const weightEl = document.getElementById('modal-weight');
-    if (product.weight) {
-        weightEl.style.display = 'block';
-        weightEl.innerHTML = `<i class="fas fa-weight"></i> ${product.weight}`;
+    if (shouldAnimateSwitch && inner && content) {
+        inner.style.setProperty('--modal-switch-dir', String(switchDir));
+        inner.classList.remove('modal-switch-animating');
+        // Force reflow so animation retriggers
+        void inner.offsetWidth;
+        content.classList.add('is-switching');
+        inner.classList.add('modal-switch-animating');
+
+        modalSwitchTimers.push(setTimeout(() => {
+            renderModalForProduct();
+        }, 140));
+        modalSwitchTimers.push(setTimeout(() => {
+            content.classList.remove('is-switching');
+            inner.classList.remove('modal-switch-animating');
+        }, 280));
     } else {
-        weightEl.style.display = 'none';
-        weightEl.textContent = '';
+        renderModalForProduct();
+        modal.style.display = 'block';
     }
-
-    const unitPrice = hasPromo ? effectivePrice : getEffectivePrice(product);
-    const qtyDisplay = document.getElementById('modal-qty-display');
-    const bigPrice = document.getElementById('modal-big-price');
-
-    function updateModalPricing() {
-        qtyDisplay.textContent = String(modalQuantity);
-        bigPrice.innerHTML = `${formatPrice(unitPrice * modalQuantity)}`;
-    }
-
-    document.getElementById('modal-qty-minus').onclick = () => {
-        modalQuantity = Math.max(1, modalQuantity - 1);
-        updateModalPricing();
-    };
-    document.getElementById('modal-qty-plus').onclick = () => {
-        modalQuantity = modalQuantity + 1;
-        updateModalPricing();
-    };
-    updateModalPricing();
-
-    const addToCartBtn = document.getElementById('modal-add-to-cart');
-    const orderable = isProductOrderable(product);
-    addToCartBtn.disabled = !orderable;
-    addToCartBtn.style.opacity = orderable ? '' : '0.6';
-    addToCartBtn.style.cursor = orderable ? '' : 'not-allowed';
-    addToCartBtn.dataset.productId = String(product.id);
-    const inCartQty = getCartQuantity(product.id);
-    const inCartQtyLabel = inCartQty > 99 ? '99+' : String(inCartQty);
-    addToCartBtn.innerHTML = `
-        <span class="add-to-cart-icon" aria-hidden="true">
-            <i class="fas fa-shopping-cart"></i>
-            <span class="add-to-cart-count-badge" style="${inCartQty > 0 ? 'display:inline-flex;' : 'display:none;'}">${inCartQtyLabel}</span>
-        </span>
-        <span class="add-to-cart-label">${orderable ? translations[currentLanguage].addToCart : (currentLanguage === 'bg' ? 'Изчерпан' : 'Out of stock')}</span>
-    `;
-    addToCartBtn.onclick = () => {
-        if (!modalProductId) return;
-        if (!orderable) return;
-        addToCartWithQuantity(modalProductId, modalQuantity);
-        closeModal();
-    };
-
-    modal.style.display = 'block';
 }
 
 function updateModalNavControls() {
@@ -2032,7 +2065,7 @@ function navigateModalByDelta(delta) {
 
     const nextProduct = modalNavList[nextIndex];
     if (!nextProduct) return;
-    openProductModal(nextProduct);
+    openProductModal(nextProduct, { switchDir: delta });
 }
 
 // Close modal
@@ -2040,6 +2073,11 @@ function closeModal() {
     document.getElementById('product-modal').style.display = 'none';
     modalProductId = null;
     modalQuantity = 1;
+
+    try {
+        for (const t of modalSwitchTimers) clearTimeout(t);
+    } catch (e) {}
+    modalSwitchTimers = [];
 
     modalNavList = [];
     modalNavIndex = -1;
