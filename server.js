@@ -8,6 +8,13 @@ const crypto = require('crypto');
 const { sendToDeliveryService } = require('./delivery-integration');
 const { printOrder } = require('./printer-service');
 
+let sharp = null;
+try {
+    sharp = require('sharp');
+} catch (e) {
+    // Optional dependency; image compression will be skipped if not installed.
+}
+
 // Optional: load environment variables from .env (useful for production without PM2 env wiring)
 try {
     // PM2 may run with a different cwd (e.g. /root). Always resolve .env next to this file.
@@ -586,6 +593,96 @@ const uploadProductImages = multer({
         cb(new Error('Only image files are allowed!'));
     }
 });
+
+function getCompressFormatFromPath(filePath) {
+    const ext = path.extname(filePath || '').toLowerCase();
+    if (ext === '.jpg' || ext === '.jpeg') return 'jpeg';
+    if (ext === '.png') return 'png';
+    if (ext === '.webp') return 'webp';
+    return null;
+}
+
+async function compressImageToTargetBuffer(inputPath, { targetBytes = 50 * 1024, maxDim = 1600 } = {}) {
+    if (!sharp) return null;
+    if (!inputPath) return null;
+    if (!fs.existsSync(inputPath)) return null;
+
+    const format = getCompressFormatFromPath(inputPath);
+    if (!format) return null;
+
+    const qualitySteps = [72, 64, 56, 48, 40, 32, 26];
+    const sizeSteps = [maxDim, 1400, 1200, 1000, 850, 700, 600];
+
+    let best = null;
+
+    for (const dim of sizeSteps) {
+        for (const quality of qualitySteps) {
+            let pipeline = sharp(inputPath, { failOnError: false })
+                .rotate()
+                .resize({ width: dim, height: dim, fit: 'inside', withoutEnlargement: true });
+
+            if (format === 'jpeg') {
+                pipeline = pipeline.jpeg({ quality, mozjpeg: true, progressive: true });
+            } else if (format === 'png') {
+                pipeline = pipeline.png({ compressionLevel: 9, adaptiveFiltering: true, palette: true, quality });
+            } else if (format === 'webp') {
+                pipeline = pipeline.webp({ quality, effort: 4 });
+            }
+
+            const buf = await pipeline.toBuffer();
+            best = buf;
+
+            if (buf && buf.length <= targetBytes) {
+                return buf;
+            }
+        }
+    }
+
+    return best;
+}
+
+async function compressUploadedFileInPlace(filePath, { targetBytes = 50 * 1024 } = {}) {
+    try {
+        if (!sharp) return null;
+        if (!filePath) return null;
+        const inputPath = filePath;
+        if (!fs.existsSync(inputPath)) return null;
+
+        const inputExt = path.extname(inputPath).toLowerCase();
+        if (inputExt === '.svg' || inputExt === '.gif' || inputExt === '.ico') return null;
+
+        let originalBytes = 0;
+        try {
+            const st = fs.statSync(inputPath);
+            originalBytes = Number(st.size) || 0;
+        } catch (e) {}
+
+        // If it's already small enough, don't touch it.
+        if (originalBytes > 0 && originalBytes <= targetBytes) return null;
+
+        const buf = await compressImageToTargetBuffer(inputPath, { targetBytes });
+        if (!buf || !buf.length) return null;
+
+        const dir = path.dirname(inputPath);
+        const tmpPath = path.join(dir, `${path.basename(inputPath)}.${Date.now()}.tmp`);
+        fs.writeFileSync(tmpPath, buf);
+        fs.renameSync(tmpPath, inputPath);
+
+        return { path: inputPath, bytes: buf.length };
+    } catch (e) {
+        return null;
+    }
+}
+
+function shouldCompressUpload(file) {
+    const mimetype = (file?.mimetype ?? '').toString().toLowerCase();
+    const ext = path.extname((file?.filename ?? '').toString()).toLowerCase();
+    if (mimetype.includes('svg') || ext === '.svg') return false;
+    if (mimetype.includes('gif') || ext === '.gif') return false;
+    if (mimetype.includes('icon') || ext === '.ico') return false;
+    if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return false;
+    return true;
+}
 
 // In-memory upload for small XLSX files (product import/template workflows)
 const uploadXlsx = multer({
@@ -4018,20 +4115,29 @@ app.delete(API_PREFIX + '/products/:id', requireAuth, (req, res) => {
 });
 
 // Upload image
-app.post(API_PREFIX + '/upload', requireAuth, upload.single('image'), (req, res) => {
+app.post(API_PREFIX + '/upload', requireAuth, upload.single('image'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
-    
-    const imageUrl = `/uploads/${req.file.filename}`;
-    res.json({ imageUrl: imageUrl });
+
+    // Best-effort compression to reduce size (target ~50KB), keeping the same extension
+    // (important for favicons / OG images).
+    if (shouldCompressUpload(req.file)) {
+        try {
+            await compressUploadedFileInPlace(req.file.path, { targetBytes: 50 * 1024 });
+        } catch (e) {
+            // fall back to original
+        }
+    }
+
+    return res.json({ imageUrl: `/uploads/${req.file.filename}` });
 });
 
 // Bulk upload product images (match by product id)
 // - Upload multiple files at once
 // - Filenames must be like: 1.jpg, 2.png, 3.webp ...
 // - Each file updates the product with matching numeric id
-app.post(API_PREFIX + '/products/upload-images', requireAuth, uploadProductImages.array('images', 500), (req, res) => {
+app.post(API_PREFIX + '/products/upload-images', requireAuth, uploadProductImages.array('images', 500), async (req, res) => {
     try {
         const files = Array.isArray(req.files) ? req.files : [];
         if (!files.length) {
@@ -4046,7 +4152,7 @@ app.post(API_PREFIX + '/products/upload-images', requireAuth, uploadProductImage
         const unmatched = [];
 
         for (const file of files) {
-            const filename = (file?.filename ?? '').toString();
+            let filename = (file?.filename ?? '').toString();
             const ext = path.extname(filename);
             const base = path.basename(filename, ext).trim();
             const id = parseInt(base, 10);
@@ -4054,6 +4160,13 @@ app.post(API_PREFIX + '/products/upload-images', requireAuth, uploadProductImage
                 skipped++;
                 unmatched.push(filename);
                 continue;
+            }
+
+            // Best-effort compression to keep bulk uploads small.
+            if (shouldCompressUpload(file)) {
+                try {
+                    await compressUploadedFileInPlace(file?.path, { targetBytes: 50 * 1024 });
+                } catch (e) {}
             }
 
             const product = products.find(p => p && p.id === id);

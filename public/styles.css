@@ -1551,6 +1551,42 @@ body {
     background: #c0392b;
 }
 
+.modal-nav-btn {
+    position: absolute;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.95);
+    background: var(--highlight-color);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    z-index: 2;
+    transform: translateY(-50%);
+}
+
+.modal-nav-prev {
+    left: 18px;
+}
+
+.modal-nav-next {
+    right: 18px;
+}
+
+.modal-nav-btn:hover {
+    background: #c0392b;
+}
+
+.modal-nav-btn.is-disabled {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+}
+
 .modal-content {
     background-color: white;
     padding: 0;

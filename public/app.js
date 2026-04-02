@@ -37,6 +37,9 @@ let restaurantLogoUrl = '';
 let modalProductId = null;
 let modalQuantity = 1;
 
+let modalNavList = [];
+let modalNavIndex = -1;
+
 // Promotional slideshow state
 let slideshowSettings = null;
 let slideshowCurrentIndex = 0;
@@ -1868,6 +1871,32 @@ function createProductCard(product) {
 function openProductModal(product) {
     const modal = document.getElementById('product-modal');
 
+    // Build navigation list: within the currently selected category filter,
+    // or (when browsing "all") within the product's own category.
+    try {
+        const visible = (products || []).filter(isProductVisible);
+        let list = [];
+
+        if (currentCategory && currentCategory !== 'all') {
+            if (currentCategory === 'Promotions') {
+                list = visible.filter(p => isPromoActive(p?.promo) || p?.isCombo === true);
+            } else {
+                list = visible.filter(p => p?.category === currentCategory);
+            }
+        } else {
+            const cat = product?.category;
+            list = visible.filter(p => p?.category === cat);
+        }
+
+        modalNavList = list;
+        modalNavIndex = modalNavList.findIndex(p => String(p?.id) === String(product?.id));
+    } catch (e) {
+        modalNavList = [];
+        modalNavIndex = -1;
+    }
+
+    updateModalNavControls();
+
     modalProductId = product.id;
     modalQuantity = 1;
     
@@ -1974,11 +2003,46 @@ function openProductModal(product) {
     modal.style.display = 'block';
 }
 
+function updateModalNavControls() {
+    const prevBtn = document.getElementById('modal-nav-prev');
+    const nextBtn = document.getElementById('modal-nav-next');
+    const canNavigate = Array.isArray(modalNavList) && modalNavList.length > 1 && modalNavIndex >= 0;
+
+    if (!prevBtn || !nextBtn) return;
+
+    if (!canNavigate) {
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'none';
+        return;
+    }
+
+    prevBtn.style.display = '';
+    nextBtn.style.display = '';
+
+    prevBtn.classList.toggle('is-disabled', modalNavIndex <= 0);
+    nextBtn.classList.toggle('is-disabled', modalNavIndex >= modalNavList.length - 1);
+}
+
+function navigateModalByDelta(delta) {
+    if (!Array.isArray(modalNavList) || modalNavList.length < 2) return;
+    if (modalNavIndex < 0) return;
+
+    const nextIndex = modalNavIndex + delta;
+    if (nextIndex < 0 || nextIndex >= modalNavList.length) return;
+
+    const nextProduct = modalNavList[nextIndex];
+    if (!nextProduct) return;
+    openProductModal(nextProduct);
+}
+
 // Close modal
 function closeModal() {
     document.getElementById('product-modal').style.display = 'none';
     modalProductId = null;
     modalQuantity = 1;
+
+    modalNavList = [];
+    modalNavIndex = -1;
 }
 
 function isProductMatch(product, searchTerm) {
@@ -2221,6 +2285,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const closeBtn = document.getElementById('modal-close-btn');
     if (closeBtn) closeBtn.onclick = closeModal;
 
+    // Modal prev/next arrows (desktop) + optional use on mobile
+    const prevBtn = document.getElementById('modal-nav-prev');
+    const nextBtn = document.getElementById('modal-nav-next');
+    if (prevBtn) prevBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        navigateModalByDelta(-1);
+    });
+    if (nextBtn) nextBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        navigateModalByDelta(1);
+    });
+
     // Close modal when clicking outside (shell overlay covers the full screen)
     const modal = document.getElementById('product-modal');
     const shell = document.querySelector('#product-modal .product-modal-shell');
@@ -2234,6 +2310,71 @@ document.addEventListener('DOMContentLoaded', function() {
             if (event.target === shell) closeModal();
         });
     }
+
+    // Swipe left/right in the modal to navigate products (touch devices)
+    let swipeStartX = 0;
+    let swipeStartY = 0;
+    let swipeStartT = 0;
+
+    if (shell) {
+        shell.addEventListener('touchstart', (e) => {
+            if (!e.touches || e.touches.length !== 1) return;
+            const t = e.touches[0];
+            swipeStartX = t.clientX;
+            swipeStartY = t.clientY;
+            swipeStartT = Date.now();
+        }, { passive: true });
+
+        shell.addEventListener('touchend', (e) => {
+            try {
+                const modal = document.getElementById('product-modal');
+                if (!modal || modal.style.display !== 'block') return;
+                if (!Array.isArray(modalNavList) || modalNavList.length < 2) return;
+                if (!e.changedTouches || e.changedTouches.length !== 1) return;
+
+                const t = e.changedTouches[0];
+                const dx = t.clientX - swipeStartX;
+                const dy = t.clientY - swipeStartY;
+                const dt = Date.now() - (swipeStartT || 0);
+
+                // Only treat as swipe when it's mostly horizontal and reasonably quick.
+                if (Math.abs(dx) < 55) return;
+                if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
+                if (dt > 900) return;
+
+                if (dx < 0) {
+                    navigateModalByDelta(1);
+                } else {
+                    navigateModalByDelta(-1);
+                }
+            } catch (err) {
+                // ignore
+            }
+        }, { passive: true });
+    }
+
+    // Keyboard navigation (desktop): left/right arrows while modal is open
+    document.addEventListener('keydown', (e) => {
+        try {
+            const modal = document.getElementById('product-modal');
+            if (!modal || modal.style.display !== 'block') return;
+
+            const active = document.activeElement;
+            const tag = (active?.tagName || '').toString().toLowerCase();
+            const isTyping = tag === 'input' || tag === 'textarea' || active?.isContentEditable;
+            if (isTyping) return;
+
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                navigateModalByDelta(-1);
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                navigateModalByDelta(1);
+            }
+        } catch (err) {
+            // ignore
+        }
+    });
 
     document.addEventListener('click', (e) => {
         const searchContainer = document.getElementById('search-container');
