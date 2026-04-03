@@ -1551,44 +1551,15 @@ async function downloadApk() {
     if (!token) return;
 
     try {
-        const res = await fetch(`${API_URL}/admin/apk`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (!res.ok) {
-            let msg = t('apkDownloadFailed', 'Failed to download APK.');
-            try {
-                const data = await res.json();
-                if (data && data.error) msg = data.error;
-            } catch (e) {}
-            alert(msg);
-            return;
-        }
-
-        const cd = (res.headers.get('content-disposition') || '').toString();
-        let filename = 'restaurant-app.apk';
-
-        // Best-effort Content-Disposition parsing
-        const utf8Match = cd.match(/filename\*=UTF-8''([^;]+)/i);
-        const asciiMatch = cd.match(/filename="?([^";]+)"?/i);
-        if (utf8Match && utf8Match[1]) {
-            try { filename = decodeURIComponent(utf8Match[1]); } catch (e) { filename = utf8Match[1]; }
-        } else if (asciiMatch && asciiMatch[1]) {
-            filename = asciiMatch[1];
-        }
-
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
+        // Stream download via normal navigation to avoid loading large APKs into JS memory.
+        const url = `${API_URL}/admin/apk?token=${encodeURIComponent(token)}`;
         const a = document.createElement('a');
         a.href = url;
-        a.download = filename;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
         document.body.appendChild(a);
         a.click();
         a.remove();
-
-        setTimeout(() => {
-            try { URL.revokeObjectURL(url); } catch (e) {}
-        }, 1000);
     } catch (e) {
         console.error('APK download failed:', e);
         alert(t('apkDownloadFailed', 'Failed to download APK.'));

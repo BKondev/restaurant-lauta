@@ -1814,7 +1814,7 @@ app.get(API_PREFIX + '/restaurants/me', requireAuthOrApiKey, (req, res) => {
 });
 
 // Admin: download the restaurant APK (Bearer token required)
-app.get(API_PREFIX + '/admin/apk', requireAuth, (req, res) => {
+app.get(API_PREFIX + '/admin/apk', requireAuthFromHeaderOrQuery, (req, res) => {
     try {
         const apkDir = path.join(__dirname, 'public', 'apk');
         if (!fs.existsSync(apkDir)) {
@@ -2620,6 +2620,26 @@ function requireAuth(req, res, next) {
     req.restaurantId = tokenData.restaurantId;
     req.username = tokenData.username;
     
+    next();
+}
+
+// Allow auth via Bearer header OR ?token= query param (used for streaming file downloads).
+function requireAuthFromHeaderOrQuery(req, res, next) {
+    const rawAuth = (req.headers.authorization || '').toString();
+    const headerToken = rawAuth.startsWith('Bearer ') ? rawAuth.slice('Bearer '.length).trim() : rawAuth.replace('Bearer ', '').trim();
+    const queryToken = (req.query?.token || '').toString().trim();
+    const token = headerToken || queryToken;
+
+    if (!token || !activeTokens.has(token)) {
+        return res.status(401).json({
+            error: 'Unauthorized',
+            message: 'Please login to access this resource'
+        });
+    }
+
+    const tokenData = activeTokens.get(token);
+    req.restaurantId = tokenData.restaurantId;
+    req.username = tokenData.username;
     next();
 }
 
