@@ -674,6 +674,42 @@ async function compressUploadedFileInPlace(filePath, { targetBytes = 50 * 1024 }
     }
 }
 
+async function transcodeUploadedImageToWebp(filePath, { maxDim = 1600, quality = 72 } = {}) {
+    try {
+        if (!sharp) return null;
+        if (!filePath) return null;
+        if (!fs.existsSync(filePath)) return null;
+
+        const inputPath = filePath;
+        const inputExt = path.extname(inputPath).toLowerCase();
+        if (inputExt === '.svg' || inputExt === '.gif' || inputExt === '.ico') return null;
+
+        const dir = path.dirname(inputPath);
+        const base = path.basename(inputPath, inputExt);
+        const outputPath = path.join(dir, `${base}.webp`);
+        const tmpPath = path.join(dir, `${base}.${Date.now()}.webp.tmp`);
+
+        const buf = await sharp(inputPath, { failOnError: false })
+            .rotate()
+            .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
+            .webp({ quality, effort: 4 })
+            .toBuffer();
+
+        if (!buf || !buf.length) return null;
+
+        fs.writeFileSync(tmpPath, buf);
+        fs.renameSync(tmpPath, outputPath);
+
+        if (outputPath !== inputPath) {
+            try { fs.unlinkSync(inputPath); } catch (e) {}
+        }
+
+        return { path: outputPath, filename: path.basename(outputPath), bytes: buf.length };
+    } catch (e) {
+        return null;
+    }
+}
+
 function shouldCompressUpload(file) {
     const mimetype = (file?.mimetype ?? '').toString().toLowerCase();
     const ext = path.extname((file?.filename ?? '').toString()).toLowerCase();
@@ -4173,26 +4209,28 @@ app.post(API_PREFIX + '/products/upload-images', requireAuth, uploadProductImage
 
         for (const file of files) {
             let filename = (file?.filename ?? '').toString();
+            const originalFilename = filename;
             const ext = path.extname(filename);
             const base = path.basename(filename, ext).trim();
             const id = parseInt(base, 10);
             if (!Number.isFinite(id) || String(id) !== base) {
                 skipped++;
-                unmatched.push(filename);
+                unmatched.push(originalFilename);
                 continue;
             }
 
-            // Best-effort compression to keep bulk uploads small.
+            // Bulk uploads can be very large; aggressively transcode to WebP (resized) for fast storefront loads.
             if (shouldCompressUpload(file)) {
-                try {
-                    await compressUploadedFileInPlace(file?.path, { targetBytes: 50 * 1024 });
-                } catch (e) {}
+                const result = await transcodeUploadedImageToWebp(file?.path, { maxDim: 1600, quality: 72 });
+                if (result?.filename) {
+                    filename = result.filename;
+                }
             }
 
             const product = products.find(p => p && p.id === id);
             if (!product) {
                 skipped++;
-                unmatched.push(filename);
+                unmatched.push(originalFilename);
                 continue;
             }
 
