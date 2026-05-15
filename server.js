@@ -1,4 +1,5 @@
 const express = require('express');
+const axios = require('axios');
 const cors = require('cors');
 const multer = require('multer');
 const XLSX = require('xlsx');
@@ -905,6 +906,7 @@ function readDatabase() {
         if (!Array.isArray(parsed.orders)) parsed.orders = [];
         if (!Array.isArray(parsed.promoCodes)) parsed.promoCodes = [];
         if (!parsed.authTokens || typeof parsed.authTokens !== 'object') parsed.authTokens = {};
+        if (!parsed.mobilePushTokens || typeof parsed.mobilePushTokens !== 'object') parsed.mobilePushTokens = {};
         if (!parsed.restaurantName) parsed.restaurantName = "Restaurant Name";
         return parsed;
     };
@@ -1802,6 +1804,74 @@ app.post(API_PREFIX + '/logout', (req, res) => {
     });
 });
 
+// Mobile app: register Expo push token for new-order notifications (Bearer auth)
+app.post(API_PREFIX + '/devices/push-token', requireAuth, (req, res) => {
+    try {
+        const expoPushToken = (req.body?.expoPushToken || '').toString().trim();
+        const platform = (req.body?.platform || '').toString().trim().toLowerCase();
+
+        if (!expoPushToken.startsWith('ExponentPushToken[') && !expoPushToken.startsWith('ExpoPushToken[')) {
+            return res.status(400).json({ success: false, message: 'Invalid Expo push token' });
+        }
+
+        const db = readDatabase();
+        if (!db.mobilePushTokens || typeof db.mobilePushTokens !== 'object') {
+            db.mobilePushTokens = {};
+        }
+
+        const restaurantId = req.restaurantId;
+        const list = Array.isArray(db.mobilePushTokens[restaurantId])
+            ? db.mobilePushTokens[restaurantId].filter(d => d && d.token)
+            : [];
+
+        const nowIso = new Date().toISOString();
+        const withoutDup = list.filter(d => d.token !== expoPushToken);
+        withoutDup.push({
+            token: expoPushToken,
+            platform: platform || 'unknown',
+            updatedAt: nowIso,
+        });
+
+        // Keep the most recently updated devices only
+        db.mobilePushTokens[restaurantId] = withoutDup
+            .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+            .slice(0, 25);
+
+        if (!writeDatabase(db)) {
+            return res.status(500).json({ success: false, message: 'Failed to save push token' });
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('[PUSH] register token error:', error);
+        res.status(500).json({ success: false, message: 'Failed to register push token' });
+    }
+});
+
+app.delete(API_PREFIX + '/devices/push-token', requireAuth, (req, res) => {
+    try {
+        const expoPushToken = (req.body?.expoPushToken || '').toString().trim();
+        const db = readDatabase();
+        if (!db.mobilePushTokens || typeof db.mobilePushTokens !== 'object') {
+            return res.json({ success: true });
+        }
+
+        const restaurantId = req.restaurantId;
+        const list = Array.isArray(db.mobilePushTokens[restaurantId]) ? db.mobilePushTokens[restaurantId] : [];
+        if (!expoPushToken) {
+            db.mobilePushTokens[restaurantId] = [];
+        } else {
+            db.mobilePushTokens[restaurantId] = list.filter(d => d?.token !== expoPushToken);
+        }
+
+        writeDatabase(db);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('[PUSH] unregister token error:', error);
+        res.status(500).json({ success: false, message: 'Failed to unregister push token' });
+    }
+});
+
 // Current restaurant profile (Bearer token or API key)
 app.get(API_PREFIX + '/restaurants/me', requireAuthOrApiKey, (req, res) => {
     try {
@@ -2515,6 +2585,10 @@ function handleBoricaReturn(req, res) {
                     }
                 });
 
+                if (order.status === 'pending') {
+                    notifyRestaurantNewPendingOrder(order);
+                }
+
                 const transitionedToApproved = autoApproveCardPayments && statusBeforePayment !== 'approved' && order.status === 'approved';
                 if (transitionedToApproved) {
                     triggerAutoApprovedSideEffects(order, restaurant, eurToBgnRate);
@@ -2613,6 +2687,10 @@ function handleBoricaReturn(req, res) {
                     console.error('[EMAIL] post-payment emails error:', e);
                 }
             });
+
+            if (order.status === 'pending') {
+                notifyRestaurantNewPendingOrder(order);
+            }
 
             const transitionedToApproved = autoApproveCardPayments && statusBeforePayment !== 'approved' && order.status === 'approved';
             if (transitionedToApproved) {
@@ -3564,6 +3642,77 @@ function getPublicOrderTrackUrl(orderId, req) {
     }
 
     return `${base}${publicBasePath}/track-order.html?id=${encodeURIComponent(orderId)}`;
+}
+
+// ── Mobile push (Expo) ─────────────────────────────────────────────────────
+
+function getRestaurantExpoPushTokens(db, restaurantId) {
+    const map = db?.mobilePushTokens;
+    if (!map || typeof map !== 'object') return [];
+    const list = map[restaurantId];
+    if (!Array.isArray(list)) return [];
+    return list
+        .map(d => (d?.token || '').toString().trim())
+        .filter(t => t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken['));
+}
+
+async function sendExpoPushMessages(messages) {
+    const list = (Array.isArray(messages) ? messages : []).filter(m => m && m.to);
+    if (!list.length) return;
+
+    const headers = {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+    };
+    if (process.env.EXPO_ACCESS_TOKEN) {
+        headers.Authorization = `Bearer ${process.env.EXPO_ACCESS_TOKEN}`;
+    }
+
+    const chunkSize = 100;
+    for (let i = 0; i < list.length; i += chunkSize) {
+        const chunk = list.slice(i, i + chunkSize);
+        try {
+            await axios.post('https://exp.host/--/api/v2/push/send', chunk, {
+                headers,
+                timeout: 15000,
+            });
+        } catch (e) {
+            console.error('[PUSH] Expo send failed:', e?.response?.data || e?.message || e);
+        }
+    }
+}
+
+function notifyRestaurantNewPendingOrder(order) {
+    const restaurantId = (order?.restaurantId || '').toString();
+    if (!restaurantId || !order?.id) return;
+
+    setImmediate(async () => {
+        try {
+            const db = readDatabase();
+            const tokens = getRestaurantExpoPushTokens(db, restaurantId);
+            if (!tokens.length) return;
+
+            const customerName = (order.customerInfo?.name || order.customerName || 'клиент').toString();
+            const totalText = formatMoneyEUR(parseNumber(order.total, 0));
+
+            const messages = tokens.map(to => ({
+                to,
+                sound: 'default',
+                priority: 'high',
+                title: '🔔 Нова поръчка!',
+                body: `Поръчка от ${customerName} за ${totalText}`,
+                data: {
+                    type: 'new-order',
+                    orderId: order.id,
+                },
+            }));
+
+            await sendExpoPushMessages(messages);
+            console.log('[PUSH] new-order sent:', order.id, 'devices:', tokens.length);
+        } catch (e) {
+            console.error('[PUSH] notifyRestaurantNewPendingOrder failed:', e);
+        }
+    });
 }
 
 async function sendOrderPlacedEmails(order, restaurant, req) {
@@ -6918,6 +7067,10 @@ app.post(API_PREFIX + '/orders', (req, res) => {
         data.orders.push(newOrder);
         if (!writeDatabase(data)) {
             return res.status(500).json({ error: 'Failed to persist order' });
+        }
+
+        if (newOrder.status === 'pending') {
+            notifyRestaurantNewPendingOrder(newOrder);
         }
 
         if (shouldAutoApprove) {
