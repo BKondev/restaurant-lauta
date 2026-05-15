@@ -1922,33 +1922,11 @@ app.get(API_PREFIX + '/restaurants/me', requireAuthOrApiKey, (req, res) => {
 // Admin: download the restaurant APK (Bearer token required)
 app.get(API_PREFIX + '/admin/apk', requireAuthFromHeaderOrQuery, (req, res) => {
     try {
-        const apkDir = path.join(__dirname, 'public', 'apk');
-        if (!fs.existsSync(apkDir)) {
-            return res.status(404).json({ error: 'APK folder missing' });
+        const apkPath = path.join(__dirname, 'public', 'apk', 'restaurant.apk');
+        if (!fs.existsSync(apkPath)) {
+            return res.status(404).json({ error: 'APK not found' });
         }
-
-        const entries = fs.readdirSync(apkDir);
-        const apkFiles = entries
-            .filter(name => name && name.toLowerCase().endsWith('.apk'))
-            .map(name => {
-                const fullPath = path.join(apkDir, name);
-                try {
-                    const stat = fs.statSync(fullPath);
-                    if (!stat.isFile()) return null;
-                    return { name, fullPath, mtimeMs: stat.mtimeMs };
-                } catch (e) {
-                    return null;
-                }
-            })
-            .filter(Boolean);
-
-        if (apkFiles.length === 0) {
-            return res.status(404).json({ error: 'No APK found' });
-        }
-
-        const canonical = apkFiles.find(f => f.name === 'restaurant.apk');
-        const chosen = canonical || apkFiles.sort((a, b) => (b.mtimeMs - a.mtimeMs) || a.name.localeCompare(b.name))[0];
-        return res.download(chosen.fullPath, chosen.name);
+        return res.download(apkPath, 'KONKAR-install.apk');
     } catch (e) {
         console.error('Error downloading APK:', e);
         return res.status(500).json({ error: 'Failed to download APK' });

@@ -199,8 +199,6 @@ run_fs mkdir -p "$PRESERVE_DIR"
 [ -f database.json ] && run_fs cp database.json "$PRESERVE_DIR/" || true
 [ -f .env ] && run_fs cp .env "$PRESERVE_DIR/" || true
 [ -d uploads ] && run_fs cp -r uploads "$PRESERVE_DIR/" || true
-[ -f public/apk/restaurant.apk ] && run_fs sh -lc "mkdir -p '$PRESERVE_DIR/apk'" && run_fs cp public/apk/restaurant.apk "$PRESERVE_DIR/apk/restaurant.apk" || true
-
 # Pull latest code
 echo "  Fetching latest code..."
 run_fs git fetch origin
@@ -211,8 +209,6 @@ echo "  Restoring production data..."
 [ -f "$PRESERVE_DIR/database.json" ] && run_fs cp "$PRESERVE_DIR/database.json" . || true
 [ -f "$PRESERVE_DIR/.env" ] && run_fs cp "$PRESERVE_DIR/.env" . || true
 [ -d "$PRESERVE_DIR/uploads" ] && run_fs cp -r "$PRESERVE_DIR/uploads" . || true
-[ -f "$PRESERVE_DIR/apk/restaurant.apk" ] && run_fs sh -lc "mkdir -p 'public/apk'" && run_fs cp "$PRESERVE_DIR/apk/restaurant.apk" public/apk/restaurant.apk || true
-
 # Install dependencies
 echo "  Installing dependencies..."
 run_fs npm ci --omit=dev 2>/dev/null || run_fs npm install --omit=dev
@@ -364,12 +360,25 @@ if [ ! -f "$SRC" ]; then
   exit 1
 fi
 
+ARCHIVE_DIR="$DEPLOY_DIR/public/apk/archive"
 if command -v sudo >/dev/null 2>&1; then
-  sudo -n mkdir -p "$DEPLOY_DIR/public/apk"
+  sudo -n mkdir -p "$DEPLOY_DIR/public/apk" "$ARCHIVE_DIR"
+  for old in "$DEPLOY_DIR/public/apk"/*.apk; do
+    [ -f "$old" ] || continue
+    base=$(basename "$old")
+    [ "$base" = "restaurant.apk" ] && continue
+    sudo -n mv "$old" "$ARCHIVE_DIR/" 2>/dev/null || true
+  done
   sudo -n mv "$SRC" "$DST"
   sudo -n chmod 0644 "$DST" || true
 else
-  mkdir -p "$DEPLOY_DIR/public/apk"
+  mkdir -p "$DEPLOY_DIR/public/apk" "$ARCHIVE_DIR"
+  for old in "$DEPLOY_DIR/public/apk"/*.apk; do
+    [ -f "$old" ] || continue
+    base=$(basename "$old")
+    [ "$base" = "restaurant.apk" ] && continue
+    mv "$old" "$ARCHIVE_DIR/" 2>/dev/null || true
+  done
   mv "$SRC" "$DST"
   chmod 0644 "$DST" || true
 fi
