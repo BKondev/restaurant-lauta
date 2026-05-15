@@ -341,7 +341,7 @@ $remoteScript = $remoteScript -replace "`r", "`n"
 $remoteScript | ssh -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 "$ServerUser@$ServerIp" "bash -s"
 
 # Step 3: Upload APK (best-effort; required for the admin 'Download APK' button)
-$apkPath = "C:\Users\User\Desktop\restaurant-orders-mobile\KONKAR-install.apk"
+$apkPath = "C:\Users\User\KonkarApkOutput\KONKAR-install.apk"
 
 if ($apkPath -and (Test-Path $apkPath)) {
         Write-Host "`nStep 3: Upload APK to server" -ForegroundColor Green
