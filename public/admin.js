@@ -14,6 +14,21 @@ const translations = {
     en: {
         adminPanel: 'Admin Panel',
         downloadApk: 'Download APK',
+        mobileApk: 'Mobile APK',
+        mobileApkTitle: 'Restaurant mobile app',
+        mobileApkHelp: 'Choose an APK file from your computer and upload it. Downloads use the original file name.',
+        apkCurrentFile: 'Current file',
+        apkNoFile: 'No APK uploaded yet. Choose a file and upload it.',
+        apkChooseFile: 'Choose APK file',
+        apkUpload: 'Upload APK',
+        apkUploading: 'Uploading…',
+        apkUploaded: 'APK uploaded successfully.',
+        apkUploadFailed: 'Failed to upload APK.',
+        apkDownload: 'Download APK',
+        apkSize: 'Size',
+        apkUploadedAt: 'Uploaded',
+        apkSelectFileFirst: 'Please choose an APK file first.',
+        apkLoading: 'Loading…',
         logout: 'Logout',
         pendingOrders: 'Pending Orders',
         allOrders: 'All Orders',
@@ -493,6 +508,21 @@ const translations = {
     bg: {
         adminPanel: 'Админ Панел',
         downloadApk: 'Свали APK',
+        mobileApk: 'Мобилно APK',
+        mobileApkTitle: 'Мобилно приложение',
+        mobileApkHelp: 'Изберете APK файл от компютъра си и го качете. При сваляне се запазва оригиналното име на файла.',
+        apkCurrentFile: 'Текущ файл',
+        apkNoFile: 'Няма качено APK. Изберете файл и го качете.',
+        apkChooseFile: 'Изберете APK файл',
+        apkUpload: 'Качи APK',
+        apkUploading: 'Качване…',
+        apkUploaded: 'APK е качено успешно.',
+        apkUploadFailed: 'Неуспешно качване на APK.',
+        apkDownload: 'Свали APK',
+        apkSize: 'Размер',
+        apkUploadedAt: 'Качено на',
+        apkSelectFileFirst: 'Първо изберете APK файл.',
+        apkLoading: 'Зареждане…',
         seoOptimisation: 'SEO optimisation',
         seoTitle: 'Meta title',
         seoTitlePlaceholder: 'Restaurant name | Online Menu',
@@ -1129,6 +1159,10 @@ function switchTab(tabName) {
     // Save current tab to localStorage
     localStorage.setItem('adminCurrentTab', normalizedTab);
 
+    if (normalizedTab === 'mobile-apk') {
+        loadApkInfo();
+    }
+
     // Mobile: close the dropdown after selecting a tab
     try {
         const nav = document.getElementById('adminNav');
@@ -1543,6 +1577,140 @@ function logout() {
     window.location.href = `${BASE_PATH}/login`;
 }
 
+function formatApkBytes(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n < 0) return '—';
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function formatApkDate(iso) {
+    if (!iso) return '—';
+    try {
+        return new Date(iso).toLocaleString(currentLanguage === 'bg' ? 'bg-BG' : 'en-GB');
+    } catch (e) {
+        return iso;
+    }
+}
+
+function renderApkInfo(data) {
+    const panel = document.getElementById('apk-info-panel');
+    const downloadBtn = document.getElementById('apk-download-btn');
+    if (!panel) return;
+
+    if (!data?.exists) {
+        panel.innerHTML = `<p class="apk-info-empty">${t('apkNoFile', 'No APK uploaded yet.')}</p>`;
+        if (downloadBtn) downloadBtn.disabled = true;
+        return;
+    }
+
+    const name = (data.downloadName || 'KONKAR-install.apk').toString();
+    panel.innerHTML = `
+        <div class="apk-info-card">
+            <p><strong>${t('apkCurrentFile', 'Current file')}:</strong> <span class="apk-info-filename">${name}</span></p>
+            <p><strong>${t('apkSize', 'Size')}:</strong> ${formatApkBytes(data.size)}</p>
+            <p><strong>${t('apkUploadedAt', 'Uploaded')}:</strong> ${formatApkDate(data.uploadedAt)}</p>
+        </div>
+    `;
+    if (downloadBtn) downloadBtn.disabled = false;
+}
+
+async function loadApkInfo() {
+    const panel = document.getElementById('apk-info-panel');
+    if (!panel) return;
+
+    const ok = await ensureAuthOrRedirect();
+    if (!ok) return;
+
+    panel.innerHTML = `<p class="apk-info-loading">${t('apkLoading', 'Loading…')}</p>`;
+
+    try {
+        const res = await fetch(`${API_URL}/admin/apk/info`, {
+            headers: { Authorization: `Bearer ${getAdminToken()}` }
+        });
+        if (res.status === 401) {
+            clearAdminToken();
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            panel.innerHTML = `<p class="apk-info-error">${data.error || t('apkUploadFailed', 'Failed to load APK info.')}</p>`;
+            return;
+        }
+        renderApkInfo(data);
+    } catch (e) {
+        console.error('APK info failed:', e);
+        panel.innerHTML = `<p class="apk-info-error">${t('apkUploadFailed', 'Failed to load APK info.')}</p>`;
+    }
+}
+
+async function uploadApk() {
+    const ok = await ensureAuthOrRedirect();
+    if (!ok) return;
+
+    const input = document.getElementById('apk-file-input');
+    const uploadBtn = document.getElementById('apk-upload-btn');
+    const file = input?.files?.[0];
+    if (!file) {
+        alert(t('apkSelectFileFirst', 'Please choose an APK file first.'));
+        return;
+    }
+    if (!/\.apk$/i.test(file.name)) {
+        alert(t('apkSelectFileFirst', 'Please choose an APK file first.'));
+        return;
+    }
+
+    const fd = new FormData();
+    fd.append('apk', file, file.name);
+
+    const prevLabel = uploadBtn?.innerHTML;
+    if (uploadBtn) {
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${t('apkUploading', 'Uploading…')}`;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/admin/apk`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${getAdminToken()}` },
+            body: fd
+        });
+        if (res.status === 401) {
+            clearAdminToken();
+            window.location.href = `${BASE_PATH}/login`;
+            return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            alert(data.error || t('apkUploadFailed', 'Failed to upload APK.'));
+            return;
+        }
+        alert(t('apkUploaded', 'APK uploaded successfully.'));
+        if (input) input.value = '';
+        const selected = document.getElementById('apk-selected-name');
+        if (selected) {
+            selected.hidden = true;
+            selected.textContent = '';
+        }
+        renderApkInfo({
+            exists: true,
+            downloadName: data.downloadName,
+            size: data.size,
+            uploadedAt: data.uploadedAt
+        });
+    } catch (e) {
+        console.error('APK upload failed:', e);
+        alert(t('apkUploadFailed', 'Failed to upload APK.'));
+    } finally {
+        if (uploadBtn) {
+            uploadBtn.disabled = false;
+            if (prevLabel) uploadBtn.innerHTML = prevLabel;
+        }
+    }
+}
+
 async function downloadApk() {
     const ok = await ensureAuthOrRedirect();
     if (!ok) return;
@@ -1551,7 +1719,6 @@ async function downloadApk() {
     if (!token) return;
 
     try {
-        // Stream download via normal navigation to avoid loading large APKs into JS memory.
         const url = `${API_URL}/admin/apk?token=${encodeURIComponent(token)}`;
         const a = document.createElement('a');
         a.href = url;
@@ -1564,6 +1731,23 @@ async function downloadApk() {
         console.error('APK download failed:', e);
         alert(t('apkDownloadFailed', 'Failed to download APK.'));
     }
+}
+
+function initApkUploadUI() {
+    const input = document.getElementById('apk-file-input');
+    const selected = document.getElementById('apk-selected-name');
+    if (!input || !selected) return;
+
+    input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (!file) {
+            selected.hidden = true;
+            selected.textContent = '';
+            return;
+        }
+        selected.hidden = false;
+        selected.textContent = file.name;
+    });
 }
 
 // Load data on page load
@@ -1601,6 +1785,8 @@ document.addEventListener('DOMContentLoaded', function() {
         loadSlideshowSettings();
         maybeEnableEmailDiagnosticsPanel();
         initializeZonesMap();
+        initApkUploadUI();
+        loadApkInfo();
     })();
 });
 

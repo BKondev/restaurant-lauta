@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Admin Panel - Restaurant Template</title>
     <link rel="stylesheet" href="styles.css?v=20260313a">
-    <link rel="stylesheet" href="admin-styles.css?v=20260313a">
+    <link rel="stylesheet" href="admin-styles.css?v=20260515c">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -79,9 +79,9 @@
                 <span class="tab-text" data-translate="seoOptimisation">SEO optimisation</span>
             </button>
 
-            <button class="admin-tab-btn" onclick="downloadApk()" data-translate-title="downloadApk" title="Download APK">
-                <i class="fas fa-download"></i>
-                <span class="tab-text" data-translate="downloadApk">Download APK</span>
+            <button class="admin-tab-btn" onclick="switchTab('mobile-apk')">
+                <i class="fas fa-mobile-alt"></i>
+                <span class="tab-text" data-translate="mobileApk">Mobile APK</span>
             </button>
             
             <div class="admin-actions">
@@ -1574,6 +1574,33 @@
         </div>
         </div><!-- End SEO Settings Tab -->
 
+        <!-- Mobile APK Tab -->
+        <div class="admin-tab-content" id="tab-mobile-apk">
+        <div class="admin-section">
+            <h2><i class="fas fa-mobile-alt"></i> <span data-translate="mobileApkTitle">Restaurant mobile app</span></h2>
+            <p class="apk-admin-help" data-translate="mobileApkHelp">Upload an APK from your computer. The file keeps its original name when downloaded.</p>
+
+            <div id="apk-info-panel" class="apk-info-panel">
+                <p class="apk-info-loading" data-translate="loading">Loading...</p>
+            </div>
+
+            <div class="form-group apk-upload-row">
+                <label for="apk-file-input"><span data-translate="apkChooseFile">Choose APK file</span></label>
+                <input type="file" id="apk-file-input" accept=".apk,application/vnd.android.package-archive" />
+                <p id="apk-selected-name" class="apk-selected-name" hidden></p>
+            </div>
+
+            <div class="apk-actions-row">
+                <button type="button" id="apk-upload-btn" class="btn btn-primary" onclick="uploadApk()">
+                    <i class="fas fa-upload"></i> <span data-translate="apkUpload">Upload APK</span>
+                </button>
+                <button type="button" id="apk-download-btn" class="btn btn-success" onclick="downloadApk()">
+                    <i class="fas fa-download"></i> <span data-translate="downloadApk">Download APK</span>
+                </button>
+            </div>
+        </div>
+        </div><!-- End Mobile APK Tab -->
+
         </div><!-- End admin-tabs-content -->
     </div>
 
@@ -1745,7 +1772,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="vendor/jszip.min.js"></script>
-    <script src="admin.js?v=20260326a"></script>
+    <script src="admin.js?v=20260515c"></script>
 </body>
 </html>
 

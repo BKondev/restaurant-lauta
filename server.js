@@ -595,6 +595,67 @@ const uploadProductImages = multer({
     }
 });
 
+const APK_DIR = path.join(__dirname, 'public', 'apk');
+const APK_FILE_PATH = path.join(APK_DIR, 'restaurant.apk');
+const APK_META_PATH = path.join(APK_DIR, 'restaurant.apk.meta.json');
+
+function ensureApkDir() {
+    if (!fs.existsSync(APK_DIR)) {
+        fs.mkdirSync(APK_DIR, { recursive: true });
+    }
+}
+
+function sanitizeApkDownloadName(name) {
+    const base = path.basename((name || '').toString()).trim();
+    if (!base.toLowerCase().endsWith('.apk')) {
+        return 'KONKAR-install.apk';
+    }
+    return base.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function readApkMeta() {
+    try {
+        if (fs.existsSync(APK_META_PATH)) {
+            return JSON.parse(fs.readFileSync(APK_META_PATH, 'utf8'));
+        }
+    } catch (e) {
+        // ignore corrupt meta
+    }
+    return null;
+}
+
+function writeApkMeta(meta) {
+    ensureApkDir();
+    fs.writeFileSync(APK_META_PATH, JSON.stringify(meta, null, 2));
+}
+
+function getApkDownloadName() {
+    const meta = readApkMeta();
+    return sanitizeApkDownloadName(meta?.downloadName);
+}
+
+const apkStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        ensureApkDir();
+        cb(null, APK_DIR);
+    },
+    filename: function (req, file, cb) {
+        cb(null, 'restaurant.apk.upload');
+    }
+});
+
+const uploadApkFile = multer({
+    storage: apkStorage,
+    limits: { fileSize: 150 * 1024 * 1024 },
+    fileFilter: function (req, file, cb) {
+        const ext = path.extname(file.originalname || '').toLowerCase();
+        if (ext !== '.apk') {
+            return cb(new Error('Only .apk files are allowed'));
+        }
+        cb(null, true);
+    }
+});
+
 function getCompressFormatFromPath(filePath) {
     const ext = path.extname(filePath || '').toLowerCase();
     if (ext === '.jpg' || ext === '.jpeg') return 'jpeg';
@@ -1919,14 +1980,70 @@ app.get(API_PREFIX + '/restaurants/me', requireAuthOrApiKey, (req, res) => {
     }
 });
 
-// Admin: download the restaurant APK (Bearer token required)
+// Admin: mobile APK info / upload / download
+app.get(API_PREFIX + '/admin/apk/info', requireAuth, (req, res) => {
+    try {
+        if (!fs.existsSync(APK_FILE_PATH)) {
+            return res.json({ exists: false });
+        }
+        const stat = fs.statSync(APK_FILE_PATH);
+        const meta = readApkMeta() || {};
+        return res.json({
+            exists: true,
+            downloadName: getApkDownloadName(),
+            size: stat.size,
+            uploadedAt: meta.uploadedAt || stat.mtime.toISOString()
+        });
+    } catch (e) {
+        console.error('Error reading APK info:', e);
+        return res.status(500).json({ error: 'Failed to read APK info' });
+    }
+});
+
+app.post(API_PREFIX + '/admin/apk', requireAuth, (req, res) => {
+    uploadApkFile.single('apk')(req, res, (err) => {
+        try {
+            if (err) {
+                return res.status(400).json({ error: err.message || 'Invalid APK upload' });
+            }
+            if (!req.file) {
+                return res.status(400).json({ error: 'Missing APK file' });
+            }
+
+            const tempPath = path.join(APK_DIR, 'restaurant.apk.upload');
+            if (!fs.existsSync(tempPath)) {
+                return res.status(500).json({ error: 'Upload failed' });
+            }
+
+            if (fs.existsSync(APK_FILE_PATH)) {
+                fs.unlinkSync(APK_FILE_PATH);
+            }
+            fs.renameSync(tempPath, APK_FILE_PATH);
+
+            const downloadName = sanitizeApkDownloadName(req.file.originalname);
+            const stat = fs.statSync(APK_FILE_PATH);
+            const uploadedAt = new Date().toISOString();
+            writeApkMeta({ downloadName, size: stat.size, uploadedAt });
+
+            return res.json({
+                ok: true,
+                downloadName,
+                size: stat.size,
+                uploadedAt
+            });
+        } catch (e) {
+            console.error('Error uploading APK:', e);
+            return res.status(500).json({ error: 'Failed to upload APK' });
+        }
+    });
+});
+
 app.get(API_PREFIX + '/admin/apk', requireAuthFromHeaderOrQuery, (req, res) => {
     try {
-        const apkPath = path.join(__dirname, 'public', 'apk', 'restaurant.apk');
-        if (!fs.existsSync(apkPath)) {
+        if (!fs.existsSync(APK_FILE_PATH)) {
             return res.status(404).json({ error: 'APK not found' });
         }
-        return res.download(apkPath, 'KONKAR-install.apk');
+        return res.download(APK_FILE_PATH, getApkDownloadName());
     } catch (e) {
         console.error('Error downloading APK:', e);
         return res.status(500).json({ error: 'Failed to download APK' });

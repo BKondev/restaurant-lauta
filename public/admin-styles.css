@@ -1683,3 +1683,65 @@ body.admin-drawer-open {
         flex-direction: column;
     }
 }
+
+.apk-admin-help {
+    color: #555;
+    margin: 0 0 16px;
+    max-width: 720px;
+    line-height: 1.5;
+}
+
+.apk-info-panel {
+    margin-bottom: 20px;
+}
+
+.apk-info-card {
+    background: #f8f9fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+
+.apk-info-card p {
+    margin: 0 0 8px;
+}
+
+.apk-info-card p:last-child {
+    margin-bottom: 0;
+}
+
+.apk-info-filename {
+    word-break: break-all;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.apk-info-empty,
+.apk-info-loading,
+.apk-info-error {
+    margin: 0;
+    color: #555;
+}
+
+.apk-info-error {
+    color: #c0392b;
+}
+
+.apk-upload-row input[type="file"] {
+    display: block;
+    margin-top: 8px;
+    max-width: 100%;
+}
+
+.apk-selected-name {
+    margin: 8px 0 0;
+    color: #333;
+    font-size: 14px;
+    word-break: break-all;
+}
+
+.apk-actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
