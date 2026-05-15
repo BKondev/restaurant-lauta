@@ -345,12 +345,7 @@ $remoteScript = $remoteScript -replace "`r", "`n"
 $remoteScript | ssh -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 "$ServerUser@$ServerIp" "bash -s"
 
 # Step 3: Upload APK (best-effort; required for the admin 'Download APK' button)
-$apkPath = ""
-if ($restaurantId -eq "rest_bojole_001") {
-        $apkPath = "C:\Users\User\Desktop\konkar-2.0.32-vc34-bojole.apk"
-} elseif ($restaurantId -eq "rest_lauta_002") {
-    $apkPath = "C:\Users\User\Desktop\konkar-2.0.33-vc35-lauta.apk"
-}
+$apkPath = "C:\Users\User\Desktop\restaurant-orders-mobile\KONKAR-install.apk"
 
 if ($apkPath -and (Test-Path $apkPath)) {
         Write-Host "`nStep 3: Upload APK to server" -ForegroundColor Green
@@ -363,7 +358,6 @@ set -e
 DEPLOY_DIR="{DEPLOY_DIR}"
 SRC="$HOME/{REMOTE_TMP}"
 DST="$DEPLOY_DIR/public/apk/restaurant.apk"
-FIXED_DST="$DEPLOY_DIR/public/apk/konkar-2.0.33-vc35-lauta.apk"
 
 if [ ! -f "$SRC" ]; then
   echo "ERROR: Uploaded APK missing: $SRC" >&2
@@ -374,15 +368,10 @@ if command -v sudo >/dev/null 2>&1; then
   sudo -n mkdir -p "$DEPLOY_DIR/public/apk"
   sudo -n mv "$SRC" "$DST"
   sudo -n chmod 0644 "$DST" || true
-    # Also publish to the fixed tenant-specific filename (admin downloads use this)
-    sudo -n cp "$DST" "$FIXED_DST" || true
-    sudo -n chmod 0644 "$FIXED_DST" || true
 else
   mkdir -p "$DEPLOY_DIR/public/apk"
   mv "$SRC" "$DST"
   chmod 0644 "$DST" || true
-    cp "$DST" "$FIXED_DST" || true
-    chmod 0644 "$FIXED_DST" || true
 fi
 
 echo "✓ APK uploaded to $DST"

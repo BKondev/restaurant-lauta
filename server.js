@@ -1946,9 +1946,9 @@ app.get(API_PREFIX + '/admin/apk', requireAuthFromHeaderOrQuery, (req, res) => {
             return res.status(404).json({ error: 'No APK found' });
         }
 
-        apkFiles.sort((a, b) => (b.mtimeMs - a.mtimeMs) || a.name.localeCompare(b.name));
-        const latest = apkFiles[0];
-        return res.download(latest.fullPath, latest.name);
+        const canonical = apkFiles.find(f => f.name === 'restaurant.apk');
+        const chosen = canonical || apkFiles.sort((a, b) => (b.mtimeMs - a.mtimeMs) || a.name.localeCompare(b.name))[0];
+        return res.download(chosen.fullPath, chosen.name);
     } catch (e) {
         console.error('Error downloading APK:', e);
         return res.status(500).json({ error: 'Failed to download APK' });
